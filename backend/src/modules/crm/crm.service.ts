@@ -4605,6 +4605,8 @@ export const crmService = {
     endDate?: string;
     callStatus?: string;
     did?: string;
+    /** Filter by agent number / name (partial match). Use ALL or omit for all agents. */
+    agent?: string;
     limit?: number | string;
     userRole?: string;
     userEmployeeId?: number;
@@ -4674,6 +4676,14 @@ export const crmService = {
 
     if (query.did && query.did !== 'ALL') {
       where.did = query.did;
+    }
+
+    const agentFilter = String(query.agent || '').trim();
+    if (agentFilter && agentFilter.toUpperCase() !== 'ALL') {
+      where.AND = [
+        ...(where.AND || []),
+        { agentNumber: { contains: agentFilter, mode: 'insensitive' } },
+      ];
     }
 
     if (query.search) {

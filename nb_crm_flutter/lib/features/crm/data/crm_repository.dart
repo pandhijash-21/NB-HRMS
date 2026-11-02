@@ -876,6 +876,7 @@ class CrmRepository {
     String? endDate,
     String? callStatus,
     String? did,
+    String? agent,
     int? limit,
   }) async {
     final query = <String, dynamic>{
@@ -889,6 +890,7 @@ class CrmRepository {
     if (endDate != null) query['endDate'] = endDate;
     if (callStatus != null && callStatus != 'ALL') query['callStatus'] = callStatus;
     if (did != null && did != 'ALL') query['did'] = did;
+    if (agent != null && agent.isNotEmpty && agent != 'ALL') query['agent'] = agent;
     if (limit != null) query['limit'] = limit.toString();
 
     return _dio.getEnvelope<List<CrmCallLog>>(

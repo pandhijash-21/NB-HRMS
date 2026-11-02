@@ -251,15 +251,18 @@ class CrmLeadsCallLogsFilterChanged extends CrmLeadsEvent {
     this.dateFilter,
     this.callStatus,
     this.hasRecording,
+    this.agent,
   });
 
   final String? search;
   final String? dateFilter;
   final String? callStatus;
   final bool? hasRecording;
+  /// 'ALL' or agent number / name string
+  final String? agent;
 
   @override
-  List<Object?> get props => [search, dateFilter, callStatus, hasRecording];
+  List<Object?> get props => [search, dateFilter, callStatus, hasRecording, agent];
 }
 
 class CrmLeadsCallLogsSyncRequested extends CrmLeadsEvent {
@@ -330,6 +333,8 @@ class CrmLeadsState extends Equatable {
     this.callLogs = const [],
     this.callRecordingFilterDate = 'all',
     this.callRecordingFilterStatus = 'ALL',
+    this.callRecordingFilterAgent = 'ALL',
+    this.callRecordingAgents = const [],
     this.callRecordingSearch = '',
     this.callRecordingsOnlyWithAudio = false,
     this.isActing = false,
@@ -357,6 +362,9 @@ class CrmLeadsState extends Equatable {
   final List<CrmCallLog> callLogs;
   final String callRecordingFilterDate;
   final String callRecordingFilterStatus;
+  final String callRecordingFilterAgent;
+  /// Distinct agent labels for the Agent filter dropdown
+  final List<String> callRecordingAgents;
   final String callRecordingSearch;
   final bool callRecordingsOnlyWithAudio;
   final bool isActing;
@@ -388,6 +396,8 @@ class CrmLeadsState extends Equatable {
     List<CrmCallLog>? callLogs,
     String? callRecordingFilterDate,
     String? callRecordingFilterStatus,
+    String? callRecordingFilterAgent,
+    List<String>? callRecordingAgents,
     String? callRecordingSearch,
     bool? callRecordingsOnlyWithAudio,
     bool? isActing,
@@ -421,6 +431,9 @@ class CrmLeadsState extends Equatable {
           callRecordingFilterDate ?? this.callRecordingFilterDate,
       callRecordingFilterStatus:
           callRecordingFilterStatus ?? this.callRecordingFilterStatus,
+      callRecordingFilterAgent:
+          callRecordingFilterAgent ?? this.callRecordingFilterAgent,
+      callRecordingAgents: callRecordingAgents ?? this.callRecordingAgents,
       callRecordingSearch: callRecordingSearch ?? this.callRecordingSearch,
       callRecordingsOnlyWithAudio:
           callRecordingsOnlyWithAudio ?? this.callRecordingsOnlyWithAudio,
@@ -452,6 +465,8 @@ class CrmLeadsState extends Equatable {
         callLogs,
         callRecordingFilterDate,
         callRecordingFilterStatus,
+        callRecordingFilterAgent,
+        callRecordingAgents,
         callRecordingSearch,
         callRecordingsOnlyWithAudio,
         isActing,
@@ -591,8 +606,11 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
             dateFilter: state.callRecordingFilterDate == 'all' ? null : state.callRecordingFilterDate,
             callStatus: state.callRecordingFilterStatus == 'ALL' ? null : state.callRecordingFilterStatus,
             hasRecording: state.callRecordingsOnlyWithAudio ? true : null,
+            agent: state.callRecordingFilterAgent == 'ALL' ? null : state.callRecordingFilterAgent,
           ),
       ]);
+
+      final loadedLogs = includeCallLogs ? results[7] as List<CrmCallLog> : null;
 
       emit(state.copyWith(
         status: LoadStatus.success,
@@ -603,7 +621,12 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         salesUsers: results[4] as List<CrmSalesUser>,
         followUps: results[5] as List<CrmFollowUp>,
         settings: results[6] as CrmSettings,
-        callLogs: includeCallLogs ? results[7] as List<CrmCallLog> : state.callLogs,
+        callLogs: loadedLogs ?? state.callLogs,
+        callRecordingAgents: loadedLogs != null
+            ? (state.callRecordingFilterAgent == 'ALL'
+                ? _agentsFromLogs(loadedLogs)
+                : _agentsFromLogs(loadedLogs, previous: state.callRecordingAgents))
+            : state.callRecordingAgents,
       ));
     } catch (e) {
       emit(state.copyWith(status: LoadStatus.failure, errorMessage: e.toString()));
@@ -1066,6 +1089,16 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     }
   }
 
+  List<String> _agentsFromLogs(List<CrmCallLog> logs, {List<String>? previous}) {
+    final set = <String>{...(previous ?? const [])};
+    for (final log in logs) {
+      final a = log.agentNumber?.trim() ?? '';
+      if (a.isNotEmpty) set.add(a);
+    }
+    final list = set.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
+  }
+
   Future<void> _onCallLogsFilterChanged(
     CrmLeadsCallLogsFilterChanged event,
     Emitter<CrmLeadsState> emit,
@@ -1074,11 +1107,13 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     final dateFilter = event.dateFilter ?? state.callRecordingFilterDate;
     final callStatus = event.callStatus ?? state.callRecordingFilterStatus;
     final hasRec = event.hasRecording ?? state.callRecordingsOnlyWithAudio;
+    final agent = event.agent ?? state.callRecordingFilterAgent;
 
     emit(state.copyWith(
       callRecordingSearch: search,
       callRecordingFilterDate: dateFilter,
       callRecordingFilterStatus: callStatus,
+      callRecordingFilterAgent: agent,
       callRecordingsOnlyWithAudio: hasRec,
     ));
 
@@ -1088,8 +1123,14 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         dateFilter: dateFilter == 'all' ? null : dateFilter,
         callStatus: callStatus == 'ALL' ? null : callStatus,
         hasRecording: hasRec ? true : null,
+        agent: agent == 'ALL' ? null : agent,
       );
-      emit(state.copyWith(callLogs: logs));
+      // Refresh agent options from unfiltered set when viewing All Agents;
+      // otherwise merge so the dropdown does not collapse.
+      final agents = agent == 'ALL'
+          ? _agentsFromLogs(logs)
+          : _agentsFromLogs(logs, previous: state.callRecordingAgents);
+      emit(state.copyWith(callLogs: logs, callRecordingAgents: agents));
     } catch (e) {
       emit(state.copyWith(errorMessage: e.toString()));
     }
@@ -1102,19 +1143,25 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     emit(state.copyWith(isActing: true));
     try {
       final sync = await _crmRepository.syncCallsFromNineance();
+      final agent = state.callRecordingFilterAgent;
       final logs = await _crmRepository.getCallLogs(
         search: state.callRecordingSearch.isEmpty ? null : state.callRecordingSearch,
         dateFilter: state.callRecordingFilterDate == 'all' ? null : state.callRecordingFilterDate,
         callStatus:
             state.callRecordingFilterStatus == 'ALL' ? null : state.callRecordingFilterStatus,
         hasRecording: state.callRecordingsOnlyWithAudio ? true : null,
+        agent: agent == 'ALL' ? null : agent,
       );
       final healed = sync['healed'];
       final upserted = sync['upserted'];
       final skipped = sync['skipped'];
+      final agents = agent == 'ALL'
+          ? _agentsFromLogs(logs)
+          : _agentsFromLogs(logs, previous: state.callRecordingAgents);
       emit(state.copyWith(
         isActing: false,
         callLogs: logs,
+        callRecordingAgents: agents,
         actionSuccessMessage:
             'Synced from 9ance — updated $upserted call(s)'
             '${healed != null && healed != 0 ? ', healed $healed error(s)' : ''}'

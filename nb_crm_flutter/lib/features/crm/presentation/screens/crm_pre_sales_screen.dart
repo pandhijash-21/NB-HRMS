@@ -2609,12 +2609,54 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 ),
                 const SizedBox(height: 14),
 
-                // Secondary Filters (Status, Audio-Only, Search)
+                // Secondary Filters (Agent, Status, Audio-Only, Search)
                 Wrap(
                   spacing: 12,
                   runSpacing: 10,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    // Agent Dropdown
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 260),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.black26 : Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: () {
+                            final current = state.callRecordingFilterAgent;
+                            if (current == 'ALL') return 'ALL';
+                            if (state.callRecordingAgents.contains(current)) return current;
+                            return 'ALL';
+                          }(),
+                          isExpanded: true,
+                          dropdownColor: cardBg,
+                          hint: const Text('All Agents', style: TextStyle(fontSize: 13)),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? Colors.white : const Color(0xFF1E293B),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: 'ALL', child: Text('All Agents')),
+                            ...state.callRecordingAgents.map(
+                              (a) => DropdownMenuItem(
+                                value: a,
+                                child: Text(a, overflow: TextOverflow.ellipsis),
+                              ),
+                            ),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) {
+                              context.read<CrmLeadsBloc>().add(CrmLeadsCallLogsFilterChanged(agent: val));
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+
                     // Status Dropdown
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12),

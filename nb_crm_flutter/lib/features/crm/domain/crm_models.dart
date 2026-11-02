@@ -379,12 +379,23 @@ class CrmLead {
   bool get isWaitingList => (telecallerId == null && assignedToId == null) || (status == CrmStatus.notStarted && telecallerId == null);
 
   bool get isManual {
-    if (leadSource?.toUpperCase() == 'MANUAL' ||
+    final src = leadSource?.toUpperCase().trim();
+    // Ads / Excel / webhook are never "manual" — even if an admin uploaded them
+    if (src == 'EXCEL' ||
+        src == 'META' ||
+        src == 'GOOGLE' ||
+        src == 'WEBHOOK' ||
+        customFields['isExcelImport'] == true) {
+      return false;
+    }
+    if (src == 'MANUAL' ||
         customFields['isManual'] == true ||
         customFields['is_manual'] == true) {
       return true;
     }
-    if (createdByName != null &&
+    // Only treat createdByName as manual when source is missing/manual
+    if ((src == null || src.isEmpty || src == 'MANUAL') &&
+        createdByName != null &&
         createdByName!.trim().isNotEmpty &&
         createdByName!.trim().toLowerCase() != 'system' &&
         createdByName!.trim().toLowerCase() != 'webhook') {
@@ -410,6 +421,12 @@ class CrmLead {
       return true;
     }
     return false;
+  }
+
+  String? get importBatchId {
+    final v = customFields['importBatchId'] ?? customFields['import_batch_id'];
+    final s = v?.toString().trim();
+    return (s != null && s.isNotEmpty) ? s : null;
   }
 
   String get allocatedAgentName {

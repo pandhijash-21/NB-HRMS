@@ -857,7 +857,11 @@ class _CrmHeadersView extends StatelessWidget {
                   children: [
                     Icon(Icons.view_column_outlined, size: 40, color: textMuted),
                     const SizedBox(height: 12),
-                    const Text('No headers discovered or created for this campaign yet.'),
+                    const Text(
+                      'This campaign has its own headers (separate from other campaigns).\n'
+                      'Add columns here, or import Excel / receive a webhook — fields appear automatically.',
+                      textAlign: TextAlign.center,
+                    ),
                     const SizedBox(height: 6),
                     Text(
                       'Incoming webhooks will automatically register headers here with First Letter Capitalization and Underscores.',
@@ -1423,7 +1427,7 @@ class _CrmHeadersView extends StatelessWidget {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'A unique Webhook URL will be generated. Paste it into Meta / Google Lead Form / n8n so leads come into CRM.',
+                              'A unique Webhook URL will be generated. This campaign keeps its own headers (not shared with Manual or other campaigns). Paste the URL into Meta / Google / n8n.',
                               style: TextStyle(fontSize: 12, color: primaryColor),
                             ),
                           ),

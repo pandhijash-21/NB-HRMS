@@ -457,7 +457,7 @@ export const crmService = {
 
   async createCampaign(dto: CreateCampaignDto, scope: string = 'NB_DEVELOPER') {
     const module = dto.module || 'PRE_SALES';
-    const defaultCamp = await this.ensureDefaultCampaign(module, scope);
+    await this.ensureDefaultCampaign(module, scope);
 
     const generatedCode = (dto.code && dto.code.trim())
       ? dto.code.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_')
@@ -489,14 +489,13 @@ export const crmService = {
       },
     });
 
-    // Clone columns from source campaign (or default campaign)
-    const sourceCampaignId = dto.copyFromCampaignId || defaultCamp.id;
-    const sourceColumns = await prisma.crmColumnConfig.findMany({
-      where: { campaignId: sourceCampaignId, isActive: true, scope },
-      orderBy: { displayOrder: 'asc' },
-    });
-
-    if (sourceColumns.length > 0) {
+    // Keep campaigns bifurcated: only clone headers when explicitly requested.
+    // Otherwise start empty — Excel/webhook/manual headers are owned per campaign.
+    if (dto.copyFromCampaignId) {
+      const sourceColumns = await prisma.crmColumnConfig.findMany({
+        where: { campaignId: dto.copyFromCampaignId, isActive: true, scope },
+        orderBy: { displayOrder: 'asc' },
+      });
       for (const col of sourceColumns) {
         await prisma.crmColumnConfig.create({
           data: {
@@ -515,27 +514,8 @@ export const crmService = {
           },
         });
       }
-    } else {
-      // Default fallback columns
-      for (const col of DEFAULT_PRE_SALES_COLUMNS) {
-        await prisma.crmColumnConfig.create({
-          data: {
-            scope,
-            module,
-            campaignId: created.id,
-            columnKey: col.columnKey,
-            label: col.label,
-            dataType: col.dataType,
-            options: col.options || [],
-            isRequired: col.isRequired,
-            isSystem: col.isSystem,
-            isVisibleInTable: true,
-            displayOrder: col.displayOrder,
-            isActive: true,
-          },
-        });
-      }
     }
+    // Note: do NOT seed DEFAULT_PRE_SALES_COLUMNS here — that made every campaign identical.
 
     return created;
   },
@@ -1150,14 +1130,20 @@ export const crmService = {
       }
     }
 
-    // Check if columns exist for this campaign, if not clone default
+    // Only the DEFAULT campaign auto-seeds shared Manual columns.
+    // Other campaigns stay empty until Excel/webhook/manual headers are added — keeps them bifurcated.
     const count = await prisma.crmColumnConfig.count({
       where: { module, campaignId: targetCampaignId, isActive: true, scope },
     });
 
+    const targetCamp = await prisma.crmCampaign.findUnique({
+      where: { id: targetCampaignId },
+      select: { code: true },
+    });
+    const isDefaultCampaign = !targetCamp || targetCamp.code === 'DEFAULT';
     const defaultCols = isFinserve ? DEFAULT_FINSERVE_PRE_SALES_COLUMNS : DEFAULT_PRE_SALES_COLUMNS;
 
-    if (count === 0 && module === 'PRE_SALES') {
+    if (count === 0 && module === 'PRE_SALES' && isDefaultCampaign) {
       for (const col of defaultCols) {
         try {
           await prisma.crmColumnConfig.create({
@@ -1379,7 +1365,21 @@ export const crmService = {
       const isMetaAssigned = pools.webhookIds.includes(query.userEmployeeId);
       const isGoogleAssigned = pools.googleIds.includes(query.userEmployeeId);
 
-      // Non-admin sees leads assigned to them either as telecaller OR as sales rep/manager
+      // Campaigns where this person is listed under "Assign leads to" (Headers)
+      const allCamps = await prisma.crmCampaign.findMany({
+        where: { scope, isActive: true, module: 'PRE_SALES' },
+        select: { id: true, assignedTelecallerIds: true },
+      });
+      const campaignIdsAssignedToUser = allCamps
+        .filter((c) => {
+          const ids = Array.isArray((c as any).assignedTelecallerIds)
+            ? (c as any).assignedTelecallerIds.map(Number)
+            : [];
+          return ids.includes(query.userEmployeeId!);
+        })
+        .map((c) => c.id);
+
+      // Personally allocated leads
       const userAssignmentCond = [
         { telecallerId: query.userEmployeeId },
         { assignedToId: query.userEmployeeId },
@@ -1396,14 +1396,22 @@ export const crmService = {
         sourceFilters.push({ leadSource: 'GOOGLE' });
       }
 
-      let visibilityBlock: any;
+      // Desk-scoped path (assigned to me AND matching desk source)
+      let deskBlock: any;
       if (sourceFilters.length === 1) {
-        visibilityBlock = { AND: [{ OR: userAssignmentCond }, sourceFilters[0]] };
+        deskBlock = { AND: [{ OR: userAssignmentCond }, sourceFilters[0]] };
       } else if (sourceFilters.length > 1) {
-        visibilityBlock = { AND: [{ OR: userAssignmentCond }, { OR: sourceFilters }] };
+        deskBlock = { AND: [{ OR: userAssignmentCond }, { OR: sourceFilters }] };
       } else {
-        visibilityBlock = { OR: userAssignmentCond };
+        deskBlock = { OR: userAssignmentCond };
       }
+
+      // Campaign assignees see all leads in their campaigns (project/campaign filters above)
+      const visibilityOr: any[] = [deskBlock, { OR: userAssignmentCond }];
+      if (campaignIdsAssignedToUser.length > 0) {
+        visibilityOr.push({ campaignId: { in: campaignIdsAssignedToUser } });
+      }
+      const visibilityBlock: any = { OR: visibilityOr };
 
       // Channel Partner leads: only designated CP viewer (+ admins) may see them
       await this.applyCpLeadVisibility(where, visibilityBlock, {
@@ -2087,6 +2095,75 @@ export const crmService = {
     return { scanned: leads.length, updated, alreadyOk, skipped, reassignedFromOther };
   },
 
+  _excelIsNameHeader(lower: string): boolean {
+    const l = lower.trim();
+    if (!l) return false;
+    // Avoid false positives: Campaign Name, File Name, Plan Name, Username, etc.
+    if (
+      /(campaign|file|plan|project|user|agent|advisor|company|scheme|tower|wing)\s*name/.test(l) ||
+      l.includes('username') ||
+      l.includes('filename')
+    ) {
+      return false;
+    }
+    return (
+      l === 'name' ||
+      l === 'client' ||
+      l === 'client name' ||
+      l === 'client_name' ||
+      l === 'customer name' ||
+      l === 'customer_name' ||
+      l === 'full name' ||
+      l === 'full_name' ||
+      l === 'lead name' ||
+      l === 'lead_name' ||
+      l === 'applicant name' ||
+      (l.includes('name') && (l.includes('client') || l.includes('customer') || l.includes('lead') || l.includes('full')))
+    );
+  },
+
+  _excelIsPhoneHeader(lower: string): boolean {
+    const l = lower.trim();
+    if (!l) return false;
+    // Exclude ESP / plot / unit / amount style "number" columns
+    if (
+      l.includes('esp') ||
+      l.includes('plot') ||
+      l.includes('unit') ||
+      l.includes('flat') ||
+      l.includes('amount') ||
+      l.includes('price') ||
+      l.includes('sqft') ||
+      l.includes('gst') ||
+      l.includes('aadhaar') ||
+      l.includes('aadhar') ||
+      l.includes('pan')
+    ) {
+      return false;
+    }
+    return (
+      l === 'phone' ||
+      l === 'mobile' ||
+      l === 'mobile no' ||
+      l === 'mobile_no' ||
+      l === 'mobile number' ||
+      l === 'phone number' ||
+      l === 'phone_number' ||
+      l === 'contact' ||
+      l === 'contact no' ||
+      l === 'contact_no' ||
+      l === 'contact number' ||
+      l === 'whatsapp' ||
+      l === 'cell' ||
+      l === 'cellphone' ||
+      l === 'number' || // common Excel header for mobile
+      l.includes('phone') ||
+      l.includes('mobile') ||
+      (l.includes('contact') && l.includes('no')) ||
+      (l.includes('whatsapp'))
+    );
+  },
+
   async importExcelLeads(
     fileBuffer: Buffer,
     createdById?: string,
@@ -2098,6 +2175,7 @@ export const crmService = {
       assignmentMode?: 'SPECIFIC' | 'ROUND_ROBIN' | 'UNASSIGNED';
       assignedTelecallerIds?: number[];
       skipDuplicates?: boolean;
+      fileName?: string;
     },
   ) {
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
@@ -2118,15 +2196,59 @@ export const crmService = {
     });
     const campaignScope = targetCampaign?.scope || scope;
 
-    // Fetch column configs to map header aliases for THIS campaign
+    // Campaign columns — Excel stays bifurcated: only EXACT label/key aliases remap.
+    // Unknown Excel headers become their own campaign columns (not forced onto Manual Client_Name/Phone).
     const cols = await this.getColumns('PRE_SALES', targetCampaignId, campaignScope);
     const colMap: Record<string, string> = {};
+    const existingKeys = new Set(cols.map((c) => c.columnKey));
     for (const c of cols) {
       colMap[c.label.toLowerCase().trim()] = c.columnKey;
       colMap[c.columnKey.toLowerCase().trim()] = c.columnKey;
+      colMap[c.columnKey.replace(/_/g, ' ').toLowerCase().trim()] = c.columnKey;
     }
 
-    const pools = await this.getAssignedTelecallerPools(campaignScope);
+    // Discover headers from sheet → register as campaign columns when new
+    const sheetHeaders = new Set<string>();
+    for (const row of rows) {
+      for (const h of Object.keys(row)) {
+        if (String(h || '').trim()) sheetHeaders.add(String(h).trim());
+      }
+    }
+    let displayOrder = cols.length;
+    for (const header of sheetHeaders) {
+      const lower = header.toLowerCase().trim();
+      if (colMap[lower]) continue;
+      const excelKey = this.normalizeHeaderKey(header);
+      if (!excelKey || existingKeys.has(excelKey)) {
+        if (excelKey) colMap[lower] = excelKey;
+        continue;
+      }
+      // Keep Excel header as its own column — do not collapse into Manual defaults
+      await prisma.crmColumnConfig.create({
+        data: {
+          scope: campaignScope,
+          module: 'PRE_SALES',
+          campaignId: targetCampaignId,
+          columnKey: excelKey,
+          label: header,
+          dataType: this._excelIsPhoneHeader(lower)
+            ? 'PHONE'
+            : lower.includes('email')
+              ? 'EMAIL'
+              : lower.includes('date')
+                ? 'DATE'
+                : 'TEXT',
+          isRequired: false,
+          isSystem: false,
+          isVisibleInTable: true,
+          displayOrder: ++displayOrder,
+          isActive: true,
+        },
+      });
+      existingKeys.add(excelKey);
+      colMap[lower] = excelKey;
+      colMap[excelKey.toLowerCase()] = excelKey;
+    }
 
     // Pre-fetch active employees to match any Assigned To column in Excel
     const activeEmployees = await prisma.employee.findMany({
@@ -2163,26 +2285,61 @@ export const crmService = {
       }
     }
 
+    const importBatchId = crypto.randomUUID();
+    const importedAt = new Date().toISOString();
+    const importFileName = options?.fileName || firstSheetName || 'excel-import.xlsx';
+
     let insertedCount = 0;
     const leadsToInsert: any[] = [];
     const seenInSheetPhones = new Set<string>();
 
     for (const row of rows) {
-      const customFields: Record<string, any> = {};
+      const customFields: Record<string, any> = {
+        isExcelImport: true,
+        isManual: false,
+        leadSourceType: 'Excel Import',
+        importBatchId,
+        importedAt,
+        importFileName,
+      };
       let phone = '';
       let name = '';
+      let phoneScore = -1;
+      let nameScore = -1;
       let assignedHeaderValue = '';
 
       for (const [header, val] of Object.entries(row)) {
         const cleanHeader = header.trim();
+        if (!cleanHeader) continue;
         const lowerHeader = cleanHeader.toLowerCase();
-        const mappedKey = colMap[lowerHeader] || lowerHeader.replace(/[^a-z0-9_]/g, '_');
-        const strVal = String(val).trim();
+        // Exact campaign alias OR Excel-normalized key (bifurcated from Manual defaults)
+        const mappedKey =
+          colMap[lowerHeader] || this.normalizeHeaderKey(cleanHeader) || lowerHeader.replace(/[^a-z0-9_]/g, '_');
+        const strVal = String(val ?? '').trim();
+        if (!strVal) {
+          customFields[mappedKey] = strVal;
+          continue;
+        }
 
-        if (mappedKey === 'phone' || lowerHeader.includes('phone') || lowerHeader.includes('mobile') || lowerHeader.includes('contact')) {
-          phone = strVal;
-        } else if (mappedKey === 'client_name' || mappedKey === 'name' || lowerHeader.includes('name') || lowerHeader.includes('client')) {
-          name = strVal;
+        if (this._excelIsPhoneHeader(lowerHeader)) {
+          const score =
+            /^(phone|mobile|mobile no|mobile_no|mobile number|phone number|whatsapp)$/.test(lowerHeader)
+              ? 3
+              : lowerHeader.includes('mobile') || lowerHeader.includes('phone')
+                ? 2
+                : 1;
+          if (score >= phoneScore) {
+            phone = strVal;
+            phoneScore = score;
+          }
+        }
+        if (this._excelIsNameHeader(lowerHeader)) {
+          const score =
+            /^(name|client name|customer name|full name|lead name)$/.test(lowerHeader) ? 3 : 2;
+          if (score >= nameScore) {
+            name = strVal;
+            nameScore = score;
+          }
         }
 
         if (
@@ -2199,11 +2356,30 @@ export const crmService = {
         customFields[mappedKey] = strVal;
       }
 
-      if (!phone && customFields.phone) phone = String(customFields.phone);
-      if (!name && customFields.client_name) name = String(customFields.client_name);
+      // Fallbacks from common excel keys already stored
+      if (!phone) {
+        phone = String(
+          customFields.Phone ||
+            customFields.Mobile ||
+            customFields.Mobile_No ||
+            customFields.Mobile_Number ||
+            customFields.Number ||
+            customFields.Contact_No ||
+            '',
+        ).trim();
+      }
+      if (!name) {
+        name = String(
+          customFields.Name ||
+            customFields.Client_Name ||
+            customFields.Customer_Name ||
+            customFields.Full_Name ||
+            '',
+        ).trim();
+      }
 
       if (phone || name) {
-        const cleanDigits = String(phone || customFields.phone || '').replace(/\D/g, '');
+        const cleanDigits = String(phone || '').replace(/\D/g, '');
         const phone10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
 
         if (shouldSkipDuplicates && phone10.length >= 7) {
@@ -2216,7 +2392,6 @@ export const crmService = {
         }
 
         let rowTelecallerId = telecallerId;
-        let rowAssignedToId: number | undefined = undefined;
 
         // Custom allocation options passed from upload dialog
         if (options?.assignmentMode === 'ROUND_ROBIN' && options.assignedTelecallerIds && options.assignedTelecallerIds.length > 0) {
@@ -2248,7 +2423,7 @@ export const crmService = {
           status: CrmLeadStatus.NOT_STARTED,
           customFields,
           leadSource: 'EXCEL',
-          telecallerId: rowTelecallerId,
+          telecallerId: rowTelecallerId || null,
           assignedToId: null,
           createdById,
         });
@@ -2277,12 +2452,135 @@ export const crmService = {
       count: insertedCount,
       skippedDuplicates: skippedDuplicatesCount,
       totalRows: rows.length,
+      importBatchId: insertedCount > 0 ? importBatchId : null,
+      importFileName,
       dispatchedCount: dispatchResult.dispatchedCount,
       queuedCount: dispatchResult.remainingQueuedCount,
       message: skippedDuplicatesCount > 0
-        ? `Successfully imported ${insertedCount} leads (${skippedDuplicatesCount} duplicate records skipped)`
-        : `Successfully imported ${insertedCount} leads from Excel (${dispatchResult.dispatchedCount} dispatched to active telecallers, ${dispatchResult.remainingQueuedCount} waiting in queue)`,
+        ? `Successfully imported ${insertedCount} Excel leads (${skippedDuplicatesCount} duplicates skipped). Batch: ${importBatchId.slice(0, 8)}…`
+        : `Successfully imported ${insertedCount} Excel leads (${dispatchResult.dispatchedCount} dispatched, ${dispatchResult.remainingQueuedCount} waiting). Batch: ${importBatchId.slice(0, 8)}…`,
     };
+  },
+
+  async bulkMoveLeadsToBin(
+    leadIds: string[],
+    userContext?: { userId?: string; employeeId?: number; role?: string },
+  ) {
+    const ids = [...new Set((leadIds || []).map(String).filter(Boolean))];
+    if (!ids.length) throw new Error('No leads selected');
+    const roleUpper = String(userContext?.role || '').toUpperCase();
+    const isAdmin =
+      isAdminRole(userContext?.role) ||
+      ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'ITADMIN'].some((r) =>
+        roleUpper.includes(r),
+      );
+    if (!isAdmin) throw new Error('Only admins can bulk-delete leads');
+
+    let moved = 0;
+    const errors: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.moveToBin(id, userContext);
+        moved += 1;
+      } catch (err: any) {
+        errors.push(`${id}: ${err?.message || err}`);
+      }
+    }
+    return { moved, failed: ids.length - moved, errors: errors.slice(0, 10) };
+  },
+
+  async revertExcelImportBatch(
+    importBatchId: string,
+    userContext?: { userId?: string; employeeId?: number; role?: string },
+    scope: string = 'NB_DEVELOPER',
+  ) {
+    const batchId = String(importBatchId || '').trim();
+    if (!batchId) throw new Error('importBatchId is required');
+    const roleUpper = String(userContext?.role || '').toUpperCase();
+    const isAdmin =
+      isAdminRole(userContext?.role) ||
+      ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'ITADMIN'].some((r) =>
+        roleUpper.includes(r),
+      );
+    if (!isAdmin) throw new Error('Only admins can revert an Excel upload');
+
+    const leads = await prisma.crmLead.findMany({
+      where: {
+        scope,
+        isDeleted: false,
+        leadSource: 'EXCEL',
+      },
+      select: { id: true, customFields: true, status: true },
+      take: 20000,
+    });
+    const matchIds = leads
+      .filter((l) => {
+        const cf =
+          l.customFields && typeof l.customFields === 'object'
+            ? (l.customFields as Record<string, any>)
+            : {};
+        return String(cf.importBatchId || '') === batchId;
+      })
+      .filter((l) => l.status !== 'BOOKING_CONFIRMED')
+      .map((l) => l.id);
+
+    if (!matchIds.length) {
+      return { reverted: 0, message: 'No active Excel leads found for this batch' };
+    }
+
+    await prisma.crmFollowUp.updateMany({
+      where: { leadId: { in: matchIds }, status: 'PENDING' },
+      data: { status: 'CANCELLED' },
+    });
+    const upd = await prisma.crmLead.updateMany({
+      where: { id: { in: matchIds } },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
+    return {
+      reverted: upd.count,
+      importBatchId: batchId,
+      message: `Reverted Excel upload — ${upd.count} lead(s) moved to Bin`,
+    };
+  },
+
+  async listExcelImportBatches(scope: string = 'NB_DEVELOPER', limit = 20) {
+    const leads = await prisma.crmLead.findMany({
+      where: {
+        scope,
+        isDeleted: false,
+        leadSource: 'EXCEL',
+      },
+      select: { id: true, customFields: true, createdAt: true, createdById: true },
+      orderBy: { createdAt: 'desc' },
+      take: 5000,
+    });
+    const map = new Map<
+      string,
+      { importBatchId: string; importFileName: string; count: number; importedAt: string; createdById?: string | null }
+    >();
+    for (const l of leads) {
+      const cf =
+        l.customFields && typeof l.customFields === 'object'
+          ? (l.customFields as Record<string, any>)
+          : {};
+      const batchId = String(cf.importBatchId || '').trim();
+      if (!batchId) continue;
+      const existing = map.get(batchId);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(batchId, {
+          importBatchId: batchId,
+          importFileName: String(cf.importFileName || 'excel-import.xlsx'),
+          count: 1,
+          importedAt: String(cf.importedAt || l.createdAt.toISOString()),
+          createdById: l.createdById,
+        });
+      }
+    }
+    return Array.from(map.values())
+      .sort((a, b) => String(b.importedAt).localeCompare(String(a.importedAt)))
+      .slice(0, Math.max(1, Math.min(limit, 50)));
   },
 
   async updateLeadStatus(

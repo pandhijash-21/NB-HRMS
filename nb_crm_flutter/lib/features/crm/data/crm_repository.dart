@@ -302,6 +302,36 @@ class CrmRepository {
     );
   }
 
+  Future<Map<String, dynamic>> bulkMoveLeadsToBin(List<String> leadIds) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/leads/bulk-bin',
+      data: {'ids': leadIds},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listExcelImportBatches({int limit = 20}) async {
+    return _dio.getEnvelope<List<Map<String, dynamic>>>(
+      'crm/leads/excel-import-batches',
+      queryParameters: {'scope': crmScopeNotifier.value, 'limit': limit},
+      parse: (raw) {
+        if (raw is! List) return [];
+        return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> revertExcelImportBatch(String importBatchId) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/leads/excel-import-batches/revert',
+      data: {
+        'importBatchId': importBatchId,
+        'scope': crmScopeNotifier.value,
+      },
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
   Future<Map<String, dynamic>> importExcel(
     Uint8List fileBytes,
     String fileName, {

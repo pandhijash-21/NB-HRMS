@@ -308,11 +308,60 @@ export const crmController = {
           assignmentMode,
           assignedTelecallerIds,
           skipDuplicates,
+          fileName: req.file.originalname || req.file.filename,
         },
       );
       res.json(ok(result));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to import Excel leads'));
+    }
+  },
+
+  async bulkMoveLeadsToBin(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const ids = Array.isArray(req.body?.ids)
+        ? req.body.ids
+        : Array.isArray(req.body?.leadIds)
+          ? req.body.leadIds
+          : [];
+      const result = await crmService.bulkMoveLeadsToBin(ids, {
+        userId: authUser?.id,
+        employeeId: authUser?.employeeId,
+        role: authUser?.roleName || authUser?.role?.name || authUser?.role,
+      });
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to bulk delete leads'));
+    }
+  },
+
+  async revertExcelImportBatch(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const importBatchId = String(req.body?.importBatchId || req.params?.batchId || '');
+      const result = await crmService.revertExcelImportBatch(
+        importBatchId,
+        {
+          userId: authUser?.id,
+          employeeId: authUser?.employeeId,
+          role: authUser?.roleName || authUser?.role?.name || authUser?.role,
+        },
+        getScope(req),
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to revert Excel import'));
+    }
+  },
+
+  async listExcelImportBatches(req: Request, res: Response) {
+    try {
+      const limit = req.query.limit ? Number(req.query.limit) : 20;
+      const result = await crmService.listExcelImportBatches(getScope(req), limit);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to list Excel import batches'));
     }
   },
 

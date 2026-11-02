@@ -438,12 +438,29 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         final end = DateTime(state.toDate!.year, state.toDate!.month, state.toDate!.day, 23, 59, 59, 999);
         if (l.createdAt.isAfter(end)) return false;
       }
-      // Leads directly assigned to this employee (as sales rep or telecaller) are always visible to them
-      if (!isAdmin && userEmployeeId != null && (l.assignedToId == userEmployeeId || l.telecallerId == userEmployeeId)) {
-        return true;
+      // Leads allocated to this employee, or in a campaign they are assigned to, always visible
+      if (!isAdmin && userEmployeeId != null) {
+        final personallyMine = l.assignedToId == userEmployeeId || l.telecallerId == userEmployeeId;
+        final campaignMine = l.campaignId != null &&
+            state.campaigns.any(
+              (c) => c.id == l.campaignId && c.assignedTelecallerIds.contains(userEmployeeId),
+            );
+        if (personallyMine || campaignMine) {
+          // Still respect lead-flow chips when browsing, but never hide personal/campaign work
+          if (effectiveFlow == 'ALL') return true;
+          if (effectiveFlow == 'EXCEL') {
+            return !l.isManual && (l.leadSource == 'EXCEL' || l.customFields['isExcelImport'] == true);
+          }
+          if (effectiveFlow == 'MANUAL') return l.isManual;
+          if (effectiveFlow == 'WEBHOOK') {
+            return !l.isManual &&
+                (l.leadSource == 'WEBHOOK' || l.leadSource == 'META' || l.leadSource == 'GOOGLE');
+          }
+          return true;
+        }
       }
       if (effectiveFlow == 'EXCEL') {
-        return (l.leadSource == 'EXCEL' || l.leadSource == null) && !l.isManual;
+        return !l.isManual && (l.leadSource == 'EXCEL' || l.customFields['isExcelImport'] == true);
       } else if (effectiveFlow == 'MANUAL') {
         return l.isManual;
       } else if (effectiveFlow == 'WEBHOOK') {
@@ -1000,6 +1017,19 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
                           ),
+                        if (isAdmin && _bulkTransferSelectedIds.isNotEmpty)
+                          FilledButton.icon(
+                            onPressed: () => _bulkDeleteSelectedLeads(context),
+                            icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                            label: Text('Delete ${_bulkTransferSelectedIds.length}'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFFDC2626),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                              visualDensity: VisualDensity.compact,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
                         PopupMenuButton<String>(
                           tooltip: 'More actions',
                           offset: const Offset(0, 40),
@@ -1009,6 +1039,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               _showMergeColumnsDialog(context, primaryColor);
                             } else if (value == 'clean') {
                               _handleCleanCrmData(context);
+                            } else if (value == 'revert_excel') {
+                              _showRevertExcelImportDialog(context);
                             }
                           },
                           itemBuilder: (ctx) => [
@@ -1021,6 +1053,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                 title: Text('Merge Columns'),
                               ),
                             ),
+                            if (isAdmin)
+                              const PopupMenuItem(
+                                value: 'revert_excel',
+                                child: ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(Icons.undo_rounded, size: 20, color: Color(0xFFEA580C)),
+                                  title: Text('Revert Excel Upload'),
+                                ),
+                              ),
                             if (isItAdminEmp1)
                               const PopupMenuItem(
                                 value: 'clean',
@@ -1238,7 +1280,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       size: 14,
                       color: state.leadFlowFilter == 'EXCEL' ? primaryColor : const Color(0xFF16A34A),
                     ),
-                    label: Text('Excel (${leads.where((l) => (l.leadSource == 'EXCEL' || l.leadSource == null) && !l.isManual).length})'),
+                    label: Text('Excel (${leads.where((l) => !l.isManual && (l.leadSource == 'EXCEL' || l.customFields['isExcelImport'] == true)).length})'),
                     selected: state.leadFlowFilter == 'EXCEL',
                     selectedColor: primaryColor.withValues(alpha: 0.18),
                     side: BorderSide(
@@ -1543,14 +1585,38 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                           ),
                                           child: const Text('⚡ Webhook', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0891B2))),
                                         )
-                                      : (!lead.isManual && (lead.leadSource == 'EXCEL' || lead.leadSource == null))
-                                          ? Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF16A34A).withValues(alpha: 0.12),
-                                                borderRadius: BorderRadius.circular(6),
+                                      : (!lead.isManual && (lead.leadSource == 'EXCEL' || lead.leadSource == null || lead.customFields['isExcelImport'] == true))
+                                          ? Tooltip(
+                                              message: lead.createdByName != null && lead.createdByName!.trim().isNotEmpty
+                                                  ? 'Excel import by ${lead.createdByName}'
+                                                  : 'Imported from Excel',
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: Column(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    const Text('📊 Excel', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
+                                                    if (lead.createdByName != null && lead.createdByName!.trim().isNotEmpty) ...[
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        'by ${lead.createdByName!.trim()}',
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.w600,
+                                                          color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF15803D),
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
                                               ),
-                                              child: const Text('📊 Excel', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
                                             )
                                           : Tooltip(
                                               message: lead.createdByName != null && lead.createdByName!.isNotEmpty
@@ -5030,6 +5096,153 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           );
         },
       ),
+    );
+  }
+
+  Future<void> _bulkDeleteSelectedLeads(BuildContext context) async {
+    final ids = _bulkTransferSelectedIds.toList();
+    if (ids.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete selected leads?'),
+        content: Text(
+          '${ids.length} lead(s) will move to Bin. Confirmed bookings are skipped.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final res = await context.read<CrmRepository>().bulkMoveLeadsToBin(ids);
+      if (!mounted) return;
+      setState(() => _bulkTransferSelectedIds.clear());
+      context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
+      final moved = res['moved'] ?? ids.length;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Moved $moved lead(s) to Bin'),
+          backgroundColor: const Color(0xFF16A34A),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Bulk delete failed: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _showRevertExcelImportDialog(BuildContext context) async {
+    List<Map<String, dynamic>> batches = [];
+    Object? loadError;
+    try {
+      batches = await context.read<CrmRepository>().listExcelImportBatches();
+    } catch (e) {
+      loadError = e;
+    }
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        String? selectedBatchId;
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return AlertDialog(
+              title: const Text('Revert Excel Upload'),
+              content: SizedBox(
+                width: 460,
+                child: loadError != null
+                    ? Text('Failed to load batches: $loadError')
+                    : batches.isEmpty
+                        ? const Text(
+                            'No Excel import batches found.\n\n'
+                            'Only uploads after this update are tracked. Older Excel leads can still be multi-selected and deleted.',
+                          )
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Pick an upload batch to move all its leads to Bin (revert).',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                              const SizedBox(height: 12),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxHeight: 320),
+                                child: ListView.separated(
+                                  shrinkWrap: true,
+                                  itemCount: batches.length,
+                                  separatorBuilder: (_, __) => const Divider(height: 1),
+                                  itemBuilder: (_, i) {
+                                    final b = batches[i];
+                                    final id = b['importBatchId']?.toString() ?? '';
+                                    final name = b['importFileName']?.toString() ?? 'excel.xlsx';
+                                    final count = b['count'] ?? 0;
+                                    final when = b['importedAt']?.toString() ?? '';
+                                    final selected = selectedBatchId == id;
+                                    return ListTile(
+                                      selected: selected,
+                                      leading: Icon(
+                                        selected ? Icons.radio_button_checked : Icons.radio_button_off,
+                                        color: const Color(0xFFEA580C),
+                                      ),
+                                      title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                      subtitle: Text('$count leads · $when', style: const TextStyle(fontSize: 11)),
+                                      onTap: () => setModalState(() => selectedBatchId = id),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Close')),
+                if (batches.isNotEmpty)
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEA580C),
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: selectedBatchId == null
+                        ? null
+                        : () async {
+                            Navigator.pop(dialogCtx);
+                            try {
+                              final res = await context
+                                  .read<CrmRepository>()
+                                  .revertExcelImportBatch(selectedBatchId!);
+                              if (!mounted) return;
+                              context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(res['message']?.toString() ?? 'Excel upload reverted'),
+                                  backgroundColor: const Color(0xFF16A34A),
+                                ),
+                              );
+                            } catch (e) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Revert failed: $e'), backgroundColor: Colors.red),
+                              );
+                            }
+                          },
+                    child: const Text('Revert Batch'),
+                  ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

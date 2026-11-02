@@ -3795,13 +3795,13 @@ export const crmService = {
   },
 
   /**
-   * Discovers all active employees eligible to receive telecaller leads for the given CRM scope.
-   * Checks:
-   * 1. Employee is ACTIVE and has an active User account (excluding administrative roles).
-   * 2. Permission Matrix: User's role has READ or WRITE permission on CRM modules:
-   *    - For Real Estate CRM (NB_DEVELOPER): CRM_PRE_SALES, CRM_SALES, or CRM
-   *    - For Finserve CRM (NB_FINSERVE): FIN_CRM_PRE_SALES, FIN_CRM_SALES, or FIN_CRM
-   * 3. Sub-organization: Matches creator or campaign sub-organization if provided (graceful fallback).
+   * Employees considered for Pre-Sales presence / auto-dispatch / workload:
+   * - Anyone who currently has a lead assigned (telecaller OR sales assignee), OR
+   * - Anyone who entered/created a lead in this CRM scope, OR
+   * - Anyone in Excel/Meta/Google assignment pools, OR
+   * - Classic telecaller role/designation holders with CRM permission
+   * Excludes ITADMIN (and other admin roles). Punch-in + screen idle + workload
+   * are applied by callers via options / capacity checks.
    */
   async getEligibleTelecallers(
     scope: string = 'NB_DEVELOPER',
@@ -3851,61 +3851,134 @@ export const crmService = {
       },
     });
 
-    // 1. Exclude administrators, IT, and executive management roles
+    // Exclude ITADMIN + company/system admins from presence & auto-dispatch
     const isExcludedAdmin = (roleName?: string | null) => {
-      const r = String(roleName || '').toLowerCase().trim();
-      return isAdminRole(roleName) || /admin|superadmin|itadmin/i.test(r);
+      const r = String(roleName || '')
+        .toLowerCase()
+        .replace(/[\s_-]+/g, '');
+      if (isAdminRole(roleName)) return true;
+      if (r.includes('itadmin') || r === 'it' || r.includes('idadmin')) return true;
+      if (r.includes('superadmin') || r.includes('systemadmin')) return true;
+      return false;
     };
 
-    // 2. Telecaller check: role or designation must indicate telecalling
-    const isTelecallerUser = (u: any) => {
-      const roleName = String(u.role?.name || '').toLowerCase().trim();
-      const desig = String(u.employee?.generalInfo?.designation || '').toLowerCase().trim();
-      if (isExcludedAdmin(u.role?.name)) return false;
-      return roleName.includes('telecall') || desig.includes('telecall');
-    };
-
-    const telecallerUsers = users.filter(isTelecallerUser);
-
-    // 3. Permission matrix: ensure they have access to this CRM scope
-    const permittedUsers = telecallerUsers.filter((u) => (u.role?.permissions?.length || 0) > 0);
-    const candidatePool = permittedUsers.length > 0 ? permittedUsers : telecallerUsers;
-
-    // 4. Filter by subOrganization if specified
-    let scopedUsers = candidatePool;
-    if (subOrganization && subOrganization.trim().length > 0) {
-      const subOrgClean = subOrganization.trim().toLowerCase();
-      const matched = candidatePool.filter((u) => {
-        const empSub = (u.subOrganization || u.employee?.generalInfo?.subOrganization || '').toLowerCase().trim();
-        return empSub === subOrgClean;
-      });
-      if (matched.length > 0) {
-        scopedUsers = matched;
+    const empIdByUserId = new Map<string, number>();
+    const roleByEmpId = new Map<number, string>();
+    for (const u of users) {
+      if (u.employeeId) {
+        empIdByUserId.set(u.id, u.employeeId);
+        roleByEmpId.set(u.employeeId, u.role?.name || '');
       }
     }
 
-    // 5. Candidate IDs sorted by employee ID
-    let candidateIds: number[] = [];
-    if (scopedUsers.length > 0) {
-      candidateIds = Array.from(
-        new Set(
-          scopedUsers
-            .map((u) => u.employeeId)
-            .filter((id): id is number => typeof id === 'number' && id > 0),
-        ),
-      ).sort((a, b) => a - b);
-    } else {
-      // Fallback: Check if explicit pools were configured in CRM Settings
-      const pools = await this.getAssignedTelecallerPools(scope);
-      const configuredPool = Array.from(
-        new Set([...pools.excelIds, ...pools.webhookIds, ...pools.googleIds]),
-      );
-      if (configuredPool.length > 0) {
-        const nonAdminPool = configuredPool.filter((id) => {
-          const user = users.find((u) => u.employeeId === id);
-          return !isExcludedAdmin(user?.role?.name);
+    const idSet = new Set<number>();
+
+    // A) Leads currently assigned (telecaller or sales assignee)
+    const assignedWide = await prisma.crmLead.findMany({
+      where: {
+        scope,
+        isDeleted: false,
+        OR: [{ telecallerId: { not: null } }, { assignedToId: { not: null } }],
+      },
+      select: { telecallerId: true, assignedToId: true },
+      take: 8000,
+    });
+    for (const row of assignedWide) {
+      if (row.telecallerId) idSet.add(row.telecallerId);
+      if (row.assignedToId) idSet.add(row.assignedToId);
+    }
+
+    // B) Whoever entered / created leads in this scope
+    const createdRows = await prisma.crmLead.findMany({
+      where: {
+        scope,
+        isDeleted: false,
+        createdById: { not: null },
+      },
+      select: { createdById: true, customFields: true },
+      take: 5000,
+    });
+    for (const row of createdRows) {
+      if (row.createdById && empIdByUserId.has(row.createdById)) {
+        idSet.add(empIdByUserId.get(row.createdById)!);
+      }
+      const custom =
+        row.customFields && typeof row.customFields === 'object'
+          ? (row.customFields as Record<string, any>)
+          : {};
+      const creatorEmp = Number(custom.creatorEmployeeId);
+      if (Number.isFinite(creatorEmp) && creatorEmp > 0) idSet.add(creatorEmp);
+    }
+
+    // C) Explicit Excel / Meta / Google desk pools from CRM Settings
+    const pools = await this.getAssignedTelecallerPools(scope);
+    for (const id of [...pools.excelIds, ...pools.webhookIds, ...pools.googleIds]) {
+      if (id > 0) idSet.add(id);
+    }
+
+    // D) Classic telecaller role/designation with CRM permission (seed pool even before first lead)
+    for (const u of users) {
+      if (!u.employeeId || isExcludedAdmin(u.role?.name)) continue;
+      const roleName = String(u.role?.name || '').toLowerCase();
+      const desig = String(u.employee?.generalInfo?.designation || '').toLowerCase();
+      const isTele =
+        roleName.includes('telecall') || desig.includes('telecall');
+      const hasCrmPerm = (u.role?.permissions?.length || 0) > 0;
+      if (isTele && hasCrmPerm) idSet.add(u.employeeId);
+    }
+
+    // Drop excluded admins / ITADMIN and inactive users not in `users`
+    let candidateIds = Array.from(idSet)
+      .filter((id) => {
+        if (!Number.isFinite(id) || id <= 0) return false;
+        const role = roleByEmpId.get(id);
+        // Unknown role (no user link): keep only if employee is active — resolve below
+        if (role !== undefined && isExcludedAdmin(role)) return false;
+        return true;
+      })
+      .sort((a, b) => a - b);
+
+    // Ensure candidates are ACTIVE employees; drop ITADMIN even if role map missed them
+    if (candidateIds.length > 0) {
+      const emps = await prisma.employee.findMany({
+        where: { id: { in: candidateIds }, status: 'ACTIVE' },
+        select: {
+          id: true,
+          user: { select: { role: { select: { name: true } } } },
+        },
+      });
+      candidateIds = emps
+        .filter((e) => !isExcludedAdmin(e.user?.role?.name))
+        .map((e) => e.id)
+        .sort((a, b) => a - b);
+    }
+
+    // Optional sub-organization filter (graceful: ignore if no matches)
+    if (subOrganization && subOrganization.trim().length > 0 && candidateIds.length > 0) {
+      const subOrgClean = subOrganization.trim().toLowerCase();
+      const matched = await prisma.employee.findMany({
+        where: {
+          id: { in: candidateIds },
+          generalInfo: { subOrganization: { equals: subOrganization.trim(), mode: 'insensitive' } },
+        },
+        select: { id: true },
+      });
+      if (matched.length > 0) {
+        candidateIds = matched.map((m) => m.id).sort((a, b) => a - b);
+      } else {
+        // soft fallback — also try users.subOrganization via map
+        const soft = candidateIds.filter((id) => {
+          const u = users.find((x) => x.employeeId === id);
+          const empSub = (
+            u?.subOrganization ||
+            u?.employee?.generalInfo?.subOrganization ||
+            ''
+          )
+            .toLowerCase()
+            .trim();
+          return empSub === subOrgClean;
         });
-        candidateIds = nonAdminPool;
+        if (soft.length > 0) candidateIds = soft;
       }
     }
 

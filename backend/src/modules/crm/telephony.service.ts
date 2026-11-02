@@ -3,7 +3,7 @@
  * Replaces Elision / Greeter Click2Call.
  */
 
-import { Request, Response } from 'express';
+import { Request, Response as ExpressResponse } from 'express';
 import { prisma } from '../../config/prisma';
 import {
   DEFAULT_NINEANCE_BASE,
@@ -12,6 +12,9 @@ import {
   NineanceTokens,
 } from './nineance.client';
 import { whatsappService } from './whatsapp.service';
+
+/** Fetch API Response (avoid clash with Express Response) */
+type FetchResponse = globalThis.Response;
 
 export type TelecallerNineanceConfig = {
   agent_id?: string;
@@ -1301,7 +1304,10 @@ class TelephonyService {
     }
   }
 
-  private async _pipeUpstreamAudio(upstreamRes: Response, res: Response): Promise<boolean> {
+  private async _pipeUpstreamAudio(
+    upstreamRes: FetchResponse,
+    res: ExpressResponse,
+  ): Promise<boolean> {
     if (!(upstreamRes.ok || upstreamRes.status === 206)) return false;
     const contentType = upstreamRes.headers.get('content-type') || 'audio/mpeg';
     // Reject HTML login pages and JSON error bodies
@@ -1330,7 +1336,7 @@ class TelephonyService {
     return false;
   }
 
-  async streamCallAudio(logId: string, req: Request, res: Response) {
+  async streamCallAudio(logId: string, req: Request, res: ExpressResponse) {
     const log = await prisma.crmCallLog.findUnique({
       where: { id: logId },
       select: { id: true, recordingUrl: true, callId: true, leadId: true },

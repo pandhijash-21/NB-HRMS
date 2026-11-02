@@ -835,21 +835,34 @@ class CrmPaymentTermTemplate {
         'lines': lines.map((l) => l.toJson()).toList(),
       };
 
-  /// Build proposal paymentSchedule rows with amounts from [grandTotal].
-  List<Map<String, dynamic>> toPaymentSchedule(double grandTotal) {
-    return [
-      for (var i = 0; i < lines.length; i++)
-        {
-          'seq': i + 1,
-          'name': lines[i].name,
-          'percentage': lines[i].percentage,
-          'months': lines[i].months,
-          'timing': lines[i].timingLabel,
-          'amount': double.parse(
-            ((grandTotal * lines[i].percentage) / 100).toStringAsFixed(2),
-          ),
-        },
-    ];
+  /// Build proposal paymentSchedule rows with amounts + due dates from [grandTotal].
+  List<Map<String, dynamic>> toPaymentSchedule(
+    double grandTotal, {
+    DateTime? bookingDate,
+  }) {
+    final base = bookingDate ?? DateTime.now();
+    final out = <Map<String, dynamic>>[];
+    for (var i = 0; i < lines.length; i++) {
+      final amount = double.parse(
+        ((grandTotal * lines[i].percentage) / 100).toStringAsFixed(2),
+      );
+      final due = DateTime(base.year, base.month + lines[i].months, base.day);
+      final dueYmd =
+          '${due.year.toString().padLeft(4, '0')}-${due.month.toString().padLeft(2, '0')}-${due.day.toString().padLeft(2, '0')}';
+      out.add({
+        'seq': i + 1,
+        'name': lines[i].name,
+        'percentage': lines[i].percentage,
+        'months': lines[i].months,
+        'timing': lines[i].timingLabel,
+        'amount': amount,
+        'dueDate': dueYmd,
+        'status': 'PENDING',
+        'paidAmount': 0.0,
+        'balance': amount,
+      });
+    }
+    return out;
   }
 }
 

@@ -5339,7 +5339,11 @@ class _ClientProposalsGroupCardState extends State<_ClientProposalsGroupCard> {
                         final authState = context.read<AuthBloc>().state;
                         final currentUserName = authState.user?.name ?? 'Sales Manager';
                         final currentUserId = authState.user?.employeeId;
-                        final paymentSchedule = term.toPaymentSchedule(proposal.grandTotal);
+                        final bookingAt = DateTime.now();
+                        final paymentSchedule = term.toPaymentSchedule(
+                          proposal.grandTotal,
+                          bookingDate: bookingAt,
+                        );
 
                         final updatedProposals = widget.lead.proposals.map((p) {
                           if (p.id != proposal.id) return p.toJson();
@@ -5348,22 +5352,29 @@ class _ClientProposalsGroupCardState extends State<_ClientProposalsGroupCard> {
                           json['paymentSchedule'] = paymentSchedule;
                           json['paymentTermTemplateId'] = term.id;
                           json['paymentTermTemplateName'] = term.name;
+                          json['bookingConfirmedAt'] = bookingAt.toIso8601String();
                           return json;
                         }).toList();
 
+                        final bookedProposalJson = updatedProposals.firstWhere(
+                          (p) => p['id'] == proposal.id,
+                          orElse: () => proposal.toJson(),
+                        );
+
                         final log = CrmCustomerLog(
                           id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-                          title: 'Deal Finalized: Unit ${proposal.unitNo}',
+                          title: 'Deal Finalized → Post Sales: Unit ${proposal.unitNo}',
                           description:
-                              'Deal finalized with payment term "${term.name}" for Unit #${proposal.unitNo} (${proposal.projectName}) at ₹ ${currency.format(proposal.grandTotal)} by $currentUserName.',
+                              'Deal finalized with payment term "${term.name}" for Unit #${proposal.unitNo} (${proposal.projectName}) at ₹ ${currency.format(proposal.grandTotal)} by $currentUserName. Handed to Post Sales with payment schedule.',
                           type: 'STATUS_CHANGE',
-                          timestamp: DateTime.now(),
+                          timestamp: bookingAt,
                           performedByName: currentUserName,
                           performedById: currentUserId,
                           metadata: {
                             'paymentTermTemplateId': term.id,
                             'paymentTermTemplateName': term.name,
                             'paymentSchedule': paymentSchedule,
+                            'postSalesHandoff': true,
                           },
                         );
 
@@ -5382,6 +5393,15 @@ class _ClientProposalsGroupCardState extends State<_ClientProposalsGroupCard> {
                                   'selectedPaymentTermId': term.id,
                                   'selectedPaymentTermName': term.name,
                                   'paymentSchedule': paymentSchedule,
+                                  'bookingConfirmedAt': bookingAt.toIso8601String(),
+                                  'postSalesHandoff': true,
+                                  'postSalesHandoffAt': bookingAt.toIso8601String(),
+                                  'postSalesAssigneeId': widget.lead.assignedToId,
+                                  'bookedProposalId': proposal.id,
+                                  'bookedProposalSnapshot': bookedProposalJson,
+                                  'paymentLedger': widget.lead.customFields['paymentLedger'] is List
+                                      ? widget.lead.customFields['paymentLedger']
+                                      : <dynamic>[],
                                 },
                               }),
                             );

@@ -286,6 +286,7 @@ crmRouter.post('/leads/:id/bank-queries', generalCrmGuard, crmController.addBank
 crmRouter.patch('/leads/:id/bank-queries/:queryId/resolve', generalCrmGuard, crmController.resolveBankQuery);
 crmRouter.post('/leads/:id/portal-link', generalCrmGuard, crmController.generateClientPortalLink);
 crmRouter.post('/leads/:id/upload-doc', generalCrmGuard, upload.single('document'), crmController.uploadLeadDoc);
+crmRouter.post('/leads/:id/payment-entries', generalCrmGuard, crmController.recordPaymentEntry);
 crmRouter.get('/leads/:id/download-docs-zip', generalCrmGuard, crmController.downloadLeadDocsZip);
 
 // Follow-ups

@@ -253,6 +253,20 @@ async function start() {
     console.warn('CRM visit reminder worker setup notice:', err);
   }
 
+  // Post-sales payment due reminders (day-before + due day) — every 3 minutes
+  try {
+    const { runPaymentDueReminders } = require('./modules/crm/paymentDueReminder.job') as typeof import('./modules/crm/paymentDueReminder.job');
+    setTimeout(() => {
+      void runPaymentDueReminders();
+    }, 20000);
+    setInterval(() => {
+      void runPaymentDueReminders();
+    }, 3 * 60 * 1000);
+    console.log('CRM payment-due post-sales reminders started (every 3 min from 07:00 IST)');
+  } catch (err) {
+    console.warn('CRM payment due reminder worker setup notice:', err);
+  }
+
   server.listen(env.PORT, () => {
     console.log(`Server running on port ${env.PORT}`);
   });

@@ -6061,6 +6061,141 @@ export const crmService = {
     };
   },
 
+  /**
+   * Record a post-sales payment against a booking installment (ledger entry).
+   * Updates paymentSchedule paid/balance/status and appends paymentLedger row.
+   */
+  async recordPaymentEntry(
+    leadId: string,
+    dto: {
+      installmentSeq: number;
+      amount: number;
+      mode: string;
+      reference?: string;
+      note?: string;
+      proofUrl?: string;
+      proofFileName?: string;
+      paidAt?: string;
+    },
+    userContext?: { userId?: string; employeeId?: number; name?: string },
+  ) {
+    const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
+    if (!lead) throw new Error('Lead not found');
+    if (lead.status !== 'BOOKING_CONFIRMED') {
+      throw new Error('Payments can only be recorded for finalized (BOOKING_CONFIRMED) bookings');
+    }
+
+    const amount = Number(dto.amount);
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error('Payment amount must be greater than 0');
+    const mode = String(dto.mode || '').trim().toUpperCase();
+    if (!mode) throw new Error('Payment mode is required (CASH / CHEQUE / DD / UPI / NEFT / RTGS / OTHER)');
+    const seq = Number(dto.installmentSeq);
+    if (!Number.isFinite(seq) || seq < 1) throw new Error('installmentSeq is required');
+
+    const custom = (lead.customFields && typeof lead.customFields === 'object'
+      ? { ...(lead.customFields as Record<string, any>) }
+      : {}) as Record<string, any>;
+
+    let schedule: any[] = Array.isArray(custom.paymentSchedule) ? [...custom.paymentSchedule] : [];
+    if (!schedule.length && Array.isArray(custom.bookedProposalSnapshot?.paymentSchedule)) {
+      schedule = [...custom.bookedProposalSnapshot.paymentSchedule];
+    }
+    if (!schedule.length) throw new Error('No payment schedule found on this booking');
+
+    const idx = schedule.findIndex((r) => Number(r.seq) === seq);
+    if (idx < 0) throw new Error(`Installment #${seq} not found on payment schedule`);
+
+    const row = { ...schedule[idx] };
+    const dueAmount = Number(row.amount) || 0;
+    const alreadyPaid = Number(row.paidAmount) || 0;
+    const newPaid = Math.round((alreadyPaid + amount) * 100) / 100;
+    const balance = Math.max(0, Math.round((dueAmount - newPaid) * 100) / 100);
+    let status = 'PENDING';
+    if (newPaid <= 0) status = 'PENDING';
+    else if (balance <= 0.009) status = 'PAID';
+    else status = 'PARTIAL';
+
+    row.paidAmount = newPaid;
+    row.balance = balance;
+    row.status = status;
+    schedule[idx] = row;
+
+    const ledger: any[] = Array.isArray(custom.paymentLedger) ? [...custom.paymentLedger] : [];
+    const totalCollected = ledger.reduce((s, e) => s + (Number(e.amount) || 0), 0) + amount;
+    const grandTotal =
+      Number(custom.bookedProposalSnapshot?.grandTotal) ||
+      schedule.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const runningBalanceAfter = Math.max(0, Math.round((grandTotal - totalCollected) * 100) / 100);
+
+    const entry = {
+      id: `pay_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      installmentSeq: seq,
+      installmentName: String(row.name || `Installment ${seq}`),
+      amount,
+      mode,
+      reference: String(dto.reference || '').trim(),
+      note: String(dto.note || '').trim(),
+      proofUrl: dto.proofUrl || null,
+      proofFileName: dto.proofFileName || null,
+      paidAt: dto.paidAt || new Date().toISOString(),
+      recordedAt: new Date().toISOString(),
+      recordedById: userContext?.employeeId || null,
+      recordedByName: userContext?.name || 'Post Sales',
+      runningBalanceAfter,
+    };
+    ledger.push(entry);
+
+    custom.paymentSchedule = schedule;
+    custom.paymentLedger = ledger;
+    custom.postSalesHandoff = true;
+    if (custom.bookedProposalSnapshot && typeof custom.bookedProposalSnapshot === 'object') {
+      custom.bookedProposalSnapshot = {
+        ...custom.bookedProposalSnapshot,
+        paymentSchedule: schedule,
+      };
+    }
+    // Keep proposal array in sync
+    if (Array.isArray(custom.proposals)) {
+      custom.proposals = custom.proposals.map((p: any) => {
+        if (p?.id && custom.bookedProposalId && p.id === custom.bookedProposalId) {
+          return { ...p, paymentSchedule: schedule };
+        }
+        if (String(p?.status || '').toUpperCase().includes('BOOK')) {
+          return { ...p, paymentSchedule: schedule };
+        }
+        return p;
+      });
+    }
+
+    const updated = await prisma.crmLead.update({
+      where: { id: leadId },
+      data: { customFields: custom },
+      include: {
+        assignedTo: { include: { generalInfo: { select: { fullName: true } } } },
+        telecaller: { include: { generalInfo: { select: { fullName: true } } } },
+      },
+    });
+
+    try {
+      await whatsappService.triggerEvent('PAYMENT_RECEIVED', updated, {
+        scope: lead.scope || 'NB_DEVELOPER',
+        paymentAmount: amount,
+        agentName: userContext?.name,
+      });
+    } catch (e) {
+      console.warn('[recordPaymentEntry] WhatsApp PAYMENT_RECEIVED skipped:', e);
+    }
+
+    return {
+      success: true,
+      entry,
+      paymentSchedule: schedule,
+      paymentLedger: ledger,
+      runningBalance: runningBalanceAfter,
+      lead: updated,
+    };
+  },
+
   async uploadLeadDoc(leadId: string, docTypeId: string, docName: string, file: { originalname: string; buffer: Buffer; size: number; mimetype: string }, uploadedBy?: string) {
     const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
     if (!lead) throw new Error('Lead not found');

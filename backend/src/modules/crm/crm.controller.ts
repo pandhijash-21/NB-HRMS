@@ -1563,6 +1563,34 @@ export const crmController = {
     }
   },
 
+  async recordPaymentEntry(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const leadId = String(req.params.id);
+      const result = await crmService.recordPaymentEntry(
+        leadId,
+        {
+          installmentSeq: Number(req.body.installmentSeq),
+          amount: Number(req.body.amount),
+          mode: String(req.body.mode || ''),
+          reference: req.body.reference,
+          note: req.body.note,
+          proofUrl: req.body.proofUrl,
+          proofFileName: req.body.proofFileName,
+          paidAt: req.body.paidAt,
+        },
+        {
+          userId: authUser?.id || authUser?.userId,
+          employeeId: authUser?.employeeId,
+          name: authUser?.name || authUser?.username || 'Post Sales',
+        },
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to record payment'));
+    }
+  },
+
   // Public Client Portal
   async getClientPortalInfo(req: Request, res: Response) {
     try {

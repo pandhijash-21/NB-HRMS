@@ -1108,6 +1108,34 @@ class CrmRepository {
     );
   }
 
+  /// Record a post-sales ledger payment against an installment.
+  Future<Map<String, dynamic>> recordPaymentEntry(
+    String leadId, {
+    required int installmentSeq,
+    required double amount,
+    required String mode,
+    String? reference,
+    String? note,
+    String? proofUrl,
+    String? proofFileName,
+    String? paidAt,
+  }) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/leads/$leadId/payment-entries',
+      data: {
+        'installmentSeq': installmentSeq,
+        'amount': amount,
+        'mode': mode,
+        if (reference != null && reference.isNotEmpty) 'reference': reference,
+        if (note != null && note.isNotEmpty) 'note': note,
+        if (proofUrl != null && proofUrl.isNotEmpty) 'proofUrl': proofUrl,
+        if (proofFileName != null && proofFileName.isNotEmpty) 'proofFileName': proofFileName,
+        if (paidAt != null && paidAt.isNotEmpty) 'paidAt': paidAt,
+      },
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Finserve Bank Processing, Post-Sanction & Disbursement Pipeline
   // ---------------------------------------------------------------------------

@@ -251,6 +251,7 @@ crmRouter.get('/campaigns', generalCrmGuard, crmController.getCampaigns);
 crmRouter.post('/campaigns', generalCrmGuard, crmController.createCampaign);
 crmRouter.put('/campaigns/:id', generalCrmGuard, crmController.updateCampaign);
 crmRouter.delete('/campaigns/:id', generalCrmGuard, crmController.deleteCampaign);
+crmRouter.post('/campaigns/:id/test-webhook', generalCrmGuard, crmController.testCampaignWebhook);
 
 // Admin-only operations within CRM (Excel import & export)
 const crmAdminGuard = (req: any, res: any, next: any) => {

@@ -581,6 +581,101 @@ export const crmService = {
     });
   },
 
+  /**
+   * Fire a sample Meta / Google / Website payload at this campaign's webhook
+   * so ops can verify Ad ID + webhook wiring before sharing with the ads person.
+   */
+  async testCampaignWebhook(campaignId: string) {
+    const campaign = await prisma.crmCampaign.findUnique({
+      where: { id: campaignId },
+      select: {
+        id: true,
+        name: true,
+        adId: true,
+        platform: true,
+        webhookToken: true,
+        isActive: true,
+      },
+    });
+    if (!campaign) throw new Error('Campaign not found');
+    if (!campaign.isActive) throw new Error('Campaign is inactive');
+    if (!campaign.webhookToken) throw new Error('Campaign has no webhook token yet');
+
+    const platform = this._normalizeCampaignPlatform(
+      (campaign as any).platform || this._inferCampaignPlatformFromAdId(campaign.adId),
+    );
+    const stamp = Date.now().toString().slice(-8);
+    const testPhone = `9${stamp.padStart(9, '0')}`.slice(0, 10);
+    const adId = (campaign.adId || '').trim() || `TEST_AD_${stamp}`;
+    const webhookUrl = `https://crm.nbdeveloper.co.in/api/crm/campaigns/${campaign.webhookToken}/webhook`;
+
+    let requestPayload: Record<string, any>;
+    if (platform === 'META') {
+      requestPayload = {
+        id: `test_leadgen_${stamp}`,
+        created_time: new Date().toISOString(),
+        ad_id: adId,
+        form_id: `test_form_${stamp}`,
+        source: 'META',
+        is_test_ping: true,
+        field_data: [
+          { name: 'full_name', values: [`TEST PING Meta ${stamp}`] },
+          { name: 'phone_number', values: [testPhone] },
+          { name: 'email', values: [`test.ping.${stamp}@nbdeveloper.co.in`] },
+          { name: 'ad_id', values: [adId] },
+        ],
+      };
+    } else if (platform === 'GOOGLE') {
+      requestPayload = {
+        name: `TEST PING Google ${stamp}`,
+        phone: testPhone,
+        email: `test.ping.${stamp}@nbdeveloper.co.in`,
+        gclid: `test_gclid_${stamp}`,
+        google_key: adId,
+        ad_id: adId,
+        source: 'GOOGLE',
+        is_test_ping: true,
+      };
+    } else {
+      requestPayload = {
+        name: `TEST PING Webhook ${stamp}`,
+        phone: testPhone,
+        email: `test.ping.${stamp}@nbdeveloper.co.in`,
+        ad_id: adId,
+        source: 'WEBHOOK',
+        is_test_ping: true,
+      };
+    }
+
+    const started = Date.now();
+    let response: any;
+    let okFlag = false;
+    let errorMessage: string | null = null;
+    try {
+      response = await this.handleCampaignWebhook(campaign.webhookToken, requestPayload);
+      okFlag = response?.status === 'success';
+    } catch (err: any) {
+      errorMessage = err?.message || 'Webhook test failed';
+      response = { status: 'error', message: errorMessage };
+      okFlag = false;
+    }
+
+    return {
+      success: okFlag,
+      platform,
+      adId,
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      webhookUrl,
+      webhookToken: campaign.webhookToken,
+      requestPayload,
+      response,
+      error: errorMessage,
+      elapsedMs: Date.now() - started,
+      testedAt: new Date().toISOString(),
+    };
+  },
+
   // ---------------------------------------------------------------------------
   // Inbound Campaign Webhook Ingestion
   // ---------------------------------------------------------------------------

@@ -126,6 +126,15 @@ class CrmRepository {
     );
   }
 
+  /// Fire a sample Meta/Google/Website payload at the campaign webhook and return the response.
+  Future<Map<String, dynamic>> testCampaignWebhook(String campaignId) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/campaigns/$campaignId/test-webhook',
+      data: const {},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Columns & Headers Management
   // ---------------------------------------------------------------------------

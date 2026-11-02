@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -740,6 +742,32 @@ class _CrmHeadersView extends StatelessWidget {
                                 ),
                               ],
                             ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: webhookUrl.isEmpty
+                                      ? null
+                                      : () => _testCampaignWebhookPing(context, activeCamp, primaryColor),
+                                  icon: const Icon(Icons.bolt_rounded, size: 18),
+                                  label: const Text('Test Ping'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: primaryColor,
+                                    side: BorderSide(color: primaryColor),
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Sends a sample ${activeCamp.platformLabel} lead with your Ad ID and shows the webhook response.',
+                                  style: TextStyle(fontSize: 11, color: textMuted),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -1812,6 +1840,169 @@ class _CrmHeadersView extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _testCampaignWebhookPing(
+    BuildContext context,
+    CrmCampaign camp,
+    Color primaryColor,
+  ) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    Map<String, dynamic>? result;
+    Object? error;
+    try {
+      result = await context.read<CrmRepository>().testCampaignWebhook(camp.id);
+    } catch (e) {
+      error = e;
+    }
+
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // loading
+
+    final pretty = const JsonEncoder.withIndent('  ');
+    final success = result != null && result['success'] == true;
+    final responseBody = result != null
+        ? pretty.convert(result)
+        : pretty.convert({'success': false, 'error': error?.toString() ?? 'Unknown error'});
+    final requestBody = result?['requestPayload'] != null
+        ? pretty.convert(result!['requestPayload'])
+        : '';
+    final webhookResponse = result?['response'] != null
+        ? pretty.convert(result!['response'])
+        : '';
+
+    if (!context.mounted) return;
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        final isDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                success ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+                color: success ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  success ? 'Webhook Test OK' : 'Webhook Test Failed',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    success
+                        ? 'Sample ${camp.platformLabel} lead was accepted. Share the webhook URL with the ads person — intake is live.'
+                        : 'Ping did not succeed. Check Ad ID / webhook token, then try again.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.white70 : const Color(0xFF475569),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (result?['webhookUrl'] != null) ...[
+                    const Text('Webhook URL', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      result!['webhookUrl'].toString(),
+                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  if (result?['adId'] != null) ...[
+                    Text(
+                      'Ad / Tag ID: ${result!['adId']}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                  if (result?['elapsedMs'] != null)
+                    Text(
+                      'Elapsed: ${result!['elapsedMs']} ms',
+                      style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey),
+                    ),
+                  if (requestBody.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Text('Request payload', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF141210) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: SelectableText(
+                        requestBody,
+                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                      ),
+                    ),
+                  ],
+                  if (webhookResponse.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Text('Webhook response', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: (success ? const Color(0xFF16A34A) : const Color(0xFFDC2626))
+                            .withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: (success ? const Color(0xFF16A34A) : const Color(0xFFDC2626))
+                              .withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: SelectableText(
+                        webhookResponse,
+                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                      ),
+                    ),
+                  ],
+                  if (!success && error != null) ...[
+                    const SizedBox(height: 12),
+                    SelectableText(
+                      responseBody,
+                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Color(0xFFDC2626)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: responseBody));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Full test result copied')),
+                );
+              },
+              child: const Text('Copy Result'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white),
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Done'),
+            ),
+          ],
+        );
+      },
     );
   }
 

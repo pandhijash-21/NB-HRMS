@@ -99,6 +99,16 @@ export const crmController = {
     }
   },
 
+  async testCampaignWebhook(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const result = await crmService.testCampaignWebhook(id);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to test campaign webhook'));
+    }
+  },
+
   async handleCampaignWebhookVerification(req: Request, res: Response) {
     const mode = req.query['hub.mode'];
     const challenge = req.query['hub.challenge'];

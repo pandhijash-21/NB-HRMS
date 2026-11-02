@@ -49,11 +49,31 @@ class CrmLeadsStatusFilterChanged extends CrmLeadsEvent {
 }
 
 class CrmLeadsLeadFlowFilterChanged extends CrmLeadsEvent {
-  const CrmLeadsLeadFlowFilterChanged(this.leadFlow);
+  /// [awaitingPicker] = UI will show "Which campaign?" next; do not reload yet.
+  /// [campaignId] auto-selects a campaign and reloads columns + leads.
+  /// [clearCampaign] clears campaign (used for All flow).
+  const CrmLeadsLeadFlowFilterChanged(
+    this.leadFlow, {
+    this.campaignId,
+    this.clearCampaign = false,
+    this.awaitingPicker = false,
+  });
   final String leadFlow;
+  final String? campaignId;
+  final bool clearCampaign;
+  final bool awaitingPicker;
 
   @override
-  List<Object?> get props => [leadFlow];
+  List<Object?> get props => [leadFlow, campaignId, clearCampaign, awaitingPicker];
+}
+
+/// Picked a campaign after a lead-flow toggle (reloads leads + headers).
+class CrmLeadsFlowCampaignPicked extends CrmLeadsEvent {
+  const CrmLeadsFlowCampaignPicked(this.campaignId);
+  final String? campaignId;
+
+  @override
+  List<Object?> get props => [campaignId];
 }
 
 class CrmLeadsSearchChanged extends CrmLeadsEvent {
@@ -341,6 +361,8 @@ class CrmLeadsState extends Equatable {
     this.errorMessage,
     this.actionSuccessMessage,
     this.settings,
+    this.lastCampaignByFlow = const {},
+    this.awaitingFlowCampaignPick = false,
   });
 
   final LoadStatus status;
@@ -371,6 +393,10 @@ class CrmLeadsState extends Equatable {
   final String? errorMessage;
   final String? actionSuccessMessage;
   final CrmSettings? settings;
+  /// Last campaign chosen per lead-flow (EXCEL / MANUAL / WEBHOOK).
+  final Map<String, String?> lastCampaignByFlow;
+  /// True while UI should show the "Which campaign?" picker.
+  final bool awaitingFlowCampaignPick;
 
   CrmLeadsState copyWith({
     LoadStatus? status,
@@ -404,6 +430,8 @@ class CrmLeadsState extends Equatable {
     String? errorMessage,
     String? actionSuccessMessage,
     CrmSettings? settings,
+    Map<String, String?>? lastCampaignByFlow,
+    bool? awaitingFlowCampaignPick,
   }) {
     return CrmLeadsState(
       status: status ?? this.status,
@@ -441,6 +469,9 @@ class CrmLeadsState extends Equatable {
       errorMessage: errorMessage,
       actionSuccessMessage: actionSuccessMessage,
       settings: settings ?? this.settings,
+      lastCampaignByFlow: lastCampaignByFlow ?? this.lastCampaignByFlow,
+      awaitingFlowCampaignPick:
+          awaitingFlowCampaignPick ?? this.awaitingFlowCampaignPick,
     );
   }
 
@@ -473,6 +504,8 @@ class CrmLeadsState extends Equatable {
         errorMessage,
         actionSuccessMessage,
         settings,
+        lastCampaignByFlow,
+        awaitingFlowCampaignPick,
       ];
 }
 
@@ -487,6 +520,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     on<CrmLeadsRefreshRequested>(_onRefresh);
     on<CrmLeadsProjectSelected>(_onProjectSelected);
     on<CrmLeadsCampaignSelected>(_onCampaignSelected);
+    on<CrmLeadsFlowCampaignPicked>(_onFlowCampaignPicked);
     on<CrmLeadsStatusFilterChanged>(_onStatusFilterChanged);
     on<CrmLeadsLeadFlowFilterChanged>(_onLeadFlowFilterChanged);
     on<CrmLeadsSearchChanged>(_onSearchChanged);
@@ -549,22 +583,31 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
   Future<void> _refreshLeadsOnly(Emitter<CrmLeadsState> emit) async {
     try {
       final effectiveStatus = state.statusFilter;
-      final effectiveLeadFlow = state.leadFlowFilter;
       final effectiveSearch = state.search;
 
+      // Fetch project-scoped leads without campaignId so flow chip totals stay accurate.
+      // Campaign + lead-flow filters are applied client-side in the Pre-Sales screen.
       final updatedLeads = await _crmRepository.getLeads(
         projectId: state.selectedProjectId,
-        campaignId: state.selectedCampaignId,
-        status: effectiveStatus == 'ALL' ? null : effectiveStatus,
-        leadFlow: effectiveLeadFlow == 'ALL' ? null : effectiveLeadFlow,
+        status: (effectiveStatus == 'ALL' || effectiveStatus == 'WL')
+            ? null
+            : effectiveStatus,
         search: effectiveSearch.isEmpty ? null : effectiveSearch,
         fromDate: state.fromDate,
         toDate: state.toDate,
+        limit: 2000,
       );
       emit(state.copyWith(leads: updatedLeads));
     } catch (_) {
       // Retain optimistic local state on network error
     }
+  }
+
+  Map<String, String?> _rememberCampaign(String flow, String? campaignId) {
+    if (flow == 'ALL') return state.lastCampaignByFlow;
+    final next = Map<String, String?>.from(state.lastCampaignByFlow);
+    next[flow] = campaignId;
+    return next;
   }
 
   Future<void> _fetchData(
@@ -579,9 +622,9 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
   }) async {
     try {
       final effectiveStatus = statusFilter ?? state.statusFilter;
-      final effectiveLeadFlow = leadFlowFilter ?? state.leadFlowFilter;
       final effectiveSearch = search ?? state.search;
       final effectiveFollowUp = followUpFilter ?? state.followUpFilter;
+      // leadFlowFilter is applied client-side in the Pre-Sales screen.
 
       // Critical path only — call recordings load lazily when that tab is used.
       final results = await Future.wait([
@@ -590,12 +633,15 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         _crmRepository.getColumns(module: 'PRE_SALES', campaignId: campaignId),
         _crmRepository.getLeads(
           projectId: projectId,
-          campaignId: campaignId,
-          status: effectiveStatus == 'ALL' ? null : effectiveStatus,
-          leadFlow: effectiveLeadFlow == 'ALL' ? null : effectiveLeadFlow,
+          // Do not pass campaignId — keep full set for flow chip totals.
+          // Headers still load for [campaignId] via getColumns above.
+          status: (effectiveStatus == 'ALL' || effectiveStatus == 'WL')
+              ? null
+              : effectiveStatus,
           search: effectiveSearch.isEmpty ? null : effectiveSearch,
           fromDate: state.fromDate,
           toDate: state.toDate,
+          limit: 2000,
         ),
         _crmRepository.getHrmsEmployees(),
         _crmRepository.getFollowUps(filter: effectiveFollowUp),
@@ -637,8 +683,65 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     CrmLeadsLeadFlowFilterChanged event,
     Emitter<CrmLeadsState> emit,
   ) async {
-    emit(state.copyWith(leadFlowFilter: event.leadFlow));
-    await _refreshLeadsOnly(emit);
+    if (event.awaitingPicker) {
+      emit(state.copyWith(
+        leadFlowFilter: event.leadFlow,
+        awaitingFlowCampaignPick: true,
+      ));
+      return;
+    }
+
+    if (event.clearCampaign || event.leadFlow == 'ALL') {
+      emit(state.copyWith(
+        leadFlowFilter: event.leadFlow,
+        clearSelectedCampaign: true,
+        awaitingFlowCampaignPick: false,
+        lastCampaignByFlow: _rememberCampaign(event.leadFlow, null),
+        status: LoadStatus.loading,
+      ));
+      await _fetchData(
+        emit,
+        projectId: state.selectedProjectId,
+        campaignId: null,
+        leadFlowFilter: event.leadFlow,
+      );
+      return;
+    }
+
+    final campId = event.campaignId;
+    emit(state.copyWith(
+      leadFlowFilter: event.leadFlow,
+      selectedCampaignId: campId,
+      clearSelectedCampaign: campId == null,
+      awaitingFlowCampaignPick: false,
+      lastCampaignByFlow: _rememberCampaign(event.leadFlow, campId),
+      status: LoadStatus.loading,
+    ));
+    await _fetchData(
+      emit,
+      projectId: state.selectedProjectId,
+      campaignId: campId,
+      leadFlowFilter: event.leadFlow,
+    );
+  }
+
+  Future<void> _onFlowCampaignPicked(
+    CrmLeadsFlowCampaignPicked event,
+    Emitter<CrmLeadsState> emit,
+  ) async {
+    final flow = state.leadFlowFilter;
+    emit(state.copyWith(
+      status: LoadStatus.loading,
+      selectedCampaignId: event.campaignId,
+      clearSelectedCampaign: event.campaignId == null,
+      awaitingFlowCampaignPick: false,
+      lastCampaignByFlow: _rememberCampaign(flow, event.campaignId),
+    ));
+    await _fetchData(
+      emit,
+      projectId: state.selectedProjectId,
+      campaignId: event.campaignId,
+    );
   }
 
   Future<void> _onLoad(
@@ -686,6 +789,8 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
       status: LoadStatus.loading,
       selectedCampaignId: event.campaignId,
       clearSelectedCampaign: event.campaignId == null,
+      awaitingFlowCampaignPick: false,
+      lastCampaignByFlow: _rememberCampaign(state.leadFlowFilter, event.campaignId),
     ));
     await _fetchData(
       emit,

@@ -1354,9 +1354,13 @@ export const crmService = {
       scope,
     };
 
-    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(
-      query.userRole?.toUpperCase() || ''
-    );
+    const roleUpper = String(query.userRole || '').toUpperCase();
+    const roleCompact = roleUpper.replace(/[\s_-]+/g, '');
+    const isAdmin =
+      isAdminRole(query.userRole) ||
+      ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'SYSTEMADMIN', 'ITADMIN'].some(
+        (r) => roleUpper === r || roleCompact === r.replace(/_/g, ''),
+      );
 
     // If non-admin user is logged in, enforce flow and assignment scoping
     if (!isAdmin && query.userEmployeeId) {
@@ -1551,10 +1555,30 @@ export const crmService = {
     }
 
     let enrichedItems = items.map((item) => {
-      const custom = (item.customFields && typeof item.customFields === 'object') ? (item.customFields as Record<string, any>) : {};
+      const custom = (item.customFields && typeof item.customFields === 'object')
+        ? { ...(item.customFields as Record<string, any>) }
+        : {};
+      // Heal: Excel often stored Remarks/Comments while UI column is Notes
+      const notesVal =
+        custom.Notes ||
+        custom.notes ||
+        custom.Remarks ||
+        custom.remarks ||
+        custom.Comments ||
+        custom.comments ||
+        custom.Remark ||
+        custom.remark ||
+        '';
+      if (notesVal && !custom.Notes) {
+        custom.Notes = notesVal;
+      }
+      if (notesVal && !custom.Remarks) {
+        custom.Remarks = notesVal;
+      }
       const creatorName = custom.createdByName || (item.createdById ? creatorMap.get(item.createdById) : undefined);
       return {
         ...item,
+        customFields: custom,
         createdByName: creatorName,
       };
     });
@@ -1601,9 +1625,13 @@ export const crmService = {
       scope,
     };
 
-    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'ITADMIN'].includes(
-      query.userRole?.toUpperCase() || ''
-    );
+    const exportRoleUpper = String(query.userRole || '').toUpperCase();
+    const exportRoleCompact = exportRoleUpper.replace(/[\s_-]+/g, '');
+    const isAdmin =
+      isAdminRole(query.userRole) ||
+      ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'SYSTEMADMIN', 'ITADMIN'].some(
+        (r) => exportRoleUpper === r || exportRoleCompact === r.replace(/_/g, ''),
+      );
 
     if (!isAdmin && query.userEmployeeId) {
       const visibilityBlock = {
@@ -1755,8 +1783,18 @@ export const crmService = {
       if (custom.email || custom.Email) {
         rowData['Email'] = custom.email || custom.Email;
       }
-      if (custom.remarks || custom.Remarks) {
-        rowData['Remarks'] = custom.remarks || custom.Remarks;
+      const remarksOut =
+        custom.Notes ||
+        custom.notes ||
+        custom.Remarks ||
+        custom.remarks ||
+        custom.Comments ||
+        custom.comments ||
+        custom.Remark ||
+        custom.remark ||
+        '';
+      if (remarksOut) {
+        rowData['Remarks / Notes'] = remarksOut;
       }
 
       return rowData;
@@ -2164,6 +2202,70 @@ export const crmService = {
     );
   },
 
+  /** Excel headers that mean remarks/notes (canonical columnKey: Notes). */
+  _excelIsRemarksHeader(lower: string): boolean {
+    const l = lower
+      .trim()
+      .toLowerCase()
+      .replace(/[_/\-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!l) return false;
+    if (
+      l === 'remarks' ||
+      l === 'remark' ||
+      l === 'notes' ||
+      l === 'note' ||
+      l === 'comments' ||
+      l === 'comment' ||
+      l === 'remarks notes' ||
+      l === 'remark notes' ||
+      l === 'remarks note' ||
+      l === 'additional remarks' ||
+      l === 'additional notes' ||
+      l === 'call notes' ||
+      l === 'call remarks' ||
+      l === 'observation' ||
+      l === 'observations' ||
+      l === 'feedback'
+    ) {
+      return true;
+    }
+    // "Remarks / Notes", "Client Remarks", etc. — but not "denotes" style false positives
+    if (/\bremarks?\b/.test(l) || /\bnotes?\b/.test(l) || /\bcomments?\b/.test(l)) {
+      if (l.includes('quotation') || l.includes('invoice') || l.includes('username')) return false;
+      return true;
+    }
+    return false;
+  },
+
+  /** Coerce Excel cell values to stable strings (numbers, dates, booleans). */
+  _excelCellToString(val: unknown): string {
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'string') return val.trim();
+    if (typeof val === 'boolean') return val ? 'true' : 'false';
+    if (typeof val === 'number') {
+      if (!Number.isFinite(val)) return '';
+      // Avoid scientific notation for phone-like / large ints
+      if (Number.isInteger(val) || Math.abs(val - Math.round(val)) < 1e-9) {
+        return String(Math.round(val));
+      }
+      return String(val);
+    }
+    if (val instanceof Date && !Number.isNaN(val.getTime())) {
+      return val.toISOString();
+    }
+    // xlsx sometimes returns Date-like objects
+    if (typeof val === 'object' && val && 'toISOString' in (val as any) && typeof (val as any).toISOString === 'function') {
+      try {
+        return (val as Date).toISOString();
+      } catch {
+        /* fall through */
+      }
+    }
+    return String(val).trim();
+  },
+
   async importExcelLeads(
     fileBuffer: Buffer,
     createdById?: string,
@@ -2196,8 +2298,8 @@ export const crmService = {
     });
     const campaignScope = targetCampaign?.scope || scope;
 
-    // Campaign columns — Excel stays bifurcated: only EXACT label/key aliases remap.
-    // Unknown Excel headers become their own campaign columns (not forced onto Manual Client_Name/Phone).
+    // Campaign columns — Excel stays bifurcated for most headers.
+    // Remarks/Notes/Comments synonyms always collapse into canonical `Notes`.
     const cols = await this.getColumns('PRE_SALES', targetCampaignId, campaignScope);
     const colMap: Record<string, string> = {};
     const existingKeys = new Set(cols.map((c) => c.columnKey));
@@ -2207,6 +2309,55 @@ export const crmService = {
       colMap[c.columnKey.replace(/_/g, ' ').toLowerCase().trim()] = c.columnKey;
     }
 
+    // Ensure canonical Notes column exists so Remarks/Comments never land in a dead field
+    if (!existingKeys.has('Notes')) {
+      const maxOrder = cols.reduce((m, c) => Math.max(m, c.displayOrder || 0), 0);
+      await prisma.crmColumnConfig.create({
+        data: {
+          scope: campaignScope,
+          module: 'PRE_SALES',
+          campaignId: targetCampaignId,
+          columnKey: 'Notes',
+          label: 'Remarks / Notes',
+          dataType: 'TEXT',
+          isRequired: false,
+          isSystem: false,
+          isVisibleInTable: true,
+          displayOrder: maxOrder + 1,
+          isActive: true,
+        },
+      });
+      existingKeys.add('Notes');
+      colMap['notes'] = 'Notes';
+      colMap['remarks / notes'] = 'Notes';
+      colMap['remarks'] = 'Notes';
+      colMap['remark'] = 'Notes';
+      colMap['comments'] = 'Notes';
+      colMap['comment'] = 'Notes';
+    } else {
+      // Always alias common remarks headers onto Notes when present
+      for (const alias of [
+        'remarks',
+        'remark',
+        'notes',
+        'note',
+        'comments',
+        'comment',
+        'remarks / notes',
+        'remark / notes',
+        'remarks notes',
+        'additional remarks',
+        'additional notes',
+        'call notes',
+        'call remarks',
+        'observation',
+        'observations',
+        'feedback',
+      ]) {
+        colMap[alias] = 'Notes';
+      }
+    }
+
     // Discover headers from sheet → register as campaign columns when new
     const sheetHeaders = new Set<string>();
     for (const row of rows) {
@@ -2214,10 +2365,17 @@ export const crmService = {
         if (String(h || '').trim()) sheetHeaders.add(String(h).trim());
       }
     }
-    let displayOrder = cols.length;
+    let displayOrder = Math.max(cols.length, existingKeys.size);
     for (const header of sheetHeaders) {
       const lower = header.toLowerCase().trim();
       if (colMap[lower]) continue;
+
+      // Remarks synonyms → Notes (never create a separate Remarks column)
+      if (this._excelIsRemarksHeader(lower)) {
+        colMap[lower] = 'Notes';
+        continue;
+      }
+
       const excelKey = this.normalizeHeaderKey(header);
       if (!excelKey || existingKeys.has(excelKey)) {
         if (excelKey) colMap[lower] = excelKey;
@@ -2311,11 +2469,15 @@ export const crmService = {
       for (const [header, val] of Object.entries(row)) {
         const cleanHeader = header.trim();
         if (!cleanHeader) continue;
-        const lowerHeader = cleanHeader.toLowerCase();
+        const lowerHeader = cleanHeader.toLowerCase().trim();
         // Exact campaign alias OR Excel-normalized key (bifurcated from Manual defaults)
-        const mappedKey =
+        let mappedKey =
           colMap[lowerHeader] || this.normalizeHeaderKey(cleanHeader) || lowerHeader.replace(/[^a-z0-9_]/g, '_');
-        const strVal = String(val ?? '').trim();
+        // Force remarks synonyms onto Notes even if a stale Remarks column exists
+        if (this._excelIsRemarksHeader(lowerHeader)) {
+          mappedKey = 'Notes';
+        }
+        const strVal = this._excelCellToString(val);
         if (!strVal) {
           customFields[mappedKey] = strVal;
           continue;
@@ -2354,6 +2516,11 @@ export const crmService = {
         }
 
         customFields[mappedKey] = strVal;
+        // Mirror onto Notes so UI/export always find remarks
+        if (mappedKey === 'Notes') {
+          customFields.Notes = strVal;
+          customFields.Remarks = strVal;
+        }
       }
 
       // Fallbacks from common excel keys already stored

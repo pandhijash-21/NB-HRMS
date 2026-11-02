@@ -16,6 +16,7 @@ import '../../../auth/domain/permissions.dart';
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_leads_bloc.dart';
+import '../utils/crm_lead_flow_campaigns.dart';
 import '../widgets/crm_audio_player_dialog.dart';
 import '../widgets/crm_nineance_dialer_panel.dart';
 import '../widgets/crm_scope_selector.dart';
@@ -406,8 +407,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
          userUsername.contains('ITADMIN') ||
          userUsername == '1');
     final canTransfer = Permissions.canTransferLeads(authState.permissions, authState.user?.role);
+    final roleCompact = userRole.replaceAll(RegExp(r'[\s_-]+'), '');
     final isAdmin = Permissions.isAdmin(authState.user?.role) ||
-        ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].contains(userRole);
+        isItAdminEmp1 ||
+        const ['ADMIN', 'SUPERADMIN', 'SUPER_ADMIN', 'SYSTEMADMIN', 'SYSTEM_ADMIN', 'ITADMIN']
+            .any((r) => userRole == r || roleCompact == r.replaceAll('_', ''));
     final canWrite = Permissions.canWriteCrmPreSales(authState.permissions, authState.user?.role);
     final repo = context.read<CrmRepository>();
     final isFinserve = repo.scope == 'NB_FINSERVE';
@@ -427,6 +431,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
     final filteredLeads = leads.where((l) {
       if (l.scope != repo.scope) return false;
+      if (selectedCampaignId != null && l.campaignId != selectedCampaignId) {
+        return false;
+      }
       if (state.statusFilter == 'WL') {
         return l.isWaitingList;
       }
@@ -529,10 +536,12 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       : 'ALL';
 
                   return DropdownButtonFormField<String>(
+                    key: ValueKey('project-$effectiveSelectedId-${projects.length}'),
                     isExpanded: true,
                     initialValue: effectiveSelectedId,
                     decoration: filterDecoration(
                       prefixIcon: Icon(Icons.apartment_rounded, size: 18, color: primaryColor),
+                      hint: 'Project',
                     ),
                     items: [
                       const DropdownMenuItem(
@@ -565,16 +574,18 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       hasValidSelection ? selectedCampaignId : allValue;
 
                   return DropdownButtonFormField<String>(
+                    key: ValueKey('campaign-$effectiveSelectedId-${campaigns.length}'),
                     isExpanded: true,
                     initialValue: effectiveSelectedId,
                     decoration: filterDecoration(
                       prefixIcon: Icon(Icons.campaign_rounded, size: 18, color: primaryColor),
+                      hint: 'Campaign',
                     ),
                     items: [
                       DropdownMenuItem(
                         value: allValue,
                         child: Text(
-                          campaigns.isEmpty ? '0 Campaigns for Project' : 'All Campaigns',
+                          campaigns.isEmpty ? '0 Campaigns — create in Headers' : 'All Campaigns (${campaigns.length})',
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                         ),
@@ -1166,10 +1177,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               ),
             ),
 
-          // Flow Switcher / Assignment Enforced Banner
+          // Desk banners
           if (isOnlyExcel)
             Container(
               width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: const Color(0xFF16A34A).withValues(alpha: 0.1),
@@ -1202,6 +1214,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         : 'Ads Desk — You handle Meta and Google campaign leads.';
                 return Container(
                   width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: 0.1),
@@ -1226,149 +1239,237 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ),
                 );
               },
-            )
-          else
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: borderColor),
-              ),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.alt_route_rounded, size: 16, color: primaryColor),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Lead flow',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: isDark ? Colors.white70 : const Color(0xFF475569),
+            ),
+
+          // Lead flow chips (totals from full lead list) → campaign picker → headers
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.alt_route_rounded, size: 16, color: primaryColor),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Lead flow',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white70 : const Color(0xFF475569),
+                          ),
                         ),
+                      ],
+                    ),
+                    if (!isOnlyExcel && !isOnlyWebhook)
+                      ChoiceChip(
+                        label: Text('All (${leads.length})'),
+                        selected: effectiveFlow == 'ALL',
+                        selectedColor: primaryColor.withValues(alpha: 0.18),
+                        side: BorderSide(
+                          color: effectiveFlow == 'ALL' ? primaryColor : borderColor,
+                        ),
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          fontWeight: effectiveFlow == 'ALL' ? FontWeight.w700 : FontWeight.w500,
+                          color: effectiveFlow == 'ALL'
+                              ? primaryColor
+                              : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                        ),
+                        onSelected: (val) {
+                          if (val) {
+                            _selectLeadFlow(
+                              context,
+                              state,
+                              'ALL',
+                              isAdmin: isAdmin,
+                              userEmployeeId: userEmployeeId,
+                              isExcelAssigned: isExcelAssigned,
+                              isMetaAssigned: isMetaAssigned,
+                              isGoogleAssigned: isGoogleAssigned,
+                            );
+                          }
+                        },
+                      ),
+                    if (!isOnlyWebhook)
+                      ChoiceChip(
+                        avatar: Icon(
+                          Icons.table_chart_rounded,
+                          size: 14,
+                          color: effectiveFlow == 'EXCEL' ? primaryColor : const Color(0xFF16A34A),
+                        ),
+                        label: Text('Excel (${leads.where(isExcelLead).length})'),
+                        selected: effectiveFlow == 'EXCEL',
+                        selectedColor: primaryColor.withValues(alpha: 0.18),
+                        side: BorderSide(
+                          color: effectiveFlow == 'EXCEL' ? primaryColor : borderColor,
+                        ),
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          fontWeight: effectiveFlow == 'EXCEL' ? FontWeight.w700 : FontWeight.w500,
+                          color: effectiveFlow == 'EXCEL'
+                              ? primaryColor
+                              : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                        ),
+                        onSelected: (val) {
+                          if (val) {
+                            _selectLeadFlow(
+                              context,
+                              state,
+                              'EXCEL',
+                              isAdmin: isAdmin,
+                              userEmployeeId: userEmployeeId,
+                              isExcelAssigned: isExcelAssigned,
+                              isMetaAssigned: isMetaAssigned,
+                              isGoogleAssigned: isGoogleAssigned,
+                            );
+                          }
+                        },
+                      ),
+                    if (!isOnlyWebhook)
+                      ChoiceChip(
+                        avatar: Icon(
+                          Icons.edit_note_rounded,
+                          size: 14,
+                          color: effectiveFlow == 'MANUAL' ? primaryColor : const Color(0xFF8B5CF6),
+                        ),
+                        label: Text('Manual (${leads.where((l) => l.isManual).length})'),
+                        selected: effectiveFlow == 'MANUAL',
+                        selectedColor: primaryColor.withValues(alpha: 0.18),
+                        side: BorderSide(
+                          color: effectiveFlow == 'MANUAL' ? primaryColor : borderColor,
+                        ),
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          fontWeight: effectiveFlow == 'MANUAL' ? FontWeight.w700 : FontWeight.w500,
+                          color: effectiveFlow == 'MANUAL'
+                              ? primaryColor
+                              : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                        ),
+                        onSelected: (val) {
+                          if (val) {
+                            _selectLeadFlow(
+                              context,
+                              state,
+                              'MANUAL',
+                              isAdmin: isAdmin,
+                              userEmployeeId: userEmployeeId,
+                              isExcelAssigned: isExcelAssigned,
+                              isMetaAssigned: isMetaAssigned,
+                              isGoogleAssigned: isGoogleAssigned,
+                            );
+                          }
+                        },
+                      ),
+                    if (!isOnlyExcel)
+                      ChoiceChip(
+                        avatar: Icon(
+                          Icons.campaign_rounded,
+                          size: 14,
+                          color: effectiveFlow == 'WEBHOOK' ? primaryColor : const Color(0xFF0891B2),
+                        ),
+                        label: Text('Ads / Webhook (${leads.where(isAdsLead).length})'),
+                        selected: effectiveFlow == 'WEBHOOK',
+                        selectedColor: primaryColor.withValues(alpha: 0.18),
+                        side: BorderSide(
+                          color: effectiveFlow == 'WEBHOOK' ? primaryColor : borderColor,
+                        ),
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          fontWeight: effectiveFlow == 'WEBHOOK' ? FontWeight.w700 : FontWeight.w500,
+                          color: effectiveFlow == 'WEBHOOK'
+                              ? primaryColor
+                              : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                        ),
+                        onSelected: (val) {
+                          if (val) {
+                            _selectLeadFlow(
+                              context,
+                              state,
+                              'WEBHOOK',
+                              isAdmin: isAdmin,
+                              userEmployeeId: userEmployeeId,
+                              isExcelAssigned: isExcelAssigned,
+                              isMetaAssigned: isMetaAssigned,
+                              isGoogleAssigned: isGoogleAssigned,
+                            );
+                          }
+                        },
+                      ),
+                    ChoiceChip(
+                      avatar: Icon(
+                        Icons.hourglass_top_rounded,
+                        size: 14,
+                        color: state.statusFilter == 'WL' ? primaryColor : const Color(0xFFD97706),
+                      ),
+                      label: Text('Waiting (${leads.where((l) => l.isWaitingList).length})'),
+                      selected: state.statusFilter == 'WL',
+                      selectedColor: primaryColor.withValues(alpha: 0.18),
+                      side: BorderSide(
+                        color: state.statusFilter == 'WL' ? primaryColor : borderColor,
+                      ),
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: state.statusFilter == 'WL' ? FontWeight.w700 : FontWeight.w500,
+                        color: state.statusFilter == 'WL'
+                            ? primaryColor
+                            : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                      ),
+                      onSelected: (val) {
+                        context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val ? 'WL' : 'ALL'));
+                      },
+                    ),
+                  ],
+                ),
+                if (effectiveFlow != 'ALL') ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(Icons.visibility_outlined, size: 15, color: textMuted),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Viewing: ${selectedCampaignId == null ? 'All campaigns in this flow' : (campaigns.where((c) => c.id == selectedCampaignId).isEmpty ? 'Campaign' : campaigns.firstWhere((c) => c.id == selectedCampaignId).name)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white70 : const Color(0xFF334155),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => _selectLeadFlow(
+                          context,
+                          state,
+                          effectiveFlow,
+                          isAdmin: isAdmin,
+                          userEmployeeId: userEmployeeId,
+                          isExcelAssigned: isExcelAssigned,
+                          isMetaAssigned: isMetaAssigned,
+                          isGoogleAssigned: isGoogleAssigned,
+                          forcePicker: true,
+                        ),
+                        child: const Text('Change'),
                       ),
                     ],
                   ),
-                  ChoiceChip(
-                    label: Text('All (${leads.length})'),
-                    selected: state.leadFlowFilter == 'ALL',
-                    selectedColor: primaryColor.withValues(alpha: 0.18),
-                    side: BorderSide(
-                      color: state.leadFlowFilter == 'ALL' ? primaryColor : borderColor,
-                    ),
-                    labelStyle: TextStyle(
-                      fontSize: 12,
-                      fontWeight: state.leadFlowFilter == 'ALL' ? FontWeight.w700 : FontWeight.w500,
-                      color: state.leadFlowFilter == 'ALL'
-                          ? primaryColor
-                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                    ),
-                    onSelected: (val) {
-                      if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('ALL'));
-                    },
-                  ),
-                  ChoiceChip(
-                    avatar: Icon(
-                      Icons.table_chart_rounded,
-                      size: 14,
-                      color: state.leadFlowFilter == 'EXCEL' ? primaryColor : const Color(0xFF16A34A),
-                    ),
-                    label: Text('Excel (${leads.where((l) => !l.isManual && (l.leadSource == 'EXCEL' || l.customFields['isExcelImport'] == true)).length})'),
-                    selected: state.leadFlowFilter == 'EXCEL',
-                    selectedColor: primaryColor.withValues(alpha: 0.18),
-                    side: BorderSide(
-                      color: state.leadFlowFilter == 'EXCEL' ? primaryColor : borderColor,
-                    ),
-                    labelStyle: TextStyle(
-                      fontSize: 12,
-                      fontWeight: state.leadFlowFilter == 'EXCEL' ? FontWeight.w700 : FontWeight.w500,
-                      color: state.leadFlowFilter == 'EXCEL'
-                          ? primaryColor
-                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                    ),
-                    onSelected: (val) {
-                      if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('EXCEL'));
-                    },
-                  ),
-                  ChoiceChip(
-                    avatar: Icon(
-                      Icons.edit_note_rounded,
-                      size: 14,
-                      color: state.leadFlowFilter == 'MANUAL' ? primaryColor : const Color(0xFF8B5CF6),
-                    ),
-                    label: Text('Manual (${leads.where((l) => l.isManual).length})'),
-                    selected: state.leadFlowFilter == 'MANUAL',
-                    selectedColor: primaryColor.withValues(alpha: 0.18),
-                    side: BorderSide(
-                      color: state.leadFlowFilter == 'MANUAL' ? primaryColor : borderColor,
-                    ),
-                    labelStyle: TextStyle(
-                      fontSize: 12,
-                      fontWeight: state.leadFlowFilter == 'MANUAL' ? FontWeight.w700 : FontWeight.w500,
-                      color: state.leadFlowFilter == 'MANUAL'
-                          ? primaryColor
-                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                    ),
-                    onSelected: (val) {
-                      if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('MANUAL'));
-                    },
-                  ),
-                  ChoiceChip(
-                    avatar: Icon(
-                      Icons.campaign_rounded,
-                      size: 14,
-                      color: state.leadFlowFilter == 'WEBHOOK' ? primaryColor : const Color(0xFF0891B2),
-                    ),
-                    label: Text('Ads / Webhook (${leads.where((l) => (l.leadSource == 'WEBHOOK' || l.leadSource == 'META' || l.leadSource == 'GOOGLE') && !l.isManual).length})'),
-                    selected: state.leadFlowFilter == 'WEBHOOK',
-                    selectedColor: primaryColor.withValues(alpha: 0.18),
-                    side: BorderSide(
-                      color: state.leadFlowFilter == 'WEBHOOK' ? primaryColor : borderColor,
-                    ),
-                    labelStyle: TextStyle(
-                      fontSize: 12,
-                      fontWeight: state.leadFlowFilter == 'WEBHOOK' ? FontWeight.w700 : FontWeight.w500,
-                      color: state.leadFlowFilter == 'WEBHOOK'
-                          ? primaryColor
-                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                    ),
-                    onSelected: (val) {
-                      if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('WEBHOOK'));
-                    },
-                  ),
-                  ChoiceChip(
-                    avatar: Icon(
-                      Icons.hourglass_top_rounded,
-                      size: 14,
-                      color: state.statusFilter == 'WL' ? primaryColor : const Color(0xFFD97706),
-                    ),
-                    label: Text('Waiting (${leads.where((l) => l.isWaitingList).length})'),
-                    selected: state.statusFilter == 'WL',
-                    selectedColor: primaryColor.withValues(alpha: 0.18),
-                    side: BorderSide(
-                      color: state.statusFilter == 'WL' ? primaryColor : borderColor,
-                    ),
-                    labelStyle: TextStyle(
-                      fontSize: 12,
-                      fontWeight: state.statusFilter == 'WL' ? FontWeight.w700 : FontWeight.w500,
-                      color: state.statusFilter == 'WL'
-                          ? primaryColor
-                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                    ),
-                    onSelected: (val) {
-                      context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val ? 'WL' : 'ALL'));
-                    },
-                  ),
                 ],
-              ),
+              ],
             ),
+          ),
           const SizedBox(height: 14),
 
           // Dynamic Data Table with Custom Scrollbar
@@ -1967,6 +2068,24 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                     lead.customFields['Budget']?.toString() ??
                                     lead.customFields['budget']?.toString() ??
                                     (lead.customFields[c.columnKey]?.toString() ?? '-');
+                              } else if (
+                                keyLower == 'notes' ||
+                                keyLower == 'remarks' ||
+                                keyLower == 'remark' ||
+                                keyLower == 'comments' ||
+                                keyLower == 'comment' ||
+                                labelLower.contains('remark') ||
+                                labelLower.contains('note')
+                              ) {
+                                cellValue = lead.customFields['Notes']?.toString() ??
+                                    lead.customFields['Remarks']?.toString() ??
+                                    lead.customFields['remarks']?.toString() ??
+                                    lead.customFields['Comments']?.toString() ??
+                                    lead.customFields['comments']?.toString() ??
+                                    lead.customFields['Remark']?.toString() ??
+                                    lead.customFields[c.columnKey]?.toString() ??
+                                    lead.customFields[c.columnKey.toLowerCase()]?.toString() ??
+                                    '-';
                               } else {
                                 cellValue = lead.customFields[c.columnKey]?.toString() ??
                                     lead.customFields[c.columnKey.toLowerCase()]?.toString() ??
@@ -5099,6 +5218,191 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     );
   }
 
+  List<CrmCampaign> _accessibleCampaignsForFlow(
+    CrmLeadsState state,
+    String flow, {
+    required bool isAdmin,
+    int? userEmployeeId,
+    required bool isExcelAssigned,
+    required bool isMetaAssigned,
+    required bool isGoogleAssigned,
+  }) {
+    return campaignsForLeadFlow(
+      flow: flow,
+      campaigns: state.campaigns,
+      leads: state.leads,
+      isAdmin: isAdmin,
+      userEmployeeId: userEmployeeId,
+      isExcelAssigned: isExcelAssigned,
+      isMetaAssigned: isMetaAssigned,
+      isGoogleAssigned: isGoogleAssigned,
+    );
+  }
+
+  Future<void> _selectLeadFlow(
+    BuildContext context,
+    CrmLeadsState state,
+    String flow, {
+    required bool isAdmin,
+    int? userEmployeeId,
+    required bool isExcelAssigned,
+    required bool isMetaAssigned,
+    required bool isGoogleAssigned,
+    bool forcePicker = false,
+  }) async {
+    final bloc = context.read<CrmLeadsBloc>();
+
+    if (flow == 'ALL') {
+      bloc.add(const CrmLeadsLeadFlowFilterChanged('ALL', clearCampaign: true));
+      return;
+    }
+
+    final options = _accessibleCampaignsForFlow(
+      state,
+      flow,
+      isAdmin: isAdmin,
+      userEmployeeId: userEmployeeId,
+      isExcelAssigned: isExcelAssigned,
+      isMetaAssigned: isMetaAssigned,
+      isGoogleAssigned: isGoogleAssigned,
+    );
+
+    final remembered = state.lastCampaignByFlow[flow];
+    final rememberedValid =
+        remembered != null && options.any((c) => c.id == remembered);
+
+    if (!forcePicker) {
+      if (options.isEmpty) {
+        bloc.add(CrmLeadsLeadFlowFilterChanged(flow, clearCampaign: true));
+        return;
+      }
+      if (options.length == 1) {
+        bloc.add(CrmLeadsLeadFlowFilterChanged(flow, campaignId: options.first.id));
+        return;
+      }
+      if (rememberedValid) {
+        bloc.add(CrmLeadsLeadFlowFilterChanged(flow, campaignId: remembered));
+        return;
+      }
+    }
+
+    bloc.add(CrmLeadsLeadFlowFilterChanged(flow, awaitingPicker: true));
+    if (!mounted) return;
+    await _showFlowCampaignPicker(
+      context,
+      flow: flow,
+      campaigns: options,
+      leads: state.leads,
+      selectedCampaignId: rememberedValid ? remembered : state.selectedCampaignId,
+    );
+  }
+
+  Future<void> _showFlowCampaignPicker(
+    BuildContext context, {
+    required String flow,
+    required List<CrmCampaign> campaigns,
+    required List<CrmLead> leads,
+    String? selectedCampaignId,
+  }) async {
+    final flowLabel = switch (flow) {
+      'EXCEL' => 'Excel',
+      'MANUAL' => 'Manual',
+      'WEBHOOK' => 'Ads / Webhook',
+      _ => flow,
+    };
+
+    final picked = await showModalBottomSheet<String?>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) {
+        final maxH = MediaQuery.sizeOf(ctx).height * 0.65;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxH),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Which $flowLabel campaign?',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Headers and columns update to match the campaign you pick.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      selectedCampaignId == null
+                          ? Icons.check_circle
+                          : Icons.radio_button_unchecked,
+                      color: selectedCampaignId == null ? const Color(0xFF2563EB) : null,
+                    ),
+                    title: const Text(
+                      'All campaigns in this flow',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: const Text('Shared / default headers'),
+                    onTap: () => Navigator.pop(ctx, ''),
+                  ),
+                  const Divider(height: 1),
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: campaigns.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final c = campaigns[i];
+                        final count = leadCountForCampaignFlow(
+                          campaign: c,
+                          flow: flow,
+                          leads: leads,
+                        );
+                        final selected = selectedCampaignId == c.id;
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            selected ? Icons.check_circle : Icons.campaign_outlined,
+                            color: selected ? const Color(0xFF2563EB) : null,
+                          ),
+                          title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: Text(
+                            '$count leads · ${c.platformLabel}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          trailing: Text(
+                            '${c.columnsCount} cols',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                          ),
+                          onTap: () => Navigator.pop(ctx, c.id),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted) return;
+    final bloc = context.read<CrmLeadsBloc>();
+    if (picked == null) {
+      // Dismissed — clear awaiting flag; keep prior campaign if any
+      bloc.add(CrmLeadsFlowCampaignPicked(selectedCampaignId));
+      return;
+    }
+    bloc.add(CrmLeadsFlowCampaignPicked(picked.isEmpty ? null : picked));
+  }
+
   Future<void> _bulkDeleteSelectedLeads(BuildContext context) async {
     final ids = _bulkTransferSelectedIds.toList();
     if (ids.isEmpty) return;
@@ -6260,6 +6564,24 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             lead.customFields['Budget']?.toString() ??
             lead.customFields['budget']?.toString() ??
             (lead.customFields[col.columnKey]?.toString() ?? '');
+      } else if (
+        keyLower == 'notes' ||
+        keyLower == 'remarks' ||
+        keyLower == 'remark' ||
+        keyLower == 'comments' ||
+        keyLower == 'comment' ||
+        labelLower.contains('remark') ||
+        labelLower.contains('note')
+      ) {
+        initialVal = lead.customFields['Notes']?.toString() ??
+            lead.customFields['Remarks']?.toString() ??
+            lead.customFields['remarks']?.toString() ??
+            lead.customFields['Comments']?.toString() ??
+            lead.customFields['comments']?.toString() ??
+            lead.customFields['Remark']?.toString() ??
+            lead.customFields[col.columnKey]?.toString() ??
+            lead.customFields[col.columnKey.toLowerCase()]?.toString() ??
+            '';
       } else {
         initialVal = lead.customFields[col.columnKey]?.toString() ??
             lead.customFields[col.columnKey.toLowerCase()]?.toString() ??
@@ -6561,6 +6883,18 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       customFields[col.columnKey] = val;
                       customFields['Client_Name'] = val;
                       customFields['client_name'] = val;
+                    } else if (
+                      keyLower == 'notes' ||
+                      keyLower == 'remarks' ||
+                      keyLower == 'remark' ||
+                      keyLower == 'comments' ||
+                      keyLower == 'comment' ||
+                      labelLower.contains('remark') ||
+                      labelLower.contains('note')
+                    ) {
+                      customFields[col.columnKey] = val;
+                      customFields['Notes'] = val;
+                      customFields['Remarks'] = val;
                     } else {
                       customFields[col.columnKey] = val;
                     }

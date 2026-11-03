@@ -546,6 +546,59 @@ class CrmLead {
     return logs..sort((a, b) => b.timestamp.compareTo(a.timestamp));
   }
 
+  DateTime? get arrivedAt {
+    final raw = customFields['arrivedAt'] ?? customFields['importedAt'];
+    if (raw != null) return DateTime.tryParse(raw.toString())?.toLocal();
+    return createdAt;
+  }
+
+  DateTime? get firstWorkedAt {
+    final raw = customFields['firstWorkedAt'];
+    if (raw != null) return DateTime.tryParse(raw.toString())?.toLocal();
+    return lastCallAt;
+  }
+
+  DateTime? get lastWorkedAt {
+    final raw = customFields['lastWorkedAt'];
+    if (raw != null) return DateTime.tryParse(raw.toString())?.toLocal();
+    return lastCallAt ?? firstWorkedAt;
+  }
+
+  DateTime? get lastStatusToggledAt {
+    final raw = customFields['lastStatusToggledAt'];
+    if (raw != null) return DateTime.tryParse(raw.toString())?.toLocal();
+    return null;
+  }
+
+  List<Map<String, dynamic>> get leadEventHistory {
+    final raw = customFields['leadEventHistory'];
+    if (raw is! List) return const [];
+    final out = <Map<String, dynamic>>[];
+    for (final item in raw) {
+      if (item is Map) out.add(Map<String, dynamic>.from(item));
+    }
+    out.sort((a, b) {
+      final atA = DateTime.tryParse(a['at']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final atB = DateTime.tryParse(b['at']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return atB.compareTo(atA);
+    });
+    return out;
+  }
+
+  List<Map<String, dynamic>> get transferHistory {
+    final raw = customFields['transferHistory'];
+    if (raw is! List) return const [];
+    final out = <Map<String, dynamic>>[];
+    for (final item in raw) {
+      if (item is Map) out.add(Map<String, dynamic>.from(item));
+    }
+    return out;
+  }
+
+  /// Raw inbound webhook / import JSON (admin-only from API).
+  dynamic get webhookRawPayload =>
+      customFields['webhookRawPayload'] ?? customFields['rawWebhookJson'];
+
   int get siteVisitCount {
     if (customFields['siteVisitCount'] is num) {
       return (customFields['siteVisitCount'] as num).toInt();
@@ -910,6 +963,8 @@ class CrmSettings {
   final String elisionAgentId;
   final int notInterestedRetentionDays;
   final int binRetentionDays;
+  /// When true, permanently delete binned leads after [binRetentionDays]. Default off.
+  final bool binAutoDeleteEnabled;
 
   // Pre-Sales and Visitor Check-in Configurations
   final List<String> notInterestedReasons;
@@ -1035,6 +1090,7 @@ class CrmSettings {
     this.elisionAgentId = '',
     required this.notInterestedRetentionDays,
     required this.binRetentionDays,
+    this.binAutoDeleteEnabled = false,
     this.notInterestedReasons = const [
       'Budget mismatch',
       'Found somewhere else',
@@ -1194,6 +1250,8 @@ class CrmSettings {
       elisionAgentId: json['elision_agent_id']?.toString() ?? '',
       notInterestedRetentionDays: int.tryParse(json['not_interested_retention_days']?.toString() ?? '30') ?? 30,
       binRetentionDays: int.tryParse(json['bin_retention_days']?.toString() ?? '30') ?? 30,
+      binAutoDeleteEnabled: json['bin_auto_delete_enabled'] == true ||
+          json['bin_auto_delete_enabled']?.toString().toLowerCase() == 'true',
       notInterestedReasons: _parseList(json['not_interested_reasons'], const [
         'Budget mismatch',
         'Found somewhere else',

@@ -144,6 +144,8 @@ export interface UpdateCrmSettingsDto {
   elision_agent_id?: string;
   not_interested_retention_days?: string;
   bin_retention_days?: string;
+  /** When 'true', permanently delete binned leads after bin_retention_days. Default off. */
+  bin_auto_delete_enabled?: string | boolean;
   excel_assigned_telecaller_ids?: string | number[];
   /** Meta Ads + generic website webhook desk */
   webhook_assigned_telecaller_ids?: string | number[];

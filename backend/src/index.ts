@@ -227,6 +227,19 @@ async function start() {
         console.error('[CRM Lead Recovery Worker Error]:', workerErr);
       }
     };
+    const runCrmBinPurgeWorker = async () => {
+      try {
+        const a = await crmService.purgeExpiredBinLeads('NB_DEVELOPER');
+        const b = await crmService.purgeExpiredBinLeads('NB_FINSERVE');
+        if (a.deletedCount || b.deletedCount) {
+          console.log(
+            `[CRM Bin Purge] deleted ${a.deletedCount + b.deletedCount} lead(s) (auto-delete enabled)`,
+          );
+        }
+      } catch (purgeErr) {
+        console.error('[CRM Bin Purge Worker Error]:', purgeErr);
+      }
+    };
     // Run initial pass after 10s warmup, then every 60s
     setTimeout(() => {
       void runCrmLeadRecoveryWorker();
@@ -234,7 +247,15 @@ async function start() {
     setInterval(() => {
       void runCrmLeadRecoveryWorker();
     }, 60 * 1000);
+    // Bin hard-delete (only when settings.bin_auto_delete_enabled=true) — hourly
+    setTimeout(() => {
+      void runCrmBinPurgeWorker();
+    }, 20000);
+    setInterval(() => {
+      void runCrmBinPurgeWorker();
+    }, 60 * 60 * 1000);
     console.log('CRM 30-min untouched lead recovery and waiting queue worker started (60s)');
+    console.log('CRM bin auto-delete purge worker started (hourly; off unless enabled in settings)');
   } catch (err) {
     console.warn('CRM lead recovery worker setup notice:', err);
   }

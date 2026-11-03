@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -439,7 +440,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       if (selectedCampaignId != null && l.campaignId != selectedCampaignId) {
         return false;
       }
+      // Waiting list is admin-only
+      if (!isAdmin && l.isWaitingList) return false;
       if (state.statusFilter == 'WL') {
+        if (!isAdmin) return false;
         return l.isWaitingList;
       }
       if (state.fromDate != null) {
@@ -626,9 +630,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 }
 
                 Widget buildStatusFilter() {
+                  final statusValue =
+                      (!isAdmin && state.statusFilter == 'WL') ? 'ALL' : state.statusFilter;
                   return DropdownButtonFormField<String>(
                     isExpanded: true,
-                    initialValue: state.statusFilter,
+                    initialValue: statusValue,
                     dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
                     decoration: filterDecoration(
                       prefixIcon: Icon(Icons.filter_list_rounded, size: 18, color: primaryColor),
@@ -638,17 +644,18 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         value: 'ALL',
                         child: Text('All Statuses', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
                       ),
-                      DropdownMenuItem(
-                        value: 'WL',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFD97706), shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text('Waiting List (WL)', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309))),
-                          ],
+                      if (isAdmin)
+                        DropdownMenuItem(
+                          value: 'WL',
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFD97706), shape: BoxShape.circle)),
+                              const SizedBox(width: 8),
+                              Text('Waiting List (WL)', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309))),
+                            ],
+                          ),
                         ),
-                      ),
                       DropdownMenuItem(
                         value: 'NOT_STARTED',
                         child: Row(
@@ -1413,29 +1420,30 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           }
                         },
                       ),
-                    ChoiceChip(
-                      avatar: Icon(
-                        Icons.hourglass_top_rounded,
-                        size: 14,
-                        color: state.statusFilter == 'WL' ? primaryColor : const Color(0xFFD97706),
+                    if (isAdmin)
+                      ChoiceChip(
+                        avatar: Icon(
+                          Icons.hourglass_top_rounded,
+                          size: 14,
+                          color: state.statusFilter == 'WL' ? primaryColor : const Color(0xFFD97706),
+                        ),
+                        label: Text('Waiting (${leads.where((l) => l.isWaitingList).length})'),
+                        selected: state.statusFilter == 'WL',
+                        selectedColor: primaryColor.withValues(alpha: 0.18),
+                        side: BorderSide(
+                          color: state.statusFilter == 'WL' ? primaryColor : borderColor,
+                        ),
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          fontWeight: state.statusFilter == 'WL' ? FontWeight.w700 : FontWeight.w500,
+                          color: state.statusFilter == 'WL'
+                              ? primaryColor
+                              : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                        ),
+                        onSelected: (val) {
+                          context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val ? 'WL' : 'ALL'));
+                        },
                       ),
-                      label: Text('Waiting (${leads.where((l) => l.isWaitingList).length})'),
-                      selected: state.statusFilter == 'WL',
-                      selectedColor: primaryColor.withValues(alpha: 0.18),
-                      side: BorderSide(
-                        color: state.statusFilter == 'WL' ? primaryColor : borderColor,
-                      ),
-                      labelStyle: TextStyle(
-                        fontSize: 12,
-                        fontWeight: state.statusFilter == 'WL' ? FontWeight.w700 : FontWeight.w500,
-                        color: state.statusFilter == 'WL'
-                            ? primaryColor
-                            : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                      ),
-                      onSelected: (val) {
-                        context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val ? 'WL' : 'ALL'));
-                      },
-                    ),
                   ],
                 ),
                 if (effectiveFlow != 'ALL') ...[
@@ -2155,6 +2163,21 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       icon: const Icon(Icons.swap_horiz_rounded, size: 18, color: Color(0xFF6366F1)),
                                       tooltip: 'Transfer Lead to another Telecaller',
                                       onPressed: () => _showTransferLeadModal(context, lead, salesUsers),
+                                    ),
+                                  if (isAdmin ||
+                                      canWrite ||
+                                      canTransfer ||
+                                      Permissions.canViewFullPhoneNumbers(authState.permissions, authState.user?.role) ||
+                                      (userEmployeeId != null &&
+                                          (lead.telecallerId == userEmployeeId || lead.assignedToId == userEmployeeId)))
+                                    IconButton(
+                                      icon: const Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFF0EA5E9)),
+                                      tooltip: 'Lead timeline & full details',
+                                      onPressed: () => _showLeadInfoDialog(
+                                        context,
+                                        lead,
+                                        isAdmin: isAdmin,
+                                      ),
                                     ),
                                   IconButton(
                                     icon: const Icon(Icons.chat_bubble_rounded, size: 18, color: Color(0xFF22C55E)),
@@ -5279,7 +5302,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Admin only. All selected leads will be allocated to the chosen telecaller immediately.',
+                              'Admin only. Allocates immediately and overrides telecaller max capacity. Excel/admin assignments stay put (not reclaimed by untouched recovery).',
                               style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
                             ),
                           ),
@@ -7841,9 +7864,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   onPressed: () => Navigator.pop(dialogCtx),
                   child: const Text('Cancel'),
                 ),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                  label: const Text('Mark Not Interested'),
+                  ElevatedButton.icon(
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                  label: const Text('Not Interested → Bin'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFEF4444),
                     foregroundColor: Colors.white,
@@ -8018,5 +8041,245 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             notInterestedRemark: notInterestedRemark,
           ),
         );
+  }
+
+  String _fmtLeadTs(DateTime? dt) {
+    if (dt == null) return '—';
+    return DateFormat('dd MMM yyyy, hh:mm a').format(dt.toLocal());
+  }
+
+  void _showLeadInfoDialog(
+    BuildContext context,
+    CrmLead lead, {
+    required bool isAdmin,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final events = lead.leadEventHistory;
+    final transfers = lead.transferHistory;
+    String prettyJson = '';
+    try {
+      final raw = lead.webhookRawPayload;
+      final source = raw ?? lead.customFields;
+      prettyJson = const JsonEncoder.withIndent('  ').convert(source);
+    } catch (_) {
+      prettyJson = lead.customFields.toString();
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0EA5E9).withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.info_outline_rounded, color: Color(0xFF0EA5E9), size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      lead.name.isNotEmpty ? lead.name : 'Lead details',
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      lead.phone,
+                      style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 560,
+            child: DefaultTabController(
+              length: isAdmin ? 3 : 2,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TabBar(
+                    isScrollable: true,
+                    labelColor: const Color(0xFF0EA5E9),
+                    tabs: [
+                      const Tab(text: 'Timeline'),
+                      const Tab(text: 'Details'),
+                      if (isAdmin) const Tab(text: 'Webhook JSON'),
+                    ],
+                  ),
+                  SizedBox(
+                    height: 420,
+                    child: TabBarView(
+                      children: [
+                        ListView(
+                          padding: const EdgeInsets.only(top: 12),
+                          children: [
+                            _leadInfoKeyValue('Came in', _fmtLeadTs(lead.arrivedAt ?? lead.createdAt)),
+                            _leadInfoKeyValue('First worked', _fmtLeadTs(lead.firstWorkedAt)),
+                            _leadInfoKeyValue('Last worked', _fmtLeadTs(lead.lastWorkedAt)),
+                            _leadInfoKeyValue('Last status toggle', _fmtLeadTs(lead.lastStatusToggledAt)),
+                            _leadInfoKeyValue('Current status', lead.status.displayName),
+                            if (lead.notInterestedReason != null && lead.notInterestedReason!.trim().isNotEmpty)
+                              _leadInfoKeyValue('Not interested reason', lead.notInterestedReason!),
+                            if (lead.notInterestedRemark != null && lead.notInterestedRemark!.trim().isNotEmpty)
+                              _leadInfoKeyValue('Not interested remark', lead.notInterestedRemark!),
+                            if (lead.deletedAt != null)
+                              _leadInfoKeyValue('Moved to Bin', _fmtLeadTs(lead.deletedAt)),
+                            const SizedBox(height: 10),
+                            const Text('Event history', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                            const SizedBox(height: 6),
+                            if (events.isEmpty && transfers.isEmpty)
+                              Text(
+                                'No timeline events recorded yet.',
+                                style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black45),
+                              ),
+                            ...events.map((e) {
+                              final at = DateTime.tryParse(e['at']?.toString() ?? '');
+                              final type = e['type']?.toString() ?? 'EVENT';
+                              final summary = e['summary']?.toString() ?? '';
+                              final by = e['by']?.toString();
+                              return ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.circle, size: 10, color: Color(0xFF0EA5E9)),
+                                title: Text(summary.isNotEmpty ? summary : type, style: const TextStyle(fontSize: 12.5)),
+                                subtitle: Text(
+                                  '${_fmtLeadTs(at)}${by != null && by.isNotEmpty ? ' · $by' : ''}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              );
+                            }),
+                            ...transfers.map((t) {
+                              final at = DateTime.tryParse(t['transferredAt']?.toString() ?? '');
+                              return ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.swap_horiz, size: 16, color: Color(0xFF6366F1)),
+                                title: Text(
+                                  'Transfer: ${t['fromName'] ?? '?'} → ${t['toName'] ?? '?'}',
+                                  style: const TextStyle(fontSize: 12.5),
+                                ),
+                                subtitle: Text(
+                                  '${_fmtLeadTs(at)}${t['remarks'] != null ? ' · ${t['remarks']}' : ''}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+                        ListView(
+                          padding: const EdgeInsets.only(top: 12),
+                          children: [
+                            _leadInfoKeyValue('Source', lead.leadSource ?? '—'),
+                            _leadInfoKeyValue('Campaign', lead.campaignName ?? '—'),
+                            _leadInfoKeyValue('Telecaller', lead.telecallerName ?? 'Unallocated'),
+                            _leadInfoKeyValue('Sales', lead.assignedToName ?? '—'),
+                            _leadInfoKeyValue('Created', _fmtLeadTs(lead.createdAt)),
+                            _leadInfoKeyValue('Updated', _fmtLeadTs(lead.updatedAt)),
+                            if (lead.latestFollowUp != null)
+                              _leadInfoKeyValue(
+                                'Next follow-up',
+                                '${_fmtLeadTs(lead.latestFollowUp!.scheduledDate)} ${lead.latestFollowUp!.scheduledTime}',
+                              ),
+                            const SizedBox(height: 8),
+                            const Text('Custom fields', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                            const SizedBox(height: 6),
+                            ...lead.customFields.entries
+                                .where((e) => ![
+                                      'leadEventHistory',
+                                      'transferHistory',
+                                      'webhookRawPayload',
+                                      'webhookPayloadHistory',
+                                      'rawWebhookJson',
+                                      'activityLogs',
+                                      'reInquiries',
+                                      'proposals',
+                                      'siteVisits',
+                                    ].contains(e.key))
+                                .take(40)
+                                .map(
+                                  (e) => _leadInfoKeyValue(
+                                    e.key.replaceAll('_', ' '),
+                                    e.value?.toString() ?? '—',
+                                  ),
+                                ),
+                          ],
+                        ),
+                        if (isAdmin)
+                          SingleChildScrollView(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                              ),
+                              child: SelectableText(
+                                prettyJson.isEmpty ? '{ }' : prettyJson,
+                                style: TextStyle(
+                                  fontFamily: 'Consolas',
+                                  fontSize: 11.5,
+                                  height: 1.35,
+                                  color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Close')),
+            if (isAdmin)
+              TextButton.icon(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: prettyJson));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('JSON copied'), duration: Duration(seconds: 2)),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.copy_rounded, size: 16),
+                label: const Text('Copy JSON'),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _leadInfoKeyValue(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
   }
 }

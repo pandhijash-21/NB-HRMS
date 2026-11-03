@@ -434,7 +434,14 @@ export const crmController = {
           authUser?.role?.name ||
           (typeof authUser?.role === 'string' ? authUser?.role : ''),
       );
-      if (!isAdminRole(role)) {
+      const roleUpper = String(role || '').toUpperCase();
+      const roleCompact = roleUpper.replace(/[\s_-]+/g, '');
+      const bulkAdmin =
+        isAdminRole(role) ||
+        ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'SYSTEMADMIN', 'ITADMIN'].some(
+          (r) => roleUpper === r || roleCompact === r.replace(/_/g, '') || roleUpper.includes(r),
+        );
+      if (!bulkAdmin) {
         return res.status(403).json(fail('Bulk lead transfer is restricted to Admins only.'));
       }
       const { leadIds, targetTelecallerId, remarks } = req.body || {};

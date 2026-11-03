@@ -62,6 +62,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   // Controllers for Retention Settings
   final _notInterestedDaysController = TextEditingController(text: '30');
   final _binDaysController = TextEditingController(text: '30');
+  bool _binAutoDeleteEnabled = false;
   final _quotationGeneralRemarksController = TextEditingController(text: CrmSettings.defaultQuotationGeneralRemarks);
   bool _quotationRemarksLoaded = false;
 
@@ -142,7 +143,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     CrmRepository.crmScopeNotifier.addListener(_onScopeUpdated);
   }
 
@@ -182,6 +183,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     if (!_settingsHydrated) {
       _notInterestedDaysController.text = settings.notInterestedRetentionDays.toString();
       _binDaysController.text = settings.binRetentionDays.toString();
+      _binAutoDeleteEnabled = settings.binAutoDeleteEnabled;
       _settingsHydrated = true;
     }
     if (!_kpiLoaded) {
@@ -406,6 +408,16 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            Icon(Icons.rule_folder_outlined, size: 15),
+                            SizedBox(width: 6),
+                            Text('CRM Rules'),
+                          ],
+                        ),
+                      ),
+                      const Tab(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                             Icon(Icons.settings_outlined, size: 15),
                             SizedBox(width: 6),
                             Text('General'),
@@ -475,6 +487,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                     ),
               _buildKpiManagementTab(state, isDark, cardBg, borderColor, textMuted, primaryGold),
               _buildRetentionPolicyTab(isDark, cardBg, borderColor, textMuted, primaryGold),
+              _buildCrmRulesReferenceTab(isDark, cardBg, borderColor, textMuted, primaryGold),
               _buildGeneralTab(isDark, cardBg, borderColor, textMuted),
             ],
           ),
@@ -929,7 +942,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Configure days before inactive "Not interested" leads move to Bin, and Bin retention duration.',
+                          'Not Interested goes to Bin immediately. Permanent delete is optional and off by default.',
                           style: TextStyle(fontSize: 13, color: textMuted),
                         ),
                       ],
@@ -941,11 +954,71 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
               const Divider(height: 1),
               const SizedBox(height: 20),
 
-              // Not Interested Retention
-              Text('Not Interested Lead Active Window (Days)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7).withValues(alpha: isDark ? 0.12 : 1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.35)),
+                ),
+                child: Text(
+                  'Marking a lead Not Interested moves it to Bin right away (with reason & remark preserved for the info panel).',
+                  style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white70 : const Color(0xFF92400E), fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'Auto-delete leads from Bin',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isDark ? Colors.white : const Color(0xFF1E293B)),
+                ),
+                subtitle: Text(
+                  _binAutoDeleteEnabled
+                      ? 'Enabled — permanently delete after the retention period below.'
+                      : 'Off — binned leads stay until you restore or delete them manually.',
+                  style: TextStyle(fontSize: 12, color: textMuted),
+                ),
+                value: _binAutoDeleteEnabled,
+                activeThumbColor: const Color(0xFFEF4444),
+                onChanged: (v) => setState(() => _binAutoDeleteEnabled = v),
+              ),
+              const SizedBox(height: 12),
+
+              // Bin Retention / auto-delete days
+              Text(
+                _binAutoDeleteEnabled
+                    ? 'Permanently delete after (Days)'
+                    : 'Bin retention reference (Days)',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B)),
+              ),
               const SizedBox(height: 4),
               Text(
-                'When telecaller marks a lead as "Not interested", it remains in Pre-sales for this duration before moving to Bin.',
+                _binAutoDeleteEnabled
+                    ? 'Leads that have been in Bin longer than this are hard-deleted automatically.'
+                    : 'Used only when auto-delete is turned on. Until then, nothing is auto-deleted.',
+                style: TextStyle(fontSize: 12, color: textMuted),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _binDaysController,
+                enabled: _binAutoDeleteEnabled,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  suffixText: 'Days',
+                  prefixIcon: const Icon(Icons.delete_forever_outlined, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Legacy key kept for older bin queries / Finserve variants
+              Text('Legacy Not-Interested window (Days)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+              const SizedBox(height: 4),
+              Text(
+                'Kept for older Not Interested rows that were not soft-deleted. New NI leads go to Bin immediately.',
                 style: TextStyle(fontSize: 12, color: textMuted),
               ),
               const SizedBox(height: 8),
@@ -955,25 +1028,6 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                 decoration: InputDecoration(
                   suffixText: 'Days',
                   prefixIcon: const Icon(Icons.timer_outlined, size: 20),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Bin Retention
-              Text('Bin Retention Period (Days)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-              const SizedBox(height: 4),
-              Text(
-                'Leads in the Bin can be restored back to Pre-sales with "Not started" status at any point during this period.',
-                style: TextStyle(fontSize: 12, color: textMuted),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _binDaysController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  suffixText: 'Days',
-                  prefixIcon: const Icon(Icons.delete_sweep_outlined, size: 20),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
@@ -993,6 +1047,210 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                   ),
                 ],
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tab: CRM Rules reference (read-only playbook of live system rules)
+  // ---------------------------------------------------------------------------
+  Widget _buildCrmRulesReferenceTab(
+    bool isDark,
+    Color cardBg,
+    Color borderColor,
+    Color textMuted,
+    Color primaryColor,
+  ) {
+    final sections = <({String title, String subtitle, List<String> rules})>[
+      (
+        title: 'Waiting List',
+        subtitle: 'Unallocated queue visibility & dispatch',
+        rules: const [
+          'Waiting List (WL) is visible to Admins only — telecallers never browse unallocated leads.',
+          'Auto-dispatch assigns WL leads only to punched-in, active-on-screen telecallers with free workload capacity.',
+          'Untouched recovery can return auto-dispatched leads to WL after the configured timeout (default 30 min) if never worked.',
+        ],
+      ),
+      (
+        title: 'Dedicated / sticky allocations (never return to WL)',
+        subtitle: 'Full campaign or full Excel assigned to one person',
+        rules: const [
+          'If a campaign is assigned to a single telecaller (or SPECIFIC mode), those leads stay with that person — untouched recovery will not reclaim them.',
+          'Excel upload assigned to one person (SPECIFIC) or a one-person ROUND_ROBIN list is sticky and never returns to WL.',
+          'All Excel-sourced leads are protected from untouched reclaim.',
+          'Admin (and ITADMIN) manual / bulk transfers override max capacity and stamp sticky flags so leads stay allocated.',
+          'Self-allocated manual leads created by a telecaller for themselves are never reclaimed.',
+        ],
+      ),
+      (
+        title: 'Workload & capacity',
+        subtitle: 'Caps for auto-dispatch vs admin override',
+        rules: const [
+          'Auto-dispatch and waiting-queue distribution respect max active workload (global + per-telecaller overrides).',
+          'Admin manual transfers ignore max capacity so you can overload a desk when needed.',
+          'Idle / break presence still blocks auto-dispatch even if capacity remains.',
+        ],
+      ),
+      (
+        title: 'Not Interested & Bin',
+        subtitle: 'What happens when a lead is closed out',
+        rules: const [
+          'Marking Not Interested moves the lead to Bin immediately (reason + remark are kept).',
+          'Permanent auto-delete from Bin is OFF by default — enable it under Bin & Retention and set days.',
+          'Until auto-delete is enabled, binned leads stay until restored or deleted manually.',
+        ],
+      ),
+      (
+        title: 'Lead info & history',
+        subtitle: 'Timeline, status toggles, webhook JSON',
+        rules: const [
+          'The (i) info icon shows when the lead came in, when it was worked, and when status was toggled.',
+          'Admins and designated CRM users (writers / transfer / phone-view / assigned telecaller or sales) can open the timeline.',
+          'Admins also see Webhook JSON (raw inbound payload when available) on the info panel.',
+          'Status changes, transfers, Excel/webhook arrival, dispatch, and bin moves are written into lead event history.',
+        ],
+      ),
+      (
+        title: 'Lead flows & visibility',
+        subtitle: 'Who sees which desk',
+        rules: const [
+          'Non-admins only see leads personally assigned to them, or campaigns they are listed under in Headers.',
+          'Excel / Meta / Google desk pools control which inbound sources a telecaller can work when browsing by flow.',
+          'Channel Partner leads are limited to the designated CP viewer + admins when configured.',
+          'Booking Confirmed leads are locked — status and edits are blocked.',
+          'In Developer CRM, once a lead is assigned to sales, telecallers are view-only on that lead.',
+        ],
+      ),
+      (
+        title: 'Inbound webhooks & Excel',
+        subtitle: 'How new leads land',
+        rules: const [
+          'Webhook / Meta / Google leads store raw JSON for admin review and append re-inquiry history on duplicate phones.',
+          'Campaign SPECIFIC or single-assignee routing stamps dedicated allocation (no WL reclaim).',
+          'Excel imports can stamp Remarks → Notes and support SPECIFIC / ROUND_ROBIN / Unassigned allocation modes.',
+        ],
+      ),
+      (
+        title: 'Staff notifications',
+        subtitle: 'In-app + push alerts for new / allocated leads',
+        rules: const [
+          'Every new lead (webhook, Excel, manual, re-inquiry, transfer, or waiting-list dispatch) creates an in-app notification.',
+          'The allocated telecaller is notified when the lead is assigned to them.',
+          'Admins (and company-admin grants) are notified for every new lead, including Waiting List arrivals.',
+          'Alerts use the bell inbox + live push while the app is open (path opens Pre-Sales).',
+        ],
+      ),
+    ];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 860),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.rule_folder_outlined, color: primaryColor, size: 28),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'CRM operating rules',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white : const Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Read-only playbook of live Pre-Sales rules so admins can recall how allocation, WL, Bin, and capacity behave.',
+                            style: TextStyle(fontSize: 13, color: textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              ...sections.map((section) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: borderColor),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          section.title,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(section.subtitle, style: TextStyle(fontSize: 12, color: textMuted)),
+                        const SizedBox(height: 12),
+                        ...section.rules.map((rule) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 5),
+                                  child: Icon(Icons.check_circle_rounded, size: 14, color: primaryColor),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    rule,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      height: 1.35,
+                                      color: isDark ? Colors.white70 : const Color(0xFF334155),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                );
+              }),
             ],
           ),
         ),
@@ -1190,6 +1448,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
       'not_interested_retention_days': _notInterestedDaysController.text.trim(),
       'bin_retention_days': _binDaysController.text.trim(),
+      'bin_auto_delete_enabled': _binAutoDeleteEnabled.toString(),
     }));
   }
 

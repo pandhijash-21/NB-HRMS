@@ -34,6 +34,7 @@ function initZipArchive(options: any = { zlib: { level: 9 } }): any {
 import { uploadService } from '../personal-education/upload.service';
 import { whatsappService } from './whatsapp.service';
 import { telephonyService } from './telephony.service';
+import { notifyNewOrAllocatedLead } from './crmLeadNotify';
 import { sendFinserveClientOtpEmail } from '../../utils/mailer';
 import { isAdminRole } from '../auth/permissions-map';
 import { deriveDayInOut } from '../attendance/dayPunch.rules';
@@ -92,6 +93,64 @@ export function maskLeadPhones<T extends Record<string, any>>(lead: T): T {
   }
   if (typeof out.leadPhone === 'string') out.leadPhone = maskPhoneNumber(out.leadPhone);
   return out as T;
+}
+
+/** Append a timeline event onto lead.customFields (arrived / worked / status / transfers / bin). */
+function appendLeadEvent(
+  custom: Record<string, any>,
+  entry: {
+    type: string;
+    summary: string;
+    by?: string | null;
+    fromStatus?: string | null;
+    toStatus?: string | null;
+    meta?: Record<string, any>;
+    at?: string;
+  },
+): Record<string, any> {
+  const at = entry.at || new Date().toISOString();
+  const history = Array.isArray(custom.leadEventHistory) ? [...custom.leadEventHistory] : [];
+  history.push({
+    at,
+    type: entry.type,
+    summary: entry.summary,
+    by: entry.by ?? null,
+    fromStatus: entry.fromStatus ?? null,
+    toStatus: entry.toStatus ?? null,
+    ...(entry.meta ? { meta: entry.meta } : {}),
+  });
+  const next: Record<string, any> = {
+    ...custom,
+    leadEventHistory: history.length > 120 ? history.slice(-120) : history,
+  };
+  if (entry.type === 'ARRIVED' || entry.type === 'CREATED') {
+    next.arrivedAt = next.arrivedAt || at;
+  }
+  if (
+    entry.type === 'STATUS_CHANGE' ||
+    entry.type === 'WORKED' ||
+    entry.type === 'CALL' ||
+    entry.type === 'FOLLOW_UP'
+  ) {
+    if (!next.firstWorkedAt) next.firstWorkedAt = at;
+    next.lastWorkedAt = at;
+  }
+  if (entry.type === 'STATUS_CHANGE' && entry.toStatus) {
+    next.lastStatusToggledAt = at;
+    next.lastStatusToggledTo = entry.toStatus;
+  }
+  return next;
+}
+
+/** Hide raw webhook / import JSON from non-admin API consumers. */
+function stripAdminOnlyLeadCustomFields(custom: Record<string, any>, isAdmin: boolean): Record<string, any> {
+  if (isAdmin) return custom;
+  const out = { ...custom };
+  delete out.webhookRawPayload;
+  delete out.rawWebhookJson;
+  delete out.webhookPayloadHistory;
+  delete out.importRawRows;
+  return out;
 }
 
 import {
@@ -781,8 +840,14 @@ export const crmService = {
       ? (campaign as any).assignedTelecallerIds.map(Number).filter((n: number) => !isNaN(n) && n > 0)
       : [];
 
+    // Dedicated = campaign locked to one person (SPECIFIC mode or a single assignee).
+    // Those allocations must never be pulled back to Waiting List by untouched recovery.
+    const isCampaignDedicatedAllocation =
+      campaignAssignedIds.length === 1 ||
+      String((campaign as any).assignmentMode || '').toUpperCase() === 'SPECIFIC';
+
     if (campaignAssignedIds.length > 0) {
-      if ((campaign as any).assignmentMode === 'SPECIFIC') {
+      if (isCampaignDedicatedAllocation) {
         webhookAssignedTelecallerId = campaignAssignedIds[0];
       } else {
         // Round-robin among campaign telecallers (pick least loaded in this campaign)
@@ -868,23 +933,40 @@ export const crmService = {
           ? (existingLead.customFields as Record<string, any>)
           : {};
 
+        const reInquiryAt = new Date().toISOString();
         const reInquiries = Array.isArray(existingCustom.reInquiries) ? [...existingCustom.reInquiries] : [];
         reInquiries.push({
-          timestamp: new Date().toISOString(),
+          timestamp: reInquiryAt,
           source: inboundSourceLabel,
           campaignName: campaign.name,
           campaignId: campaign.id,
           payload: normalizedPayload,
         });
+        const webhookPayloadHistory = Array.isArray(existingCustom.webhookPayloadHistory)
+          ? [...existingCustom.webhookPayloadHistory]
+          : [];
+        webhookPayloadHistory.push({ at: reInquiryAt, source: inboundSourceLabel, payload });
 
         // Merge newly arriving payload values into existing customFields
-        const mergedCustom: Record<string, any> = {
+        let mergedCustom: Record<string, any> = {
           ...existingCustom,
           ...normalizedPayload,
           reInquiries,
-          lastReInquiryAt: new Date().toISOString(),
+          lastReInquiryAt: reInquiryAt,
           reInquiryCount: reInquiries.length + 1,
+          webhookRawPayload: payload,
+          webhookPayloadHistory:
+            webhookPayloadHistory.length > 30
+              ? webhookPayloadHistory.slice(-30)
+              : webhookPayloadHistory,
         };
+        mergedCustom = appendLeadEvent(mergedCustom, {
+          type: 'ARRIVED',
+          summary: `Re-inquiry via ${inboundSourceLabel} on "${campaign.name}"`,
+          by: 'WEBHOOK',
+          at: reInquiryAt,
+          meta: { campaignId: campaign.id, campaignName: campaign.name },
+        });
 
         const updatedLead = await prisma.crmLead.update({
           where: { id: existingLead.id },
@@ -924,6 +1006,16 @@ export const crmService = {
           })
           .catch((err) => console.error('[CRM WhatsApp Hook Error - Re-inquiry]:', err));
 
+        void notifyNewOrAllocatedLead({
+          leadId: existingLead.id,
+          leadName: existingLead.name || name,
+          phone: existingLead.phone || rawPhone,
+          telecallerEmployeeId: existingLead.telecallerId,
+          scope: campaignScope,
+          campaignName: campaign.name,
+          reason: 're_inquiry',
+        });
+
         return {
           status: 'success',
           message: `Re-inquiry logged for existing lead (${existingLead.name || phone10})`,
@@ -938,6 +1030,49 @@ export const crmService = {
       }
     }
 
+    const arrivedAt = new Date().toISOString();
+    let webhookCustom: Record<string, any> = {
+      ...normalizedPayload,
+      leadSourceType: inboundSourceLabel,
+      campaignPlatform,
+      campaignTagId: (campaign as any).adId || null,
+      arrivedAt,
+      webhookRawPayload: payload,
+      webhookPayloadHistory: [{ at: arrivedAt, source: inboundSourceLabel, payload }],
+      ...(webhookAssignedTelecallerId
+        ? {
+            allocatedAt: arrivedAt,
+            assignedAt: arrivedAt,
+            ...(isCampaignDedicatedAllocation
+              ? {
+                  skipUntouchedRecovery: true,
+                  manualAllocation: true,
+                  adminAllocated: true,
+                  campaignDedicatedAllocation: true,
+                  dedicatedTelecallerId: webhookAssignedTelecallerId,
+                }
+              : {}),
+          }
+        : {}),
+    };
+    webhookCustom = appendLeadEvent(webhookCustom, {
+      type: 'ARRIVED',
+      summary: `Lead received via ${inboundSourceLabel} (${campaign.name})`,
+      by: 'WEBHOOK',
+      at: arrivedAt,
+      meta: { campaignId: campaign.id, campaignName: campaign.name, leadSource: inboundLeadSource },
+    });
+    if (webhookAssignedTelecallerId) {
+      webhookCustom = appendLeadEvent(webhookCustom, {
+        type: 'ALLOCATED',
+        summary: isCampaignDedicatedAllocation
+          ? `Dedicated campaign allocation to telecaller #${webhookAssignedTelecallerId}`
+          : `Auto-allocated to telecaller #${webhookAssignedTelecallerId}`,
+        by: 'WEBHOOK',
+        at: arrivedAt,
+      });
+    }
+
     const lead = await prisma.crmLead.create({
       data: {
         scope: campaignScope,
@@ -945,13 +1080,7 @@ export const crmService = {
         phone: rawPhone || '0000000000',
         name,
         status: CrmLeadStatus.NOT_STARTED,
-        customFields: {
-          ...normalizedPayload,
-          leadSourceType: inboundSourceLabel,
-          campaignPlatform,
-          campaignTagId: (campaign as any).adId || null,
-          ...(webhookAssignedTelecallerId ? { allocatedAt: new Date().toISOString() } : {}),
-        },
+        customFields: webhookCustom,
         telecallerId: webhookAssignedTelecallerId,
         assignedToId: null,
         leadSource: inboundLeadSource,
@@ -969,6 +1098,18 @@ export const crmService = {
         projectName: campaign.project?.name || (campaign.scope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower'),
       })
       .catch((err) => console.error('[CRM WhatsApp Hook Error - Webhook]:', err));
+
+    // Staff notify: allocated telecaller (if any) + admins.
+    // When unallocated, dispatchWaitingQueue will also notify once it assigns.
+    void notifyNewOrAllocatedLead({
+      leadId: lead.id,
+      leadName: lead.name,
+      phone: lead.phone,
+      telecallerEmployeeId: webhookAssignedTelecallerId,
+      scope: campaignScope,
+      campaignName: campaign.name,
+      reason: 'webhook',
+    });
 
     return {
       status: 'success',
@@ -1464,16 +1605,36 @@ export const crmService = {
       where.campaign = { projectId: query.projectId, scope };
     }
 
-    if (
+    const waitingListQuery =
       query.status === 'WL' ||
       query.status === 'WAITING_LIST' ||
       (query as any).inWaitingQueue === true ||
-      (query as any).inWaitingQueue === 'true'
-    ) {
+      (query as any).inWaitingQueue === 'true';
+
+    // Waiting list is admin-only (telecallers never browse unallocated queue).
+    if (waitingListQuery && !isAdmin) {
+      return { total: 0, page, limit, totalPages: 0, items: [] };
+    }
+
+    if (waitingListQuery) {
       where.telecallerId = null;
       where.assignedToId = null;
     } else if (query.status && query.status !== 'ALL') {
       where.status = query.status as CrmLeadStatus;
+    }
+
+    if (!isAdmin) {
+      const assignedOnly = {
+        OR: [{ telecallerId: { not: null } }, { assignedToId: { not: null } }],
+      };
+      if (where.AND) {
+        where.AND.push(assignedOnly);
+      } else if (where.OR) {
+        where.AND = [{ OR: where.OR }, assignedOnly];
+        delete where.OR;
+      } else {
+        where.AND = [assignedOnly];
+      }
     }
 
     if (query.assignedToId) {
@@ -1558,7 +1719,7 @@ export const crmService = {
     }
 
     let enrichedItems = items.map((item) => {
-      const custom = (item.customFields && typeof item.customFields === 'object')
+      let custom = (item.customFields && typeof item.customFields === 'object')
         ? { ...(item.customFields as Record<string, any>) }
         : {};
       // Heal: Excel often stored Remarks/Comments while UI column is Notes
@@ -1578,6 +1739,7 @@ export const crmService = {
       if (notesVal && !custom.Remarks) {
         custom.Remarks = notesVal;
       }
+      custom = stripAdminOnlyLeadCustomFields(custom, isAdmin);
       const creatorName = custom.createdByName || (item.createdById ? creatorMap.get(item.createdById) : undefined);
       return {
         ...item,
@@ -1973,6 +2135,16 @@ export const crmService = {
         agentName: newLead.assignedTo?.generalInfo?.fullName,
       })
       .catch((err) => console.error('[CRM WhatsApp Hook Error - Manual Lead]:', err));
+
+    void notifyNewOrAllocatedLead({
+      leadId: newLead.id,
+      leadName: newLead.name,
+      phone: newLead.phone,
+      telecallerEmployeeId: allocatedTelecallerId || null,
+      scope,
+      campaignName: (newLead.campaign as any)?.name || null,
+      reason: 'manual',
+    });
 
     // If lead was not explicitly allocated to a telecaller, dispatch waiting queue
     if (!allocatedTelecallerId) {
@@ -2455,7 +2627,7 @@ export const crmService = {
     const seenInSheetPhones = new Set<string>();
 
     for (const row of rows) {
-      const customFields: Record<string, any> = {
+      let customFields: Record<string, any> = {
         isExcelImport: true,
         isManual: false,
         leadSourceType: 'Excel Import',
@@ -2563,15 +2735,35 @@ export const crmService = {
 
         let rowTelecallerId = telecallerId;
 
-        // Custom allocation options passed from upload dialog
+        // Custom allocation options passed from upload dialog (ignore capacity — sticky Excel assignment)
+        const stampAlloc = (opts?: { dedicated?: boolean }) => {
+          const nowIso = new Date().toISOString();
+          customFields.allocatedAt = nowIso;
+          customFields.assignedAt = nowIso;
+          customFields.skipUntouchedRecovery = true;
+          customFields.manualAllocation = true;
+          customFields.adminAllocated = true;
+          customFields.capacityOverride = true;
+          // Full Excel / single-person assignment must never return to Waiting List
+          if (
+            opts?.dedicated ||
+            options?.assignmentMode === 'SPECIFIC' ||
+            (options?.assignedTelecallerIds && options.assignedTelecallerIds.length === 1)
+          ) {
+            customFields.campaignDedicatedAllocation = true;
+            customFields.excelDedicatedAllocation = true;
+            customFields.dedicatedTelecallerId =
+              rowTelecallerId || options?.assignedTelecallerIds?.[0] || null;
+          }
+        };
         if (options?.assignmentMode === 'ROUND_ROBIN' && options.assignedTelecallerIds && options.assignedTelecallerIds.length > 0) {
           const targetId = options.assignedTelecallerIds[leadsToInsert.length % options.assignedTelecallerIds.length];
           rowTelecallerId = targetId;
-          customFields.allocatedAt = new Date().toISOString();
+          stampAlloc({ dedicated: options.assignedTelecallerIds.length === 1 });
         } else if (options?.assignmentMode === 'SPECIFIC' && options.assignedTelecallerIds && options.assignedTelecallerIds.length > 0) {
           const targetId = options.assignedTelecallerIds[0];
           rowTelecallerId = targetId;
-          customFields.allocatedAt = new Date().toISOString();
+          stampAlloc({ dedicated: true });
         } else if (options?.assignmentMode === 'UNASSIGNED') {
           rowTelecallerId = undefined;
         }
@@ -2581,9 +2773,25 @@ export const crmService = {
             (!isNaN(Number(assignedHeaderValue)) ? Number(assignedHeaderValue) : undefined);
           if (matched) {
             rowTelecallerId = matched;
-            customFields.allocatedAt = new Date().toISOString();
+            stampAlloc();
           }
         }
+
+        // Any Excel row that lands on a telecaller (incl. default telecallerId) must stick.
+        if (rowTelecallerId) {
+          stampAlloc();
+        }
+
+        const arrivedAt = new Date().toISOString();
+        customFields.arrivedAt = customFields.arrivedAt || arrivedAt;
+        customFields = appendLeadEvent(customFields, {
+          type: 'ARRIVED',
+          summary: rowTelecallerId
+            ? `Excel import allocated to telecaller #${rowTelecallerId}`
+            : 'Excel import (waiting list)',
+          by: createdById || 'ADMIN',
+          at: arrivedAt,
+        });
 
         leadsToInsert.push({
           campaignId: targetCampaignId,
@@ -2613,6 +2821,16 @@ export const crmService = {
             projectName: campaignProjectName,
           })
           .catch((err) => console.error('[CRM WhatsApp Hook Error - Excel]:', err));
+
+        void notifyNewOrAllocatedLead({
+          leadId: createdLead.id,
+          leadName: createdLead.name,
+          phone: createdLead.phone,
+          telecallerEmployeeId: createdLead.telecallerId,
+          scope: campaignScope,
+          campaignName: targetCampaign?.name || null,
+          reason: 'excel',
+        });
       }
     }
 
@@ -2793,8 +3011,21 @@ export const crmService = {
       status: status as CrmLeadStatus,
     };
 
+    let nextCustom: Record<string, any> =
+      existing.customFields && typeof existing.customFields === 'object'
+        ? { ...(existing.customFields as Record<string, any>) }
+        : {};
+
+    const actorLabel =
+      userContext?.role ||
+      (userContext?.employeeId != null ? `Employee #${userContext.employeeId}` : null) ||
+      userContext?.userId ||
+      'User';
+
     if (status === 'NOT_INTERESTED') {
       updateData.notInterestedAt = new Date();
+      updateData.isDeleted = true;
+      updateData.deletedAt = new Date();
       if (payload.notInterestedReason) {
         updateData.notInterestedReason = payload.notInterestedReason;
       }
@@ -2812,15 +3043,10 @@ export const crmService = {
         updateData.scheduledVisitAt = new Date(payload.scheduledDate);
       }
       // New / changed visit slot → allow a fresh day-of visit_reminder
-      const prevCustom =
-        existing.customFields && typeof existing.customFields === 'object'
-          ? { ...(existing.customFields as Record<string, any>) }
-          : {};
-      delete prevCustom.visitReminderFor;
-      delete prevCustom.visitReminderSentAt;
-      delete prevCustom.visit_reminder_sent_at;
-      delete prevCustom.visitReminderDay;
-      updateData.customFields = prevCustom;
+      delete nextCustom.visitReminderFor;
+      delete nextCustom.visitReminderSentAt;
+      delete nextCustom.visit_reminder_sent_at;
+      delete nextCustom.visitReminderDay;
     }
 
     if (status === 'SITE_VISIT_DONE') {
@@ -2902,6 +3128,41 @@ export const crmService = {
           },
         });
       }
+    }
+
+    nextCustom = appendLeadEvent(nextCustom, {
+      type: 'STATUS_CHANGE',
+      summary: `Status changed from ${existing.status} to ${status}`,
+      by: String(actorLabel),
+      fromStatus: String(existing.status),
+      toStatus: status,
+      meta: {
+        remarks: payload.remarks || null,
+        notInterestedReason: payload.notInterestedReason || null,
+        notInterestedRemark: payload.notInterestedRemark || null,
+        scheduledDate: payload.scheduledDate || null,
+        scheduledTime: payload.scheduledTime || null,
+      },
+    });
+    if (status === 'NOT_INTERESTED') {
+      nextCustom = appendLeadEvent(nextCustom, {
+        type: 'MOVED_TO_BIN',
+        summary: `Moved to Bin (Not Interested${payload.notInterestedReason ? `: ${payload.notInterestedReason}` : ''})`,
+        by: String(actorLabel),
+        meta: {
+          reason: payload.notInterestedReason || null,
+          remark: payload.notInterestedRemark || null,
+        },
+      });
+    }
+    updateData.customFields = nextCustom;
+
+    // Cancel pending follow-ups when lead is binned via Not Interested
+    if (status === 'NOT_INTERESTED') {
+      await prisma.crmFollowUp.updateMany({
+        where: { leadId, status: 'PENDING' },
+        data: { status: 'CANCELLED' },
+      });
     }
 
     const updatedLead = await prisma.crmLead.update({
@@ -3120,9 +3381,13 @@ export const crmService = {
       throw new Error('This lead has a Confirmed Booking and is locked. Transfers are blocked.');
     }
 
-    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(
-      userContext?.role?.toUpperCase() || ''
-    );
+    const roleUpper = String(userContext?.role || '').toUpperCase();
+    const roleCompact = roleUpper.replace(/[\s_-]+/g, '');
+    const isAdmin =
+      isAdminRole(userContext?.role) ||
+      ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'SYSTEMADMIN', 'ITADMIN'].some(
+        (r) => roleUpper === r || roleCompact === r.replace(/_/g, '') || roleUpper.includes(r),
+      );
     const isCurrentTelecaller = userContext?.employeeId != null && (
       userContext.employeeId === existing.telecallerId ||
       userContext.employeeId === existing.assignedToId
@@ -3142,6 +3407,9 @@ export const crmService = {
     });
     if (!targetEmp) throw new Error('Target telecaller employee not found');
 
+    // Admin (and ITADMIN) transfers intentionally ignore max telecaller capacity.
+    // Auto-dispatch still enforces capacity; manual override must stick.
+
     const fromName = existing.telecaller?.generalInfo?.fullName || (existing.telecallerId ? `Telecaller #${existing.telecallerId}` : 'Waiting List / Unallocated');
     const toName = targetEmp.generalInfo?.fullName || targetEmp.user?.username || `Telecaller #${targetTelecallerId}`;
 
@@ -3156,8 +3424,10 @@ export const crmService = {
       transferredByName: userContext?.username || userContext?.role || 'Admin',
       transferredAt: new Date().toISOString(),
       remarks: remarks?.trim() || null,
+      capacityOverride: isAdmin,
     });
 
+    const nowIso = new Date().toISOString();
     const updated = await prisma.crmLead.update({
       where: { id: leadId },
       data: {
@@ -3165,10 +3435,41 @@ export const crmService = {
         customFields: {
           ...existingCustom,
           transferHistory,
-          allocatedAt: new Date().toISOString(),
-          lastTransferredAt: new Date().toISOString(),
+          allocatedAt: nowIso,
+          assignedAt: nowIso,
+          lastTransferredAt: nowIso,
           lastTransferredFrom: fromName,
           lastTransferredTo: toName,
+          // Keep admin/manual transfers out of untouched-recovery reclaim
+          ...(isAdmin
+            ? {
+                skipUntouchedRecovery: true,
+                manualAllocation: true,
+                adminAllocated: true,
+                capacityOverride: true,
+                campaignDedicatedAllocation: true,
+                dedicatedTelecallerId: targetTelecallerId,
+              }
+            : {
+                skipUntouchedRecovery: true,
+                manualAllocation: true,
+              }),
+          returnedToQueueAt: null,
+          unassignedReason: null,
+          previousTelecallerId: null,
+          leadEventHistory: appendLeadEvent(
+            {
+              ...existingCustom,
+              transferHistory,
+            },
+            {
+              type: 'TRANSFER',
+              summary: `Transferred from ${fromName} to ${toName}`,
+              by: userContext?.username || userContext?.role || 'Admin',
+              at: nowIso,
+              meta: { remarks: remarks?.trim() || null, capacityOverride: isAdmin },
+            },
+          ).leadEventHistory,
         },
       },
       include: {
@@ -3194,6 +3495,16 @@ export const crmService = {
       console.error('[CRM Lead Transfer Note Error]:', e);
     }
 
+    void notifyNewOrAllocatedLead({
+      leadId,
+      leadName: updated.name || existing.name,
+      phone: updated.phone || existing.phone,
+      telecallerEmployeeId: targetTelecallerId,
+      scope: existing.scope || 'NB_DEVELOPER',
+      campaignName: null,
+      reason: 'transfer',
+    });
+
     return updated;
   },
 
@@ -3208,7 +3519,14 @@ export const crmService = {
     userContext?: { userId?: string; employeeId?: number; role?: string; username?: string },
   ) {
     const role = userContext?.role;
-    if (!isAdminRole(role)) {
+    const roleUpper = String(role || '').toUpperCase();
+    const roleCompact = roleUpper.replace(/[\s_-]+/g, '');
+    const bulkAdmin =
+      isAdminRole(role) ||
+      ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'SYSTEMADMIN', 'ITADMIN'].some(
+        (r) => roleUpper === r || roleCompact === r.replace(/_/g, '') || roleUpper.includes(r),
+      );
+    if (!bulkAdmin) {
       throw new Error('Bulk lead transfer is restricted to Admins only.');
     }
     const uniqueIds = Array.from(new Set((leadIds || []).map((id) => String(id).trim()).filter(Boolean)));
@@ -3432,13 +3750,53 @@ export const crmService = {
       data: { status: 'CANCELLED' },
     });
 
+    const actor =
+      userContext?.role ||
+      (userContext?.employeeId != null ? `Employee #${userContext.employeeId}` : null) ||
+      userContext?.userId ||
+      'User';
+    const existingCustom =
+      existing.customFields && typeof existing.customFields === 'object'
+        ? { ...(existing.customFields as Record<string, any>) }
+        : {};
+    const customFields = appendLeadEvent(existingCustom, {
+      type: 'MOVED_TO_BIN',
+      summary: 'Moved to Bin',
+      by: String(actor),
+    });
+
     return prisma.crmLead.update({
       where: { id: leadId },
       data: {
         isDeleted: true,
         deletedAt: new Date(),
+        customFields,
       },
     });
+  },
+
+  /** Permanently delete binned leads past retention when auto-delete is enabled (default off). */
+  async purgeExpiredBinLeads(scope: string = 'NB_DEVELOPER'): Promise<{
+    deletedCount: number;
+    enabled: boolean;
+    days: number;
+  }> {
+    const settings = await this.getSettings(scope);
+    const enabled = String(settings.bin_auto_delete_enabled || 'false').toLowerCase() === 'true';
+    const days = Math.max(1, parseInt(String(settings.bin_retention_days || '30'), 10) || 30);
+    if (!enabled) {
+      return { deletedCount: 0, enabled: false, days };
+    }
+    const threshold = new Date();
+    threshold.setDate(threshold.getDate() - days);
+    const result = await prisma.crmLead.deleteMany({
+      where: {
+        scope,
+        isDeleted: true,
+        deletedAt: { lte: threshold },
+      },
+    });
+    return { deletedCount: result.count, enabled: true, days };
   },
 
   async restoreFromBin(leadId: string) {
@@ -4051,6 +4409,7 @@ export const crmService = {
       elision_agent_id: '',
       not_interested_retention_days: '30',
       bin_retention_days: '30',
+      bin_auto_delete_enabled: 'false',
       not_interested_reasons: JSON.stringify([
         'Budget mismatch',
         'Found somewhere else',
@@ -4611,7 +4970,7 @@ export const crmService = {
         assignedToId: null,
       },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, customFields: true },
+      select: { id: true, name: true, phone: true, customFields: true },
     });
 
     if (queuedLeads.length === 0) {
@@ -4715,18 +5074,35 @@ export const crmService = {
 
       const assignedAt = new Date().toISOString();
       const existingCustom = (lead.customFields as any) || {};
+      let customFields = {
+        ...existingCustom,
+        assignedAt,
+        allocatedAt: assignedAt,
+      };
+      customFields = appendLeadEvent(customFields, {
+        type: 'ALLOCATED',
+        summary: `Dispatched from waiting list to telecaller #${candidateWithCapacity.employeeId}`,
+        by: 'SYSTEM',
+        at: assignedAt,
+      });
 
       await prisma.crmLead.update({
         where: { id: lead.id },
         data: {
           telecallerId: candidateWithCapacity.employeeId,
           status: CrmLeadStatus.NOT_STARTED,
-          customFields: {
-            ...existingCustom,
-            assignedAt,
-            allocatedAt: assignedAt,
-          },
+          customFields,
         },
+      });
+
+      void notifyNewOrAllocatedLead({
+        leadId: lead.id,
+        leadName: lead.name,
+        phone: lead.phone,
+        telecallerEmployeeId: candidateWithCapacity.employeeId,
+        scope,
+        campaignName: null,
+        reason: 'dispatch',
       });
 
       candidateWithCapacity.availableCapacity--;
@@ -4774,6 +5150,28 @@ export const crmService = {
       take: 200,
     });
 
+    // Preload campaign assignment so dedicated (single-person / SPECIFIC) campaigns stay put.
+    const campaignIds = Array.from(
+      new Set(potentialLeads.map((l) => l.campaignId).filter((id): id is string => Boolean(id))),
+    );
+    const campaigns =
+      campaignIds.length > 0
+        ? await prisma.crmCampaign.findMany({
+            where: { id: { in: campaignIds } },
+            select: { id: true, assignedTelecallerIds: true, assignmentMode: true },
+          })
+        : [];
+    const dedicatedCampaignAssignee = new Map<string, number>();
+    for (const c of campaigns) {
+      const ids = Array.isArray((c as any).assignedTelecallerIds)
+        ? (c as any).assignedTelecallerIds.map(Number).filter((n: number) => !isNaN(n) && n > 0)
+        : [];
+      const mode = String((c as any).assignmentMode || '').toUpperCase();
+      if (ids.length === 1 || mode === 'SPECIFIC') {
+        dedicatedCampaignAssignee.set(c.id, ids[0]);
+      }
+    }
+
     let recoveredCount = 0;
     for (const lead of potentialLeads) {
       if (lead.callLogs && lead.callLogs.length > 0) {
@@ -4786,6 +5184,32 @@ export const crmService = {
       // DO NOT bring it back to waiting queue or recover it. Telecaller owns this lead personally.
       if (custom.selfAllocated === true) {
         continue;
+      }
+      // Admin / Excel / explicit manual / dedicated campaign allocations must stay put.
+      if (
+        custom.skipUntouchedRecovery === true ||
+        custom.manualAllocation === true ||
+        custom.adminAllocated === true ||
+        custom.campaignDedicatedAllocation === true ||
+        custom.excelDedicatedAllocation === true ||
+        custom.capacityOverride === true ||
+        custom.isExcelImport === true ||
+        lead.leadSource === 'EXCEL'
+      ) {
+        continue;
+      }
+      // Full campaign assigned to one person (or SPECIFIC) — keep leads with that telecaller.
+      if (lead.campaignId && lead.telecallerId != null) {
+        const dedicatedId = dedicatedCampaignAssignee.get(lead.campaignId);
+        if (dedicatedId != null && Number(lead.telecallerId) === Number(dedicatedId)) {
+          continue;
+        }
+        if (
+          custom.dedicatedTelecallerId != null &&
+          Number(lead.telecallerId) === Number(custom.dedicatedTelecallerId)
+        ) {
+          continue;
+        }
       }
       if (
         (lead.leadSource === 'MANUAL' || custom.isManual === true) &&
@@ -4808,21 +5232,35 @@ export const crmService = {
       if (custom.assignedAt) {
         const parsedAssigned = new Date(custom.assignedAt).getTime();
         if (!isNaN(parsedAssigned)) assignedTime = parsedAssigned;
+      } else if (custom.allocatedAt) {
+        const parsedAlloc = new Date(custom.allocatedAt).getTime();
+        if (!isNaN(parsedAlloc)) assignedTime = parsedAlloc;
       }
 
       if (Date.now() - assignedTime >= timeoutMinutes * 60 * 1000) {
+        const returnedAt = new Date().toISOString();
+        const customFields = appendLeadEvent(
+          {
+            ...custom,
+            returnedToQueueAt: returnedAt,
+            unassignedReason: `UNTOUCHED_${timeoutMinutes}_MIN`,
+            previousTelecallerId: lead.telecallerId,
+          },
+          {
+            type: 'RETURNED_TO_QUEUE',
+            summary: `Returned to waiting list (untouched ${timeoutMinutes} min)`,
+            by: 'SYSTEM',
+            at: returnedAt,
+            meta: { previousTelecallerId: lead.telecallerId },
+          },
+        );
         await prisma.crmLead.update({
           where: { id: lead.id },
           data: {
             telecallerId: null,
             assignedToId: null,
             status: CrmLeadStatus.NOT_STARTED,
-            customFields: {
-              ...custom,
-              returnedToQueueAt: new Date().toISOString(),
-              unassignedReason: `UNTOUCHED_${timeoutMinutes}_MIN`,
-              previousTelecallerId: lead.telecallerId,
-            },
+            customFields,
           },
         });
         recoveredCount++;

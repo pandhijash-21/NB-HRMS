@@ -207,7 +207,7 @@ export const crmController = {
         userEmployeeId: authUser?.employeeId,
         userPermissions: authUser?.permissions,
         page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
-        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 100,
+        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 2000,
         scope: getScope(req),
         inWaitingQueue: req.query.inWaitingQueue === 'true' || req.query.status === 'WL' || req.query.status === 'WAITING_LIST',
         fromDate: (req.query.fromDate || req.query.startDate) as string,

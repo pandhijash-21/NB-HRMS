@@ -62,6 +62,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   /// Admin-only multi-select for bulk transfer.
   final Set<String> _bulkTransferSelectedIds = {};
 
+  /// UI pagination over filtered leads (unlimited total; page through locally).
+  int _leadsPage = 0;
+  int _leadsPageSize = 50;
+  String _leadsPageFilterKey = '';
+
   @override
   void initState() {
     super.initState();
@@ -1506,7 +1511,19 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 ),
               ),
             )
-          else
+          else ...[
+            () {
+              final filterKey =
+                  '${effectiveFlow}|${selectedCampaignId ?? ''}|${state.statusFilter}|${state.search}|${state.fromDate}|${state.toDate}|${filteredLeads.length}';
+              if (filterKey != _leadsPageFilterKey) {
+                _leadsPageFilterKey = filterKey;
+                _leadsPage = 0;
+              }
+              final totalPages =
+                  (filteredLeads.length / _leadsPageSize).ceil().clamp(1, 999999);
+              if (_leadsPage >= totalPages) _leadsPage = totalPages - 1;
+              return const SizedBox.shrink();
+            }(),
             RepaintBoundary(
               child: Container(
                 decoration: BoxDecoration(
@@ -1620,8 +1637,17 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         }),
                         const DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
                       ],
-                      rows: List.generate(filteredLeads.length, (index) {
-                        final lead = filteredLeads[index];
+                      rows: List.generate(() {
+                        final totalPages =
+                            (filteredLeads.length / _leadsPageSize).ceil().clamp(1, 999999);
+                        final page = _leadsPage.clamp(0, totalPages - 1);
+                        final start = page * _leadsPageSize;
+                        final end = (start + _leadsPageSize).clamp(0, filteredLeads.length);
+                        return end > start ? end - start : 0;
+                      }(), (index) {
+                        final pageStart = _leadsPage * _leadsPageSize;
+                        final lead = filteredLeads[pageStart + index];
+                        final displayIndex = pageStart + index;
 
                         // Telecaller Limitation:
                         // Once a sales representative is assigned (assignedToId != null),
@@ -1657,7 +1683,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                   },
                                 ),
                               ),
-                            DataCell(Text('${index + 1}')),
+                            DataCell(Text('${displayIndex + 1}')),
                             DataCell(
                               (!lead.isManual && lead.leadSource == 'META')
                                   ? Container(
@@ -2181,12 +2207,97 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 ),
               ),
             ),
+            const SizedBox(height: 10),
+            _buildLeadsPaginationBar(
+              total: filteredLeads.length,
+              isDark: isDark,
+              borderColor: borderColor,
+              cardBg: cardBg,
+              textMuted: textMuted,
+              primaryColor: primaryColor,
+            ),
+          ],
         ],
       ),
     );
   }
 
+  Widget _buildLeadsPaginationBar({
+    required int total,
+    required bool isDark,
+    required Color borderColor,
+    required Color cardBg,
+    required Color textMuted,
+    required Color primaryColor,
+  }) {
+    final totalPages = (total / _leadsPageSize).ceil().clamp(1, 999999);
+    final page = _leadsPage.clamp(0, totalPages - 1);
+    final start = total == 0 ? 0 : page * _leadsPageSize + 1;
+    final end = ((page + 1) * _leadsPageSize).clamp(0, total);
 
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        alignment: WrapAlignment.spaceBetween,
+        children: [
+          Text(
+            'Showing $start–$end of $total',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textMuted),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Rows', style: TextStyle(fontSize: 12, color: textMuted)),
+              const SizedBox(width: 6),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: _leadsPageSize,
+                  isDense: true,
+                  items: const [25, 50, 100, 200]
+                      .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() {
+                      _leadsPageSize = v;
+                      _leadsPage = 0;
+                    });
+                  },
+                ),
+              ),
+              IconButton(
+                tooltip: 'Previous page',
+                onPressed: page <= 0
+                    ? null
+                    : () => setState(() => _leadsPage = page - 1),
+                icon: const Icon(Icons.chevron_left_rounded),
+              ),
+              Text(
+                'Page ${page + 1} / $totalPages',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: primaryColor),
+              ),
+              IconButton(
+                tooltip: 'Next page',
+                onPressed: page >= totalPages - 1
+                    ? null
+                    : () => setState(() => _leadsPage = page + 1),
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // Status Dropdown with Modal Triggers (With Telecaller Lock)

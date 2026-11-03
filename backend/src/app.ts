@@ -43,6 +43,8 @@ import { crmRouter, crmPublicRouter, clientPortalPageRouter } from './modules/cr
 import { hubRouter } from './modules/hub';
 import { platformRouter } from './modules/platform/platform.routes';
 import { earthRouter } from './modules/earth';
+import { opsRouter } from './modules/ops/ops.routes';
+import { opsRequestLogMiddleware } from './modules/ops/ops-request-log.middleware';
 
 configureCloudinary();
 
@@ -76,6 +78,7 @@ app.use(cors({
 }));
 
 app.use(vpnBlockMiddleware);
+app.use(opsRequestLogMiddleware);
 // Allow cross-origin reads for Flutter web / CRM frontend (default helmet CORP is same-origin).
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -173,6 +176,7 @@ app.use('/api/reimbursements', reimbursementsRouter);
 app.use('/api/recruitment', recruitmentRouter);
 app.use('/api/repository', repositoryRouter);
 app.use('/api/platform', platformRouter);
+app.use('/api/ops', opsRouter);
 app.use('/api', organizationRouter);
 app.use('/api/org-tree', orgTreeRouter);
 app.use('/api/admin', designationRouter);

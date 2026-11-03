@@ -1345,8 +1345,10 @@ export const crmService = {
     endDate?: string;
   }) {
     const scope = query.scope || 'NB_DEVELOPER';
-    const page = Math.max(1, query.page || 1);
-    const limit = Math.min(2000, query.limit || 50);
+    const page = Math.max(1, Number(query.page) || 1);
+    // Default 2000 so Pre-Sales / admin lists are not silently truncated at 50/100.
+    const rawLimit = Number(query.limit);
+    const limit = Math.min(5000, Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 2000);
     const skip = (page - 1) * limit;
 
     const where: any = {

@@ -132,6 +132,7 @@ import '../../features/crm/presentation/screens/crm_visitor_desk_screen.dart';
 import '../../features/crm/presentation/screens/crm_sales_screen.dart';
 import '../../features/crm/presentation/screens/crm_virtual_building_screen.dart';
 import '../../features/crm/presentation/screens/crm_partners_screen.dart';
+import '../../features/crm/presentation/screens/crm_ops_health_screen.dart';
 import '../../features/platform/presentation/screens/platform_console_screen.dart';
 import '../../features/tour/presentation/software_tour_hub_screen.dart';
 import '../../features/earth/presentation/screens/earth_hub_screen.dart';
@@ -359,6 +360,11 @@ GoRouter createAppRouter(AuthBloc authBloc) {
               next = '/crm/pre-sales';
             } else if (loc.startsWith('/crm/settings') && !Permissions.canReadCrmSettings(perms, role)) {
               next = '/crm/pre-sales';
+            } else if (loc.startsWith('/crm/ops-health')) {
+              final r = (role ?? '').toUpperCase().replaceAll(RegExp(r'[\s_-]+'), '');
+              final opsOk = Permissions.isAdmin(role) ||
+                  const ['ADMIN', 'SUPERADMIN', 'SYSTEMADMIN', 'ITADMIN'].contains(r);
+              if (!opsOk) next = '/crm/dashboard';
             } else if (loc.startsWith('/admin/earth') && !Permissions.canReadGoogleEarth(perms, role)) {
               next = defaultRoute;
             } else if (loc.startsWith('/admin/roles') && !Permissions.canManageRoles(perms, role)) {
@@ -538,6 +544,10 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           GoRoute(
             path: '/crm/settings',
             builder: (context, state) => const CrmSettingsScreen(),
+          ),
+          GoRoute(
+            path: '/crm/ops-health',
+            builder: (context, state) => const CrmOpsHealthScreen(),
           ),
           GoRoute(
             path: '/crm/visitor-desk',

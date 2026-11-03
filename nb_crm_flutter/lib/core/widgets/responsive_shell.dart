@@ -48,6 +48,7 @@ class ResponsiveShell extends ConsumerStatefulWidget {
 }
 
 class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
+
   bool _isExpanded = true;
   final _navSearch = TextEditingController();
   final Set<String> _expandedNavGroups = {};

@@ -22,6 +22,8 @@ yarn-error.log*
 .pnpm-debug.log*
 backend/uploads/
 uploads/
+backend/backups/
+backups/
 
 # Env files
 .env

@@ -267,6 +267,14 @@ async function start() {
     console.warn('CRM payment due reminder worker setup notice:', err);
   }
 
+  try {
+    const { startDailyBackupScheduler } = require('./modules/ops/backup.service') as typeof import('./modules/ops/backup.service');
+    startDailyBackupScheduler();
+    console.log('Ops daily DB backup scheduler started (local backups/db)');
+  } catch (err) {
+    console.warn('Ops backup scheduler setup notice:', err);
+  }
+
   server.listen(env.PORT, () => {
     console.log(`Server running on port ${env.PORT}`);
   });

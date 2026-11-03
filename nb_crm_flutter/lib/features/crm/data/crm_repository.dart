@@ -228,36 +228,56 @@ class CrmRepository {
     int page = 1,
     int limit = 2000,
   }) async {
-    final query = <String, dynamic>{
-      'page': page,
-      'limit': limit,
-      'scope': crmScopeNotifier.value,
-    };
-    if (projectId != null && projectId != 'ALL' && projectId.isNotEmpty) {
-      query['projectId'] = projectId;
-    }
-    if (campaignId != null && campaignId != 'ALL' && campaignId.isNotEmpty) {
-      query['campaignId'] = campaignId;
-    }
-    if (status != null && status != 'ALL') query['status'] = status;
-    if (search != null && search.isNotEmpty) query['search'] = search;
-    if (assignedToId != null) query['assignedToId'] = assignedToId;
-    if (leadFlow != null && leadFlow != 'ALL') query['leadFlow'] = leadFlow;
-    if (fromDate != null) query['fromDate'] = fromDate.toIso8601String();
-    if (toDate != null) query['toDate'] = toDate.toIso8601String();
+    // Fetch all pages until we have every lead (fixes silent truncate at 100).
+    final pageSize = limit.clamp(1, 5000);
+    final all = <CrmLead>[];
+    var currentPage = page < 1 ? 1 : page;
+    var total = 0;
+    const maxPages = 200;
 
-    return _dio.getEnvelope<List<CrmLead>>(
-      'crm/leads',
-      queryParameters: query,
-      parse: (raw) {
-        if (raw is! Map) return [];
-        final items = raw['items'];
-        if (items is! List) return [];
-        return items
-            .map((e) => CrmLead.fromJson(Map<String, dynamic>.from(e as Map)))
-            .toList();
-      },
-    );
+    while (currentPage <= maxPages) {
+      final query = <String, dynamic>{
+        'page': currentPage.toString(),
+        'limit': pageSize.toString(),
+        'scope': crmScopeNotifier.value,
+      };
+      if (projectId != null && projectId != 'ALL' && projectId.isNotEmpty) {
+        query['projectId'] = projectId;
+      }
+      if (campaignId != null && campaignId != 'ALL' && campaignId.isNotEmpty) {
+        query['campaignId'] = campaignId;
+      }
+      if (status != null && status != 'ALL') query['status'] = status;
+      if (search != null && search.isNotEmpty) query['search'] = search;
+      if (assignedToId != null) query['assignedToId'] = assignedToId.toString();
+      if (leadFlow != null && leadFlow != 'ALL') query['leadFlow'] = leadFlow;
+      if (fromDate != null) query['fromDate'] = fromDate.toIso8601String();
+      if (toDate != null) query['toDate'] = toDate.toIso8601String();
+
+      final batch = await _dio.getEnvelope<({List<CrmLead> items, int total})>(
+        'crm/leads',
+        queryParameters: query,
+        parse: (raw) {
+          if (raw is! Map) return (items: <CrmLead>[], total: 0);
+          final itemsRaw = raw['items'];
+          final items = itemsRaw is List
+              ? itemsRaw
+                  .map((e) => CrmLead.fromJson(Map<String, dynamic>.from(e as Map)))
+                  .toList()
+              : <CrmLead>[];
+          final t = raw['total'];
+          final totalCount = t is num ? t.toInt() : items.length;
+          return (items: items, total: totalCount);
+        },
+      );
+
+      all.addAll(batch.items);
+      total = batch.total;
+      if (batch.items.isEmpty || all.length >= total) break;
+      currentPage += 1;
+    }
+
+    return all;
   }
 
   Future<Uint8List> exportLeadsExcel({
@@ -1327,6 +1347,42 @@ class CrmRepository {
   Future<List<Map<String, dynamic>>> getHubTrash() async {
     return _dio.getEnvelope<List<Map<String, dynamic>>>(
       'crm/partners/trash',
+      parse: (raw) {
+        if (raw is! List) return [];
+        return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ops Health (admin / ITADMIN)
+  // ---------------------------------------------------------------------------
+  Future<Map<String, dynamic>> getOpsDashboard() async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'ops/dashboard',
+      queryParameters: {'scope': crmScopeNotifier.value},
+      parse: (raw) {
+        if (raw is Map) return Map<String, dynamic>.from(raw);
+        return <String, dynamic>{};
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> createOpsBackup() async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'ops/backups',
+      data: const {},
+      parse: (raw) {
+        if (raw is Map) return Map<String, dynamic>.from(raw);
+        return <String, dynamic>{};
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listOpsLiveLogs({int limit = 100}) async {
+    return _dio.getEnvelope<List<Map<String, dynamic>>>(
+      'ops/live-logs',
+      queryParameters: {'limit': limit.toString()},
       parse: (raw) {
         if (raw is! List) return [];
         return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();

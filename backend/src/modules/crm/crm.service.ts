@@ -587,7 +587,8 @@ export const crmService = {
     const stamp = Date.now().toString().slice(-8);
     const testPhone = `9${stamp.padStart(9, '0')}`.slice(0, 10);
     const adId = (campaign.adId || '').trim() || `TEST_AD_${stamp}`;
-    const webhookUrl = `https://crm.nbdeveloper.co.in/api/crm/campaigns/${campaign.webhookToken}/webhook`;
+    // Prefer crm-public (VPN-exempt). /api/crm/.../webhook also works (mounted before auth).
+    const webhookUrl = `https://crm.nbdeveloper.co.in/api/crm-public/campaigns/${campaign.webhookToken}/webhook`;
 
     let requestPayload: Record<string, any>;
     if (platform === 'META') {

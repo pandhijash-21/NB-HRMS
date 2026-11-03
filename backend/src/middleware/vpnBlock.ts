@@ -170,6 +170,26 @@ function deny(res: Response, gate: boolean) {
   return res.status(403).json(fail('VPN and proxy connections are not allowed. Turn off your VPN and try again.'));
 }
 
+/** Lead ingestion + dialer callbacks (no browser session; often from cloud hosts). */
+export function isPublicCrmIngressPath(pathname: string): boolean {
+  const p = pathname || '';
+  if (
+    p.startsWith('/api/crm-public') ||
+    p.startsWith('/api/crm/public') ||
+    p.startsWith('/client-portal') ||
+    p.startsWith('/api/client-portal') ||
+    p.startsWith('/uploads/crm') ||
+    p.includes('/brochure')
+  ) {
+    return true;
+  }
+  // Authenticated mount aliases used in older webhook docs / n8n flows
+  if (p === '/api/crm/telephony/webhook') return true;
+  if (/^\/api\/crm\/campaigns\/[^/]+\/webhook\/?$/.test(p)) return true;
+  if (/^\/api\/crm\/webhook\/[^/]+\/?$/.test(p)) return true;
+  return false;
+}
+
 export async function vpnBlockMiddleware(req: Request, res: Response, next: NextFunction) {
   const gate = req.path === '/vpn-gate';
   try {
@@ -183,14 +203,9 @@ export async function vpnBlockMiddleware(req: Request, res: Response, next: Next
     if (req.method === 'OPTIONS') return next();
     if (req.path === '/health' || req.path === '/system-health' || req.path === '/docs') return next();
     if (req.path === '/system-health.html' || req.path === '/project-documentation.html') return next();
-    if (
-      req.path.startsWith('/api/crm-public') ||
-      req.path.startsWith('/api/crm/public') ||
-      req.path.startsWith('/client-portal') ||
-      req.path.startsWith('/api/client-portal') ||
-      req.path.startsWith('/uploads/crm') ||
-      req.path.includes('/brochure')
-    ) {
+    // Public lead / telephony webhooks must accept Meta, Google, n8n, Zapier, etc.
+    // Those run from datacenter IPs that ip-api flags as hosting/proxy.
+    if (isPublicCrmIngressPath(req.path)) {
       return next();
     }
 

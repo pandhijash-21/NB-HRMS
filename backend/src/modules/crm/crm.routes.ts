@@ -39,6 +39,11 @@ crmPublicRouter.get('/campaigns/:token/webhook', crmController.handleCampaignWeb
 crmPublicRouter.post('/campaigns/:token/webhook', crmController.handleCampaignWebhook);
 crmPublicRouter.get('/webhook/:token', crmController.handleCampaignWebhookVerification);
 crmPublicRouter.post('/webhook/:token', crmController.handleCampaignWebhook);
+// Same handlers on /api/crm/* BEFORE requireAuth — matches Headers / Test Ping / n8n URLs
+crmRouter.get('/campaigns/:token/webhook', crmController.handleCampaignWebhookVerification);
+crmRouter.post('/campaigns/:token/webhook', crmController.handleCampaignWebhook);
+crmRouter.get('/webhook/:token', crmController.handleCampaignWebhookVerification);
+crmRouter.post('/webhook/:token', crmController.handleCampaignWebhook);
 
 // Public Client Verification & Document Upload Portal Endpoints
 crmPublicRouter.get('/client-portal/:token/info', crmController.getClientPortalInfo);

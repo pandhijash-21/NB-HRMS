@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -1141,6 +1141,16 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
           'The allocated telecaller is notified when the lead is assigned to them.',
           'Admins (and company-admin grants) are notified for every new lead, including Waiting List arrivals.',
           'Alerts use the bell inbox + live push while the app is open (path opens Pre-Sales).',
+        ],
+      ),
+      (
+        title: 'Campaign assignees',
+        subtitle: 'Headers → campaign people & live lead counts',
+        rules: const [
+          '1 person on a campaign → every lead goes to them. No Waiting List for that campaign; untouched recovery will not reclaim.',
+          '2+ people on a campaign → round-robin only among those people (any role). Punch-in + capacity apply; if nobody free, lead stays on Waiting List until someone is.',
+          '0 people on a campaign → classic telecaller Waiting List pool (punched-in telecallers with free capacity).',
+          'Headers shows a live allocation panel: who has how many leads + Waiting List count for that campaign.',
         ],
       ),
     ];

@@ -834,46 +834,64 @@ export const crmService = {
 
     const campaignScope = campaign.scope || 'NB_DEVELOPER';
 
-    // Campaign-specific telecaller routing
+    // Campaign assignee routing (any role — not telecaller-only):
+    // 1 person  → all leads to them, never Waiting List
+    // 2+ people → round-robin / least-loaded among them (capacity + punch); else WL
+    // 0 people  → global telecaller waiting-list pool
     let webhookAssignedTelecallerId: number | null = null;
     const campaignAssignedIds = Array.isArray((campaign as any).assignedTelecallerIds)
       ? (campaign as any).assignedTelecallerIds.map(Number).filter((n: number) => !isNaN(n) && n > 0)
       : [];
+    const isSingleCampaignAssignee = campaignAssignedIds.length === 1;
+    const isMultiCampaignAssignees = campaignAssignedIds.length > 1;
+    // Sticky / no-WL only when exactly one person owns the campaign
+    const isCampaignDedicatedAllocation = isSingleCampaignAssignee;
 
-    // Dedicated = campaign locked to one person (SPECIFIC mode or a single assignee).
-    // Those allocations must never be pulled back to Waiting List by untouched recovery.
-    const isCampaignDedicatedAllocation =
-      campaignAssignedIds.length === 1 ||
-      String((campaign as any).assignmentMode || '').toUpperCase() === 'SPECIFIC';
-
-    if (campaignAssignedIds.length > 0) {
-      if (isCampaignDedicatedAllocation) {
-        webhookAssignedTelecallerId = campaignAssignedIds[0];
-      } else {
-        // Round-robin among campaign telecallers (pick least loaded in this campaign)
-        const counts = await prisma.crmLead.groupBy({
-          by: ['telecallerId'],
-          where: {
-            campaignId: campaign.id,
-            telecallerId: { in: campaignAssignedIds },
-            isDeleted: false,
-          },
-          _count: { id: true },
-        });
-        const countMap = new Map<number, number>();
-        for (const c of counts) {
-          if (c.telecallerId) countMap.set(c.telecallerId, c._count.id);
+    if (isSingleCampaignAssignee) {
+      const active = await this.resolveActiveAssigneeIds(campaignAssignedIds);
+      webhookAssignedTelecallerId = active[0] || campaignAssignedIds[0];
+    } else if (isMultiCampaignAssignees) {
+      const activeAssignees = await this.resolveActiveAssigneeIds(campaignAssignedIds);
+      const punched: number[] = [];
+      for (const id of activeAssignees) {
+        if (await this.isPunchedInToday(id)) punched.push(id);
+      }
+      const pool = punched.length > 0 ? punched : [];
+      // Only assign now if someone in the campaign pool is punched-in with free capacity;
+      // otherwise leave on Waiting List for later campaign-scoped dispatch.
+      if (pool.length > 0) {
+        const settings = await this.getSettings(campaignScope);
+        const withCapacity: number[] = [];
+        for (const id of pool) {
+          const cap = await this.getTelecallerCapacity(id, campaignScope, settings);
+          if (cap.availableCapacity > 0) withCapacity.push(id);
         }
-        let minCount = Infinity;
-        let selectedId = campaignAssignedIds[0];
-        for (const id of campaignAssignedIds) {
-          const count = countMap.get(id) || 0;
-          if (count < minCount) {
-            minCount = count;
-            selectedId = id;
+        const rrPool = withCapacity.length > 0 ? withCapacity : [];
+        if (rrPool.length > 0) {
+          const counts = await prisma.crmLead.groupBy({
+            by: ['telecallerId'],
+            where: {
+              campaignId: campaign.id,
+              telecallerId: { in: rrPool },
+              isDeleted: false,
+            },
+            _count: { id: true },
+          });
+          const countMap = new Map<number, number>();
+          for (const c of counts) {
+            if (c.telecallerId) countMap.set(c.telecallerId, c._count.id);
           }
+          let minCount = Infinity;
+          let selectedId = rrPool[0];
+          for (const id of rrPool) {
+            const count = countMap.get(id) || 0;
+            if (count < minCount) {
+              minCount = count;
+              selectedId = id;
+            }
+          }
+          webhookAssignedTelecallerId = selectedId;
         }
-        webhookAssignedTelecallerId = selectedId;
       }
     }
 
@@ -4970,6 +4988,110 @@ export const crmService = {
     return { maxCapacity, currentWorkload, availableCapacity };
   },
 
+  /** Active employees from an explicit ID list (any designation — not telecaller-only). */
+  async resolveActiveAssigneeIds(employeeIds: number[]): Promise<number[]> {
+    const ids = [...new Set((employeeIds || []).map(Number).filter((n) => !isNaN(n) && n > 0))];
+    if (!ids.length) return [];
+    const emps = await prisma.employee.findMany({
+      where: { id: { in: ids }, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    return emps.map((e) => e.id);
+  },
+
+  /**
+   * Campaign-wise who has how many Pre-Sales leads (assigned people + unallocated).
+   */
+  async getCampaignAllocation(campaignId: string) {
+    const campaign = await prisma.crmCampaign.findUnique({
+      where: { id: campaignId },
+      select: {
+        id: true,
+        name: true,
+        scope: true,
+        assignedTelecallerIds: true,
+        assignmentMode: true,
+      },
+    });
+    if (!campaign) throw new Error('Campaign not found');
+
+    const assignedIds = Array.isArray((campaign as any).assignedTelecallerIds)
+      ? (campaign as any).assignedTelecallerIds.map(Number).filter((n: number) => !isNaN(n) && n > 0)
+      : [];
+
+    const groups = await prisma.crmLead.groupBy({
+      by: ['telecallerId'],
+      where: {
+        campaignId,
+        isDeleted: false,
+        scope: campaign.scope || 'NB_DEVELOPER',
+      },
+      _count: { id: true },
+    });
+
+    const countByEmp = new Map<number, number>();
+    let unallocatedCount = 0;
+    for (const g of groups) {
+      if (g.telecallerId == null) {
+        unallocatedCount += g._count.id;
+      } else {
+        countByEmp.set(g.telecallerId, g._count.id);
+      }
+    }
+
+    const allEmpIds = [...new Set([...assignedIds, ...countByEmp.keys()])];
+    const employees =
+      allEmpIds.length > 0
+        ? await prisma.employee.findMany({
+            where: { id: { in: allEmpIds } },
+            include: {
+              generalInfo: { select: { fullName: true, designation: true } },
+              user: { select: { role: { select: { name: true } } } },
+            },
+          })
+        : [];
+    const empMap = new Map(employees.map((e) => [e.id, e]));
+
+    const assignees = allEmpIds
+      .map((id) => {
+        const emp = empMap.get(id);
+        return {
+          employeeId: id,
+          fullName: emp?.generalInfo?.fullName || `Employee #${id}`,
+          designation: emp?.generalInfo?.designation || emp?.user?.role?.name || null,
+          leadCount: countByEmp.get(id) || 0,
+          isCampaignAssignee: assignedIds.includes(id),
+        };
+      })
+      .sort((a, b) => b.leadCount - a.leadCount || a.fullName.localeCompare(b.fullName));
+
+    // Ensure configured assignees with 0 leads still appear
+    for (const id of assignedIds) {
+      if (!assignees.some((a) => a.employeeId === id)) {
+        const emp = empMap.get(id);
+        assignees.push({
+          employeeId: id,
+          fullName: emp?.generalInfo?.fullName || `Employee #${id}`,
+          designation: emp?.generalInfo?.designation || emp?.user?.role?.name || null,
+          leadCount: 0,
+          isCampaignAssignee: true,
+        });
+      }
+    }
+
+    const totalLeads = assignees.reduce((s, a) => s + a.leadCount, 0) + unallocatedCount;
+
+    return {
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      assignmentMode: (campaign as any).assignmentMode || 'ROUND_ROBIN',
+      assignedTelecallerIds: assignedIds,
+      totalLeads,
+      unallocatedCount,
+      assignees,
+    };
+  },
+
   // ---------------------------------------------------------------------------
   // Waiting Queue Dispatcher
   // ---------------------------------------------------------------------------
@@ -4990,7 +5112,7 @@ export const crmService = {
         assignedToId: null,
       },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, phone: true, customFields: true },
+      select: { id: true, name: true, phone: true, customFields: true, campaignId: true },
     });
 
     if (queuedLeads.length === 0) {
@@ -5002,109 +5124,170 @@ export const crmService = {
       };
     }
 
-    // 1. Primary: Find telecallers who have punched in today AND are active on screen
-    let eligibleIds = await this.getEligibleTelecallers(scope, subOrganization, {
+    const campaignIds = [
+      ...new Set(queuedLeads.map((l) => l.campaignId).filter((id): id is string => Boolean(id))),
+    ];
+    const campaigns =
+      campaignIds.length > 0
+        ? await prisma.crmCampaign.findMany({
+            where: { id: { in: campaignIds } },
+            select: { id: true, name: true, assignedTelecallerIds: true, assignmentMode: true },
+          })
+        : [];
+    const campaignById = new Map(campaigns.map((c) => [c.id, c]));
+
+    const settings = await this.getSettings(scope);
+
+    // Global fallback pool (no campaign assignees configured)
+    let globalEligibleIds = await this.getEligibleTelecallers(scope, subOrganization, {
       requirePunchIn: true,
       requireActive: true,
     });
-
-    // Fallback: If no one has screen activity right this second (e.g. idle timeout / brief pause),
-    // fallback to telecallers who ARE PUNCHED IN today (on duty), so leads only go to people at work.
-    // If an employee is NOT punched in today, leads will NEVER go to them.
-    if (eligibleIds.length === 0) {
-      eligibleIds = await this.getEligibleTelecallers(scope, subOrganization, {
+    if (globalEligibleIds.length === 0) {
+      globalEligibleIds = await this.getEligibleTelecallers(scope, subOrganization, {
         requirePunchIn: true,
         requireActive: false,
       });
     }
 
-    if (eligibleIds.length === 0) {
-      return {
-        dispatchedCount: 0,
-        remainingQueuedCount: queuedLeads.length,
-        activeTelecallersCount: 0,
-        candidateDetails: [],
-      };
-    }
-
-    const settings = await this.getSettings(scope);
-
-    // 2. Compute workload and available capacity for each active telecaller
-    const candidates: Array<{
+    type Cand = {
       employeeId: number;
       maxCapacity: number;
       currentWorkload: number;
       availableCapacity: number;
-    }> = [];
+      campaignScoped: boolean;
+    };
+    const candidateCache = new Map<string, Cand[]>();
+    const rrIndex = new Map<string, number>();
 
-    for (const empId of eligibleIds) {
-      const cap = await this.getTelecallerCapacity(empId, scope, settings);
-      if (cap.availableCapacity > 0) {
-        candidates.push({
-          employeeId: empId,
-          maxCapacity: cap.maxCapacity,
-          currentWorkload: cap.currentWorkload,
-          availableCapacity: cap.availableCapacity,
-        });
+    const buildCandidates = async (
+      key: string,
+      employeeIds: number[],
+      opts: { campaignScoped: boolean; ignoreCapacity: boolean },
+    ): Promise<Cand[]> => {
+      if (candidateCache.has(key)) return candidateCache.get(key)!;
+      const list: Cand[] = [];
+      for (const empId of employeeIds) {
+        const cap = await this.getTelecallerCapacity(empId, scope, settings);
+        const available = opts.ignoreCapacity
+          ? Math.max(1, cap.availableCapacity || 1)
+          : cap.availableCapacity;
+        if (available > 0 || opts.ignoreCapacity) {
+          list.push({
+            employeeId: empId,
+            maxCapacity: cap.maxCapacity,
+            currentWorkload: cap.currentWorkload,
+            availableCapacity: opts.ignoreCapacity ? Math.max(available, 9999) : available,
+            campaignScoped: opts.campaignScoped,
+          });
+        }
       }
-    }
+      candidateCache.set(key, list);
+      return list;
+    };
 
-    if (candidates.length === 0) {
-      return {
-        dispatchedCount: 0,
-        remainingQueuedCount: queuedLeads.length,
-        activeTelecallersCount: eligibleIds.length,
-        candidateDetails: [],
-      };
-    }
-
-    // 3. Dispatch leads round-robin across candidates with available capacity
     let dispatchedCount = 0;
-    let candidateIndex = 0;
+    const allTouchedCandidates: Cand[] = [];
 
     for (const lead of queuedLeads) {
-      let candidateWithCapacity: typeof candidates[0] | null = null;
+      const camp = lead.campaignId ? campaignById.get(lead.campaignId) : null;
+      const assignedIds = Array.isArray((camp as any)?.assignedTelecallerIds)
+        ? (camp as any).assignedTelecallerIds.map(Number).filter((n: number) => !isNaN(n) && n > 0)
+        : [];
+
+      let poolIds: number[] = [];
+      let campaignScoped = false;
+      let cacheKey = `global:${subOrganization || ''}`;
+
+      let singleCampaignOwner = false;
+      if (assignedIds.length === 1) {
+        // Exactly one person → always them, no Waiting List / capacity gate
+        campaignScoped = true;
+        singleCampaignOwner = true;
+        poolIds = await this.resolveActiveAssigneeIds(assignedIds);
+        if (poolIds.length === 0) poolIds = assignedIds;
+        cacheKey = `camp-single:${lead.campaignId}:${poolIds[0] || assignedIds[0]}`;
+      } else if (assignedIds.length > 1) {
+        // 2+ people → round-robin among them only (punch + capacity); else stay on WL
+        campaignScoped = true;
+        const activeAssignees = await this.resolveActiveAssigneeIds(assignedIds);
+        const punched: number[] = [];
+        for (const id of activeAssignees) {
+          if (await this.isPunchedInToday(id)) punched.push(id);
+        }
+        poolIds = punched; // if nobody punched in among assignees → leave on WL
+        cacheKey = `camp-rr:${lead.campaignId}:${poolIds.join(',')}`;
+      } else {
+        // No campaign assignees → classic telecaller waiting-list pool
+        poolIds = globalEligibleIds;
+      }
+
+      if (poolIds.length === 0) {
+        continue; // leave this lead queued (Waiting List)
+      }
+
+      const candidates = await buildCandidates(cacheKey, poolIds, {
+        campaignScoped,
+        // Single owner ignores capacity; multi-assignee RR respects capacity (WL when full)
+        ignoreCapacity: singleCampaignOwner,
+      });
+      if (candidates.length === 0) continue; // all at capacity → stay on WL
+
+      let startIdx = rrIndex.get(cacheKey) || 0;
+      let candidateWithCapacity: Cand | null = null;
       let attempts = 0;
       const prevTelecallerId = (lead.customFields as any)?.previousTelecallerId;
 
       while (attempts < candidates.length) {
-        const cand = candidates[candidateIndex % candidates.length];
-        candidateIndex++;
+        const cand = candidates[startIdx % candidates.length];
+        startIdx++;
         attempts++;
-
-        // If candidates length > 1, avoid immediately assigning back to telecaller who left it untouched
         if (cand.availableCapacity > 0) {
-          if (candidates.length > 1 && prevTelecallerId && cand.employeeId === Number(prevTelecallerId) && attempts < candidates.length) {
+          if (
+            candidates.length > 1 &&
+            prevTelecallerId &&
+            cand.employeeId === Number(prevTelecallerId) &&
+            attempts < candidates.length
+          ) {
             continue;
           }
           candidateWithCapacity = cand;
           break;
         }
       }
-
-      // If skipping previous telecaller failed to find someone, accept any candidate with capacity
       if (!candidateWithCapacity) {
-        candidateWithCapacity = candidates.find((c) => c.availableCapacity > 0) || null;
+        candidateWithCapacity = candidates.find((c) => c.availableCapacity > 0) || candidates[0] || null;
       }
+      if (!candidateWithCapacity) continue;
 
-      if (!candidateWithCapacity) {
-        // All active telecallers have reached their maximum workload limit
-        break;
-      }
+      rrIndex.set(cacheKey, startIdx);
 
       const assignedAt = new Date().toISOString();
       const existingCustom = (lead.customFields as any) || {};
-      let customFields = {
+      let customFields: Record<string, any> = {
         ...existingCustom,
         assignedAt,
         allocatedAt: assignedAt,
       };
       customFields = appendLeadEvent(customFields, {
         type: 'ALLOCATED',
-        summary: `Dispatched from waiting list to telecaller #${candidateWithCapacity.employeeId}`,
+        summary: campaignScoped
+          ? `Campaign assignee dispatch to #${candidateWithCapacity.employeeId}`
+          : `Dispatched from waiting list to telecaller #${candidateWithCapacity.employeeId}`,
         by: 'SYSTEM',
         at: assignedAt,
       });
+      if (singleCampaignOwner) {
+        // One assignee owns the campaign — never reclaim to WL
+        customFields.skipUntouchedRecovery = true;
+        customFields.manualAllocation = true;
+        customFields.adminAllocated = true;
+        customFields.campaignDedicatedAllocation = true;
+        customFields.dedicatedTelecallerId = candidateWithCapacity.employeeId;
+      } else if (campaignScoped) {
+        // Multi-assignee campaign: may return to WL if untouched (then re-dispatch among pool)
+        customFields.campaignPoolAllocation = true;
+      }
 
       await prisma.crmLead.update({
         where: { id: lead.id },
@@ -5121,13 +5304,16 @@ export const crmService = {
         phone: lead.phone,
         telecallerEmployeeId: candidateWithCapacity.employeeId,
         scope,
-        campaignName: null,
+        campaignName: camp?.name || null,
         reason: 'dispatch',
       });
 
       candidateWithCapacity.availableCapacity--;
       candidateWithCapacity.currentWorkload++;
       dispatchedCount++;
+      if (!allTouchedCandidates.some((c) => c.employeeId === candidateWithCapacity!.employeeId)) {
+        allTouchedCandidates.push(candidateWithCapacity);
+      }
     }
 
     const remainingQueuedCount = queuedLeads.length - dispatchedCount;
@@ -5135,8 +5321,8 @@ export const crmService = {
     return {
       dispatchedCount,
       remainingQueuedCount,
-      activeTelecallersCount: candidates.length,
-      candidateDetails: candidates,
+      activeTelecallersCount: allTouchedCandidates.length || globalEligibleIds.length,
+      candidateDetails: allTouchedCandidates,
     };
   },
 
@@ -5181,13 +5367,14 @@ export const crmService = {
             select: { id: true, assignedTelecallerIds: true, assignmentMode: true },
           })
         : [];
+    // Only single-assignee campaigns are sticky (never reclaim to WL).
+    // Multi-assignee campaigns still use untouched → WL → re-dispatch among that pool.
     const dedicatedCampaignAssignee = new Map<string, number>();
     for (const c of campaigns) {
       const ids = Array.isArray((c as any).assignedTelecallerIds)
         ? (c as any).assignedTelecallerIds.map(Number).filter((n: number) => !isNaN(n) && n > 0)
         : [];
-      const mode = String((c as any).assignmentMode || '').toUpperCase();
-      if (ids.length === 1 || mode === 'SPECIFIC') {
+      if (ids.length === 1) {
         dedicatedCampaignAssignee.set(c.id, ids[0]);
       }
     }

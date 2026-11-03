@@ -70,6 +70,16 @@ export const crmController = {
     }
   },
 
+  async getCampaignAllocation(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const stats = await crmService.getCampaignAllocation(id);
+      res.json(ok(stats));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to fetch campaign allocation'));
+    }
+  },
+
   async createCampaign(req: Request, res: Response) {
     try {
       const campaign = await crmService.createCampaign(req.body, getScope(req));

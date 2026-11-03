@@ -254,6 +254,7 @@ crmRouter.delete('/projects/:id', generalCrmGuard, crmController.deleteProject);
 
 // Campaigns
 crmRouter.get('/campaigns', generalCrmGuard, crmController.getCampaigns);
+crmRouter.get('/campaigns/:id/allocation', generalCrmGuard, crmController.getCampaignAllocation);
 crmRouter.post('/campaigns', generalCrmGuard, crmController.createCampaign);
 crmRouter.put('/campaigns/:id', generalCrmGuard, crmController.updateCampaign);
 crmRouter.delete('/campaigns/:id', generalCrmGuard, crmController.deleteCampaign);

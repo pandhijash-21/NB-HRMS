@@ -671,33 +671,14 @@ class _CrmHeadersView extends StatelessWidget {
                               ),
                             ],
                           ),
-                          if (activeCamp.assignedTelecallerIds.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.people_alt_rounded, size: 13, color: Colors.blue),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '${activeCamp.assignedTelecallerIds.length} person(s) allocated (${activeCamp.assignmentMode == "SPECIFIC" ? "Specific" : "Round-Robin"})',
-                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.blue),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                          const SizedBox(height: 10),
+                          _CampaignAllocationPanel(
+                            campaign: activeCamp,
+                            isDark: isDark,
+                            cardBg: cardBg,
+                            borderColor: borderColor,
+                            textMuted: textMuted,
+                          ),
                           const SizedBox(height: 10),
                           Row(
                             children: [
@@ -1499,7 +1480,7 @@ class _CrmHeadersView extends StatelessWidget {
             title: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Select Telecallers', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Text('Select assignees', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 TextButton(
                   onPressed: () {
                     setLocalState(() {
@@ -1521,17 +1502,25 @@ class _CrmHeadersView extends StatelessWidget {
                 children: [
                   TextField(
                     decoration: const InputDecoration(
-                      hintText: 'Search by telecaller name or role...',
+                      hintText: 'Search by name, designation or role...',
                       prefixIcon: Icon(Icons.search, size: 20),
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     ),
                     onChanged: (val) => setLocalState(() => searchQuery = val),
                   ),
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Leads for this campaign go only to the people you select (any role — not telecallers only).',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   Expanded(
                     child: filtered.isEmpty
-                        ? const Center(child: Text('No telecallers match search'))
+                        ? const Center(child: Text('No people match search'))
                         : ListView.builder(
                             itemCount: filtered.length,
                             itemBuilder: (ctx, idx) {
@@ -2244,6 +2233,196 @@ class _CrmHeadersView extends StatelessWidget {
             },
             child: const Text('Delete Campaign'),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Live campaign-wise view: who holds how many leads (+ Waiting List).
+class _CampaignAllocationPanel extends StatefulWidget {
+  const _CampaignAllocationPanel({
+    required this.campaign,
+    required this.isDark,
+    required this.cardBg,
+    required this.borderColor,
+    required this.textMuted,
+  });
+
+  final CrmCampaign campaign;
+  final bool isDark;
+  final Color cardBg;
+  final Color borderColor;
+  final Color textMuted;
+
+  @override
+  State<_CampaignAllocationPanel> createState() => _CampaignAllocationPanelState();
+}
+
+class _CampaignAllocationPanelState extends State<_CampaignAllocationPanel> {
+  bool _loading = true;
+  String? _error;
+  Map<String, dynamic>? _stats;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CampaignAllocationPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.campaign.id != widget.campaign.id ||
+        oldWidget.campaign.assignedTelecallerIds.join(',') !=
+            widget.campaign.assignedTelecallerIds.join(',')) {
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final stats = await context.read<CrmRepository>().getCampaignAllocation(widget.campaign.id);
+      if (!mounted) return;
+      setState(() {
+        _stats = stats;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mode = widget.campaign.assignmentMode == 'SPECIFIC' ? 'Specific' : 'Round-Robin';
+    final assigneeCount = widget.campaign.assignedTelecallerIds.length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: widget.isDark ? const Color(0xFF181614) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: widget.borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.pie_chart_outline_rounded, size: 16, color: Color(0xFF2563EB)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  assigneeCount > 0
+                      ? 'Lead allocation · $assigneeCount assignee(s) · $mode'
+                      : 'Lead allocation · no campaign assignees (global waiting-list pool)',
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh allocation',
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                onPressed: _loading ? null : _load,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              assigneeCount == 0
+                  ? 'No assignees → uses punched-in telecaller Waiting List pool.'
+                  : assigneeCount == 1
+                      ? '1 assignee → all leads go to them (no Waiting List for this campaign).'
+                      : '$assigneeCount assignees → round-robin among them only. If none free/punched-in, leads wait on Waiting List.',
+              style: TextStyle(fontSize: 11, color: widget.textMuted),
+            ),
+          ),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+            )
+          else if (_error != null)
+            Text('Could not load allocation: $_error', style: const TextStyle(fontSize: 12, color: Colors.redAccent))
+          else ...[
+            Text(
+              'Total ${_stats?['totalLeads'] ?? 0} leads'
+              '${(_stats?['unallocatedCount'] ?? 0) > 0 ? ' · ${_stats!['unallocatedCount']} on Waiting List' : ''}',
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: widget.textMuted),
+            ),
+            const SizedBox(height: 8),
+            ...(() {
+              final raw = _stats?['assignees'];
+              if (raw is! List || raw.isEmpty) {
+                return [
+                  Text(
+                    'No allocated leads yet for this campaign.',
+                    style: TextStyle(fontSize: 12, color: widget.textMuted),
+                  ),
+                ];
+              }
+              return raw.map((row) {
+                final m = Map<String, dynamic>.from(row as Map);
+                final name = m['fullName']?.toString() ?? 'Unknown';
+                final desig = m['designation']?.toString();
+                final count = int.tryParse('${m['leadCount'] ?? 0}') ?? 0;
+                final isAssignee = m['isCampaignAssignee'] == true;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                        child: Text(
+                          name.isNotEmpty ? name[0].toUpperCase() : '?',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                            Text(
+                              [
+                                if (desig != null && desig.isNotEmpty) desig,
+                                if (isAssignee) 'campaign assignee',
+                              ].join(' · '),
+                              style: TextStyle(fontSize: 10.5, color: widget.textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '$count lead${count == 1 ? '' : 's'}',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF2563EB)),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList();
+            })(),
+          ],
         ],
       ),
     );

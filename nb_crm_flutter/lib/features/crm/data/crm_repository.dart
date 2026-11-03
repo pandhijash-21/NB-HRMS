@@ -126,6 +126,15 @@ class CrmRepository {
     );
   }
 
+  /// Campaign-wise lead counts per assignee (+ unallocated).
+  Future<Map<String, dynamic>> getCampaignAllocation(String campaignId) async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'crm/campaigns/$campaignId/allocation',
+      queryParameters: {'scope': crmScopeNotifier.value},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
   /// Fire a sample Meta/Google/Website payload at the campaign webhook and return the response.
   Future<Map<String, dynamic>> testCampaignWebhook(String campaignId) async {
     return _dio.postEnvelope<Map<String, dynamic>>(

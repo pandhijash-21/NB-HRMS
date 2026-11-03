@@ -95,7 +95,8 @@ export async function notifyNewOrAllocatedLead(opts: {
       allocated ? '' : '· Waiting List',
     ].filter(Boolean);
     const body = bodyParts.join(' ');
-    const path = `/crm/pre-sales?leadId=${opts.leadId}`;
+    const scopeQ = opts.scope ? `&scope=${encodeURIComponent(String(opts.scope))}` : '';
+    const path = `/crm/pre-sales?leadId=${encodeURIComponent(opts.leadId)}${scopeQ}`;
     const kind = 'crm_lead';
 
     const recipientIds = new Set<string>();

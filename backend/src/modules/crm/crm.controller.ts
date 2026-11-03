@@ -195,6 +195,10 @@ export const crmController = {
   async getLeads(req: Request, res: Response) {
     try {
       const authUser = (req as any).user;
+      const roleName =
+        authUser?.roleName ||
+        authUser?.role?.name ||
+        (typeof authUser?.role === 'string' ? authUser.role : undefined);
       const leads = await crmService.getLeads({
         projectId: req.query.projectId as string,
         campaignId: req.query.campaignId as string,
@@ -203,7 +207,8 @@ export const crmController = {
         assignedToId: req.query.assignedToId ? parseInt(req.query.assignedToId as string, 10) : undefined,
         telecallerId: req.query.telecallerId ? parseInt(req.query.telecallerId as string, 10) : undefined,
         leadFlow: req.query.leadFlow as string,
-        userRole: authUser?.role,
+        userRole: roleName,
+        companyAdminGranted: authUser?.companyAdminGranted === true,
         userEmployeeId: authUser?.employeeId,
         userPermissions: authUser?.permissions,
         page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
@@ -222,6 +227,10 @@ export const crmController = {
   async exportLeadsExcel(req: Request, res: Response) {
     try {
       const authUser = (req as any).user;
+      const roleName =
+        authUser?.roleName ||
+        authUser?.role?.name ||
+        (typeof authUser?.role === 'string' ? authUser.role : undefined);
       const buffer = await crmService.exportLeadsExcel({
         projectId: req.query.projectId as string,
         campaignId: req.query.campaignId as string,
@@ -230,7 +239,8 @@ export const crmController = {
         assignedToId: req.query.assignedToId ? parseInt(req.query.assignedToId as string, 10) : undefined,
         telecallerId: req.query.telecallerId ? parseInt(req.query.telecallerId as string, 10) : undefined,
         leadFlow: req.query.leadFlow as string,
-        userRole: authUser?.role,
+        userRole: roleName,
+        companyAdminGranted: authUser?.companyAdminGranted === true,
         userEmployeeId: authUser?.employeeId,
         userPermissions: authUser?.permissions,
         scope: getScope(req),

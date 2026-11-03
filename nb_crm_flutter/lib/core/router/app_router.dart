@@ -497,7 +497,10 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           ),
           GoRoute(
             path: '/crm/pre-sales',
-            builder: (context, state) => const CrmPreSalesScreen(),
+            builder: (context, state) => CrmPreSalesScreen(
+              focusLeadId: state.uri.queryParameters['leadId'],
+              initialScope: state.uri.queryParameters['scope'],
+            ),
           ),
           GoRoute(
             path: '/crm/pre-sales/headers',

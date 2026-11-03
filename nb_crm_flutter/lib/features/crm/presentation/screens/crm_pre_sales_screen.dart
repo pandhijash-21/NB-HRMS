@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/tour/models/tour_models.dart';
 import '../../../../core/tour/widgets/tour_target.dart';
@@ -26,21 +27,32 @@ import '../widgets/crm_send_whatsapp_dialog.dart';
 
 
 class CrmPreSalesScreen extends StatelessWidget {
-  const CrmPreSalesScreen({super.key});
+  const CrmPreSalesScreen({super.key, this.focusLeadId, this.initialScope});
+
+  /// From notification deep-link: `/crm/pre-sales?leadId=...&scope=...`
+  final String? focusLeadId;
+  final String? initialScope;
 
   @override
   Widget build(BuildContext context) {
+    final repo = context.read<CrmRepository>();
+    final scope = initialScope?.trim();
+    if (scope != null && scope.isNotEmpty) {
+      repo.setScope(scope);
+    }
     return BlocProvider<CrmLeadsBloc>(
       create: (ctx) => CrmLeadsBloc(
         crmRepository: ctx.read<CrmRepository>(),
       )..add(const CrmLeadsLoadRequested()),
-      child: const _CrmPreSalesView(),
+      child: _CrmPreSalesView(focusLeadId: focusLeadId),
     );
   }
 }
 
 class _CrmPreSalesView extends StatefulWidget {
-  const _CrmPreSalesView();
+  const _CrmPreSalesView({this.focusLeadId});
+
+  final String? focusLeadId;
 
   @override
   State<_CrmPreSalesView> createState() => _CrmPreSalesViewState();
@@ -67,15 +79,30 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   int _leadsPage = 0;
   int _leadsPageSize = 50;
   String _leadsPageFilterKey = '';
+  String? _focusLeadId;
+  bool _focusLeadHandled = false;
 
   @override
   void initState() {
     super.initState();
+    _focusLeadId = widget.focusLeadId?.trim();
+    if (_focusLeadId != null && _focusLeadId!.isEmpty) _focusLeadId = null;
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_onTabChanged);
     CrmRepository.crmScopeNotifier.addListener(_onScopeChanged);
     _setupInactivityTracker();
     _loadNumberMaskingSetting();
+    // Notification deep-link: clear restrictive chips so the lead can appear.
+    if (_focusLeadId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final bloc = context.read<CrmLeadsBloc>();
+        bloc.add(const CrmLeadsLeadFlowFilterChanged('ALL', clearCampaign: true));
+        bloc.add(const CrmLeadsStatusFilterChanged('ALL'));
+        bloc.add(const CrmLeadsDateFilterChanged(datePreset: 'all'));
+        bloc.add(const CrmLeadsFlowCampaignPicked(null));
+      });
+    }
   }
 
   Future<void> _loadNumberMaskingSetting() async {
@@ -224,6 +251,30 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               duration: const Duration(seconds: 2),
             ),
           );
+        }
+        if (!_focusLeadHandled &&
+            _focusLeadId != null &&
+            state.status == LoadStatus.success) {
+          _focusLeadHandled = true;
+          final hit = state.leads.where((l) => l.id == _focusLeadId).toList();
+          if (hit.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Notified lead is not in your current Pre-Sales view (wrong scope, Waiting List-only, or already in Bin). Check scope / Waiting List.',
+                ),
+                duration: Duration(seconds: 5),
+              ),
+            );
+          } else {
+            final lead = hit.first;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Opened lead: ${lead.name.isNotEmpty ? lead.name : lead.phone}'),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
         }
       },
       builder: (context, state) {
@@ -436,6 +487,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     final effectiveFlow = isOnlyExcel ? 'EXCEL' : (isOnlyWebhook ? 'WEBHOOK' : state.leadFlowFilter);
 
     final filteredLeads = leads.where((l) {
+      // Always keep the deep-linked lead visible (from notification).
+      if (_focusLeadId != null && l.id == _focusLeadId) return true;
       if (l.scope != repo.scope) return false;
       if (selectedCampaignId != null && l.campaignId != selectedCampaignId) {
         return false;
@@ -454,15 +507,15 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         final end = DateTime(state.toDate!.year, state.toDate!.month, state.toDate!.day, 23, 59, 59, 999);
         if (l.createdAt.isAfter(end)) return false;
       }
-      // Leads allocated to this employee, or in a campaign they are assigned to, always visible
+      // Leads allocated to this employee must always be visible (notifications deep-link here).
       if (!isAdmin && userEmployeeId != null) {
         final personallyMine = l.assignedToId == userEmployeeId || l.telecallerId == userEmployeeId;
+        if (personallyMine) return true;
         final campaignMine = l.campaignId != null &&
             state.campaigns.any(
               (c) => c.id == l.campaignId && c.assignedTelecallerIds.contains(userEmployeeId),
             );
-        if (personallyMine || campaignMine) {
-          // Still respect lead-flow chips when browsing, but never hide personal/campaign work
+        if (campaignMine) {
           if (effectiveFlow == 'ALL') return true;
           if (effectiveFlow == 'EXCEL') {
             return !l.isManual && (l.leadSource == 'EXCEL' || l.customFields['isExcelImport'] == true);
@@ -1669,8 +1722,13 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         final canAlterLead = canWrite && !isBlockedForTelecaller && !isBooked;
 
                         final isBulkSelected = _bulkTransferSelectedIds.contains(lead.id);
+                        final isFocusLead = _focusLeadId != null && lead.id == _focusLeadId;
                         return DataRow(
-                          color: isAdmin && isBulkSelected
+                          color: isFocusLead
+                              ? WidgetStateProperty.all(
+                                  const Color(0xFF0EA5E9).withValues(alpha: isDark ? 0.22 : 0.12),
+                                )
+                              : isAdmin && isBulkSelected
                               ? WidgetStateProperty.all(
                                   const Color(0xFF6366F1).withValues(alpha: isDark ? 0.12 : 0.06),
                                 )

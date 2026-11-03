@@ -36,7 +36,7 @@ import { whatsappService } from './whatsapp.service';
 import { telephonyService } from './telephony.service';
 import { notifyNewOrAllocatedLead } from './crmLeadNotify';
 import { sendFinserveClientOtpEmail } from '../../utils/mailer';
-import { isAdminRole } from '../auth/permissions-map';
+import { effectiveCompanyAdminRoleName, isAdminRole } from '../auth/permissions-map';
 import { deriveDayInOut } from '../attendance/dayPunch.rules';
 
 interface TelecallerPresence {
@@ -1475,6 +1475,8 @@ export const crmService = {
     telecallerId?: number;
     leadFlow?: string;
     userRole?: string;
+    /** Company-admin grant keeps designation role but must still see all CRM leads. */
+    companyAdminGranted?: boolean;
     userEmployeeId?: number;
     userPermissions?: Record<string, string[]>;
     page?: number;
@@ -1498,12 +1500,19 @@ export const crmService = {
       scope,
     };
 
-    const roleUpper = String(query.userRole || '').toUpperCase();
+    const rawRole =
+      typeof query.userRole === 'string'
+        ? query.userRole
+        : (query.userRole as any)?.name || '';
+    const effectiveRole = effectiveCompanyAdminRoleName(rawRole, query.companyAdminGranted === true);
+    const roleUpper = String(effectiveRole || '').toUpperCase();
     const roleCompact = roleUpper.replace(/[\s_-]+/g, '');
     const isAdmin =
-      isAdminRole(query.userRole) ||
+      query.companyAdminGranted === true ||
+      isAdminRole(effectiveRole) ||
+      isAdminRole(rawRole) ||
       ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'SYSTEMADMIN', 'ITADMIN'].some(
-        (r) => roleUpper === r || roleCompact === r.replace(/_/g, ''),
+        (r) => roleUpper === r || roleCompact === r.replace(/_/g, '') || roleUpper.includes(r),
       );
 
     // If non-admin user is logged in, enforce flow and assignment scoping
@@ -1775,6 +1784,7 @@ export const crmService = {
     telecallerId?: number;
     leadFlow?: string;
     userRole?: string;
+    companyAdminGranted?: boolean;
     userEmployeeId?: number;
     userPermissions?: Record<string, string[]>;
     scope?: string;
@@ -1790,12 +1800,22 @@ export const crmService = {
       scope,
     };
 
-    const exportRoleUpper = String(query.userRole || '').toUpperCase();
+    const exportRawRole =
+      typeof query.userRole === 'string'
+        ? query.userRole
+        : (query.userRole as any)?.name || '';
+    const exportEffectiveRole = effectiveCompanyAdminRoleName(
+      exportRawRole,
+      query.companyAdminGranted === true,
+    );
+    const exportRoleUpper = String(exportEffectiveRole || '').toUpperCase();
     const exportRoleCompact = exportRoleUpper.replace(/[\s_-]+/g, '');
     const isAdmin =
-      isAdminRole(query.userRole) ||
+      query.companyAdminGranted === true ||
+      isAdminRole(exportEffectiveRole) ||
+      isAdminRole(exportRawRole) ||
       ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'SYSTEMADMIN', 'ITADMIN'].some(
-        (r) => exportRoleUpper === r || exportRoleCompact === r.replace(/_/g, ''),
+        (r) => exportRoleUpper === r || exportRoleCompact === r.replace(/_/g, '') || exportRoleUpper.includes(r),
       );
 
     if (!isAdmin && query.userEmployeeId) {

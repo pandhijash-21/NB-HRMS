@@ -596,6 +596,47 @@ export const crmController = {
     }
   },
 
+  async bulkRestoreFromBin(req: Request, res: Response) {
+    try {
+      const leadIds = Array.isArray(req.body?.leadIds)
+        ? req.body.leadIds
+        : Array.isArray(req.body?.ids)
+          ? req.body.ids
+          : [];
+      const result = await crmService.bulkRestoreFromBin(leadIds.map((id: any) => String(id)));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to bulk restore leads'));
+    }
+  },
+
+  async permanentlyDeleteFromBin(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const result = await crmService.permanentlyDeleteFromBin(id, getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to permanently delete lead'));
+    }
+  },
+
+  async bulkPermanentlyDeleteFromBin(req: Request, res: Response) {
+    try {
+      const leadIds = Array.isArray(req.body?.leadIds)
+        ? req.body.leadIds
+        : Array.isArray(req.body?.ids)
+          ? req.body.ids
+          : [];
+      const result = await crmService.bulkPermanentlyDeleteFromBin(
+        leadIds.map((id: any) => String(id)),
+        getScope(req),
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to permanently delete leads'));
+    }
+  },
+
   async getBin(req: Request, res: Response) {
     try {
       const authUser = (req as any).user;

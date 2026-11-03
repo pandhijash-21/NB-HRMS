@@ -3838,15 +3838,76 @@ export const crmService = {
   },
 
   async restoreFromBin(leadId: string) {
+    const existing = await prisma.crmLead.findUnique({ where: { id: leadId } });
+    if (!existing) throw new Error('Lead not found');
+    if (!existing.isDeleted && existing.status !== CrmLeadStatus.NOT_INTERESTED) {
+      throw new Error('Lead is not in the Bin');
+    }
     return prisma.crmLead.update({
       where: { id: leadId },
       data: {
         isDeleted: false,
         deletedAt: null,
         notInterestedAt: null,
+        notInterestedReason: null,
+        notInterestedRemark: null,
         status: CrmLeadStatus.NOT_STARTED,
       },
     });
+  },
+
+  async bulkRestoreFromBin(leadIds: string[]) {
+    const ids = [...new Set((leadIds || []).map((id) => String(id).trim()).filter(Boolean))];
+    if (!ids.length) throw new Error('Select at least one lead to restore');
+    let restored = 0;
+    const results: { leadId: string; ok: boolean; error?: string }[] = [];
+    for (const id of ids) {
+      try {
+        await this.restoreFromBin(id);
+        restored++;
+        results.push({ leadId: id, ok: true });
+      } catch (e: any) {
+        results.push({ leadId: id, ok: false, error: e?.message || 'Restore failed' });
+      }
+    }
+    return { total: ids.length, restored, failed: ids.length - restored, results };
+  },
+
+  /** Hard-delete a lead that is already in the Bin (manual permanent delete). */
+  async permanentlyDeleteFromBin(leadId: string, scope?: string) {
+    const existing = await prisma.crmLead.findUnique({ where: { id: leadId } });
+    if (!existing) throw new Error('Lead not found');
+    if (scope && existing.scope !== scope) {
+      throw new Error('Lead scope mismatch');
+    }
+    const inBin =
+      existing.isDeleted === true || existing.status === CrmLeadStatus.NOT_INTERESTED;
+    if (!inBin) {
+      throw new Error('Only leads in the Bin can be permanently deleted. Move to Bin first.');
+    }
+    if (existing.status === CrmLeadStatus.BOOKING_CONFIRMED) {
+      throw new Error('Booking Confirmed leads cannot be permanently deleted.');
+    }
+    // Follow-ups cascade; call logs set null via schema
+    await prisma.crmLead.delete({ where: { id: leadId } });
+    return { deleted: true, leadId };
+  },
+
+  async bulkPermanentlyDeleteFromBin(leadIds: string[], scope?: string) {
+    const ids = [...new Set((leadIds || []).map((id) => String(id).trim()).filter(Boolean))];
+    if (!ids.length) throw new Error('Select at least one lead to delete permanently');
+    let deleted = 0;
+    const results: { leadId: string; ok: boolean; error?: string }[] = [];
+    for (const id of ids) {
+      try {
+        await this.permanentlyDeleteFromBin(id, scope);
+        deleted++;
+        results.push({ leadId: id, ok: true });
+      } catch (e: any) {
+        results.push({ leadId: id, ok: false, error: e?.message || 'Delete failed' });
+      }
+    }
+    return { total: ids.length, deleted, failed: ids.length - deleted, results };
   },
 
   async getBinLeads(

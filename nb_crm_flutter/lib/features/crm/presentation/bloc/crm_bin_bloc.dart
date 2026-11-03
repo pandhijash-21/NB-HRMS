@@ -43,6 +43,30 @@ class CrmBinLeadRestored extends CrmBinEvent {
   List<Object?> get props => [leadId];
 }
 
+class CrmBinLeadPermanentlyDeleted extends CrmBinEvent {
+  const CrmBinLeadPermanentlyDeleted(this.leadId);
+  final String leadId;
+
+  @override
+  List<Object?> get props => [leadId];
+}
+
+class CrmBinBulkRestored extends CrmBinEvent {
+  const CrmBinBulkRestored(this.leadIds);
+  final List<String> leadIds;
+
+  @override
+  List<Object?> get props => [leadIds];
+}
+
+class CrmBinBulkPermanentlyDeleted extends CrmBinEvent {
+  const CrmBinBulkPermanentlyDeleted(this.leadIds);
+  final List<String> leadIds;
+
+  @override
+  List<Object?> get props => [leadIds];
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -103,6 +127,9 @@ class CrmBinBloc extends Bloc<CrmBinEvent, CrmBinState> {
     on<CrmBinRefreshRequested>(_onRefresh);
     on<CrmBinModuleChanged>(_onModuleChanged);
     on<CrmBinLeadRestored>(_onLeadRestored);
+    on<CrmBinLeadPermanentlyDeleted>(_onLeadPermanentlyDeleted);
+    on<CrmBinBulkRestored>(_onBulkRestored);
+    on<CrmBinBulkPermanentlyDeleted>(_onBulkPermanentlyDeleted);
   }
 
   final CrmRepository _crmRepository;
@@ -156,6 +183,67 @@ class CrmBinBloc extends Bloc<CrmBinEvent, CrmBinState> {
       emit(state.copyWith(
         isActing: false,
         actionSuccessMessage: 'Lead restored successfully',
+      ));
+      await _fetchData(emit, module: state.module);
+    } catch (e) {
+      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onLeadPermanentlyDeleted(
+    CrmBinLeadPermanentlyDeleted event,
+    Emitter<CrmBinState> emit,
+  ) async {
+    emit(state.copyWith(isActing: true));
+    try {
+      await _crmRepository.permanentlyDeleteFromBin(event.leadId);
+      emit(state.copyWith(
+        isActing: false,
+        actionSuccessMessage: 'Lead permanently deleted',
+      ));
+      await _fetchData(emit, module: state.module);
+    } catch (e) {
+      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onBulkRestored(
+    CrmBinBulkRestored event,
+    Emitter<CrmBinState> emit,
+  ) async {
+    if (event.leadIds.isEmpty) return;
+    emit(state.copyWith(isActing: true));
+    try {
+      final res = await _crmRepository.bulkRestoreFromBin(event.leadIds);
+      final restored = res['restored'] ?? event.leadIds.length;
+      final failed = res['failed'] ?? 0;
+      emit(state.copyWith(
+        isActing: false,
+        actionSuccessMessage: failed == 0
+            ? 'Restored $restored lead(s)'
+            : 'Restored $restored, failed $failed',
+      ));
+      await _fetchData(emit, module: state.module);
+    } catch (e) {
+      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onBulkPermanentlyDeleted(
+    CrmBinBulkPermanentlyDeleted event,
+    Emitter<CrmBinState> emit,
+  ) async {
+    if (event.leadIds.isEmpty) return;
+    emit(state.copyWith(isActing: true));
+    try {
+      final res = await _crmRepository.bulkPermanentlyDeleteFromBin(event.leadIds);
+      final deleted = res['deleted'] ?? event.leadIds.length;
+      final failed = res['failed'] ?? 0;
+      emit(state.copyWith(
+        isActing: false,
+        actionSuccessMessage: failed == 0
+            ? 'Permanently deleted $deleted lead(s)'
+            : 'Deleted $deleted, failed $failed',
       ));
       await _fetchData(emit, module: state.module);
     } catch (e) {

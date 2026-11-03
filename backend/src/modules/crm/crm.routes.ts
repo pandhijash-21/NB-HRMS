@@ -99,6 +99,9 @@ crmRouter.delete('/columns/:id', requireCrmSubmodule('CRM_HEADERS'), crmControll
 // Bin (Recycle Bin / Archive)
 crmRouter.get('/bin', requireCrmSubmodule('CRM_BIN'), crmController.getBin);
 crmRouter.post('/bin/restore/:id', requireCrmSubmodule('CRM_BIN'), crmController.restoreFromBin);
+crmRouter.post('/bin/bulk-restore', requireCrmSubmodule('CRM_BIN'), crmController.bulkRestoreFromBin);
+crmRouter.delete('/bin/:id', requireCrmSubmodule('CRM_BIN'), crmController.permanentlyDeleteFromBin);
+crmRouter.post('/bin/bulk-delete', requireCrmSubmodule('CRM_BIN'), crmController.bulkPermanentlyDeleteFromBin);
 
 // Settings & Telephony
 crmRouter.get('/settings', requireCrmSubmodule('CRM_SETTINGS'), crmController.getSettings);

@@ -550,6 +550,29 @@ class CrmRepository {
     );
   }
 
+  Future<Map<String, dynamic>> bulkRestoreFromBin(List<String> leadIds) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/bin/bulk-restore',
+      data: {'leadIds': leadIds},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<void> permanentlyDeleteFromBin(String leadId) async {
+    await _dio.deleteEnvelope<void>(
+      'crm/bin/$leadId',
+      parse: (_) {},
+    );
+  }
+
+  Future<Map<String, dynamic>> bulkPermanentlyDeleteFromBin(List<String> leadIds) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/bin/bulk-delete',
+      data: {'leadIds': leadIds},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
   Future<List<CrmLead>> getBinLeads({String module = 'PRE_SALES'}) async {
     return _dio.getEnvelope<List<CrmLead>>(
       'crm/bin',

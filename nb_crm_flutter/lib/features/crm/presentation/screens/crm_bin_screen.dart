@@ -34,6 +34,7 @@ class _CrmBinView extends StatefulWidget {
 class _CrmBinViewState extends State<_CrmBinView>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  final Set<String> _selectedIds = {};
 
   @override
   void initState() {
@@ -45,6 +46,7 @@ class _CrmBinViewState extends State<_CrmBinView>
   void _onTabChanged() {
     if (!_tabController.indexIsChanging) {
       final module = _tabController.index == 0 ? 'PRE_SALES' : 'POST_SALES';
+      setState(() => _selectedIds.clear());
       context.read<CrmBinBloc>().add(CrmBinModuleChanged(module));
     }
   }
@@ -54,6 +56,47 @@ class _CrmBinViewState extends State<_CrmBinView>
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _confirmPermanentDelete(List<String> ids) async {
+    if (ids.isEmpty) return;
+    final bloc = context.read<CrmBinBloc>();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete permanently?'),
+        content: Text(
+          ids.length == 1
+              ? 'This lead will be removed forever and cannot be restored.'
+              : '${ids.length} leads will be removed forever and cannot be restored.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete forever'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    if (ids.length == 1) {
+      bloc.add(CrmBinLeadPermanentlyDeleted(ids.first));
+    } else {
+      bloc.add(CrmBinBulkPermanentlyDeleted(ids));
+    }
+    setState(() => _selectedIds.clear());
+  }
+
+  void _restoreSelected(BuildContext context) {
+    final ids = _selectedIds.toList();
+    if (ids.isEmpty) return;
+    context.read<CrmBinBloc>().add(CrmBinBulkRestored(ids));
+    setState(() => _selectedIds.clear());
   }
 
   @override
@@ -97,19 +140,20 @@ class _CrmBinViewState extends State<_CrmBinView>
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(48),
               child: TourTarget(
-              id: TourIds.step('crm.bin', 2),
-              child: TabBar(
-              controller: _tabController,
-              tabs: const [
-                Tab(text: 'Pre-sales Leads'),
-                Tab(text: 'Post-sales Archive'),
-              ],
-            ),
+                id: TourIds.step('crm.bin', 2),
+                child: TabBar(
+                  controller: _tabController,
+                  tabs: const [
+                    Tab(text: 'Pre-sales Leads'),
+                    Tab(text: 'Post-sales Archive'),
+                  ],
+                ),
               ),
             ),
             actions: [
               CrmScopeSelectorWidget(
                 onScopeChanged: () {
+                  setState(() => _selectedIds.clear());
                   context.read<CrmBinBloc>().add(const CrmBinRefreshRequested());
                 },
               ),
@@ -124,12 +168,60 @@ class _CrmBinViewState extends State<_CrmBinView>
               const SizedBox(width: 8),
             ],
           ),
-          body: TabBarView(
-            controller: _tabController,
-            physics: const NeverScrollableScrollPhysics(),
+          body: Column(
             children: [
-              _buildPreSalesBinTab(context, state, isDark, cardBg, borderColor, textMuted),
-              _buildPostSalesBinTab(isDark, cardBg, borderColor, textMuted),
+              if (_selectedIds.isNotEmpty)
+                Material(
+                  color: isDark ? const Color(0xFF1E1B18) : const Color(0xFFEFF6FF),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    child: Row(
+                      children: [
+                        Text(
+                          '${_selectedIds.length} selected',
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: state.isActing ? null : () => setState(() => _selectedIds.clear()),
+                          child: const Text('Clear'),
+                        ),
+                        const SizedBox(width: 4),
+                        ElevatedButton.icon(
+                          onPressed: state.isActing ? null : () => _restoreSelected(context),
+                          icon: const Icon(Icons.restore_from_trash_rounded, size: 16),
+                          label: Text('Restore ${_selectedIds.length}'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF16A34A),
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: state.isActing
+                              ? null
+                              : () => _confirmPermanentDelete(_selectedIds.toList()),
+                          icon: const Icon(Icons.delete_forever_rounded, size: 16),
+                          label: Text('Delete ${_selectedIds.length}'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFDC2626),
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _buildPreSalesBinTab(context, state, isDark, cardBg, borderColor, textMuted),
+                    _buildPostSalesBinTab(isDark, cardBg, borderColor, textMuted),
+                  ],
+                ),
+              ),
             ],
           ),
         );
@@ -152,141 +244,215 @@ class _CrmBinViewState extends State<_CrmBinView>
       onRetry: () => context.read<CrmBinBloc>().add(const CrmBinRefreshRequested()),
       isEmpty: (leads) => leads.isEmpty,
       builder: (leads) {
-        return ListView.builder(
-          padding: const EdgeInsets.all(14),
-          itemCount: leads.length,
-          itemBuilder: (context, index) {
-            final lead = leads[index];
-            final dateStr = lead.deletedAt != null
-                ? '${lead.deletedAt!.day}/${lead.deletedAt!.month}/${lead.deletedAt!.year}'
-                : (lead.notInterestedAt != null
-                    ? '${lead.notInterestedAt!.day}/${lead.notInterestedAt!.month}/${lead.notInterestedAt!.year}'
-                    : 'N/A');
+        final allSelected = leads.isNotEmpty && leads.every((l) => _selectedIds.contains(l.id));
+        final someSelected = leads.any((l) => _selectedIds.contains(l.id));
 
-            return RepaintBoundary(
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 10),
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: allSelected
+                        ? true
+                        : (someSelected ? null : false),
+                    tristate: true,
+                    onChanged: (val) {
+                      setState(() {
+                        if (val == true) {
+                          _selectedIds.addAll(leads.map((l) => l.id));
+                        } else {
+                          for (final l in leads) {
+                            _selectedIds.remove(l.id);
+                          }
+                        }
+                      });
+                    },
+                  ),
+                  Text(
+                    'Select all (${leads.length})',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: textMuted),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
                 padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: cardBg,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: borderColor),
-                ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isCompact = constraints.maxWidth < 450;
+                itemCount: leads.length,
+                itemBuilder: (context, index) {
+                  final lead = leads[index];
+                  final selected = _selectedIds.contains(lead.id);
+                  final dateStr = lead.deletedAt != null
+                      ? '${lead.deletedAt!.day}/${lead.deletedAt!.month}/${lead.deletedAt!.year}'
+                      : (lead.notInterestedAt != null
+                          ? '${lead.notInterestedAt!.day}/${lead.notInterestedAt!.month}/${lead.notInterestedAt!.year}'
+                          : 'N/A');
 
-                    Widget avatarAndDetails = Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        CircleAvatar(
-                          radius: 18,
-                          backgroundColor: Colors.red.withValues(alpha: 0.12),
-                          child: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 18),
+                  return RepaintBoundary(
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF))
+                            : cardBg,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: selected ? const Color(0xFF2563EB) : borderColor,
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isCompact = constraints.maxWidth < 520;
+
+                          Widget avatarAndDetails = Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 4,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Text(
-                                    lead.name.isNotEmpty ? lead.name : 'Unnamed Lead',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      lead.status.displayName,
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.red,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              Checkbox(
+                                value: selected,
+                                onChanged: (val) {
+                                  setState(() {
+                                    if (val == true) {
+                                      _selectedIds.add(lead.id);
+                                    } else {
+                                      _selectedIds.remove(lead.id);
+                                    }
+                                  });
+                                },
                               ),
-                              const SizedBox(height: 4),
-                              Wrap(
-                                spacing: 12,
-                                runSpacing: 2,
-                                children: [
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.phone_outlined, size: 13, color: textMuted),
-                                      const SizedBox(width: 3),
-                                      Text(lead.phone, style: TextStyle(fontSize: 12, color: textMuted)),
-                                    ],
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.access_time_rounded, size: 13, color: textMuted),
-                                      const SizedBox(width: 3),
-                                      Text('Moved: $dateStr', style: TextStyle(fontSize: 11, color: textMuted)),
-                                    ],
-                                  ),
-                                ],
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: Colors.red.withValues(alpha: 0.12),
+                                child: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 18),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 4,
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      children: [
+                                        Text(
+                                          lead.name.isNotEmpty ? lead.name : 'Unnamed Lead',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                            color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red.withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            lead.status.displayName,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.red,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 12,
+                                      runSpacing: 2,
+                                      children: [
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.phone_outlined, size: 13, color: textMuted),
+                                            const SizedBox(width: 3),
+                                            Text(lead.phone, style: TextStyle(fontSize: 12, color: textMuted)),
+                                          ],
+                                        ),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.access_time_rounded, size: 13, color: textMuted),
+                                            const SizedBox(width: 3),
+                                            Text('Moved: $dateStr', style: TextStyle(fontSize: 11, color: textMuted)),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
-                          ),
-                        ),
-                      ],
-                    );
+                          );
 
-                    Widget restoreButton = ElevatedButton.icon(
-                      onPressed: state.isActing
-                          ? null
-                          : () => context
-                              .read<CrmBinBloc>()
-                              .add(CrmBinLeadRestored(lead.id)),
-                      icon: const Icon(Icons.restore_from_trash_rounded, size: 16),
-                      label: const Text('Restore', style: TextStyle(fontSize: 12)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF16A34A),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          Widget actions = Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            alignment: WrapAlignment.end,
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: state.isActing
+                                    ? null
+                                    : () => context.read<CrmBinBloc>().add(CrmBinLeadRestored(lead.id)),
+                                icon: const Icon(Icons.restore_from_trash_rounded, size: 16),
+                                label: const Text('Restore', style: TextStyle(fontSize: 12)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF16A34A),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: state.isActing
+                                    ? null
+                                    : () => _confirmPermanentDelete([lead.id]),
+                                icon: const Icon(Icons.delete_forever_rounded, size: 16, color: Color(0xFFDC2626)),
+                                label: const Text(
+                                  'Delete',
+                                  style: TextStyle(fontSize: 12, color: Color(0xFFDC2626)),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFFDC2626)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                              ),
+                            ],
+                          );
+
+                          if (isCompact) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                avatarAndDetails,
+                                const SizedBox(height: 10),
+                                actions,
+                              ],
+                            );
+                          }
+
+                          return Row(
+                            children: [
+                              Expanded(child: avatarAndDetails),
+                              const SizedBox(width: 8),
+                              actions,
+                            ],
+                          );
+                        },
                       ),
-                    );
-
-                    if (isCompact) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          avatarAndDetails,
-                          const SizedBox(height: 10),
-                          restoreButton,
-                        ],
-                      );
-                    }
-
-                    return Row(
-                      children: [
-                        Expanded(child: avatarAndDetails),
-                        const SizedBox(width: 8),
-                        restoreButton,
-                      ],
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               ),
-            );
-          },
+            ),
+          ],
         );
       },
     );

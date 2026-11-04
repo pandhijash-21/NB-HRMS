@@ -4,8 +4,29 @@ import { isSuperAdminRole, isSystemAdminRole } from './permissions-map';
 
 export function isExemptIdentifier(identifier?: string | null): boolean {
   if (!identifier) return false;
-  const id = String(identifier).trim().toLowerCase();
-  return id === 'superadmin' || id === 'systemadmin' || id === 'admin';
+  const id = String(identifier).trim().toLowerCase().replace(/[\s_-]+/g, '');
+  // Platform superadmin (and legacy admin aliases) — never lock / never permanent ID-block
+  return (
+    id === 'superadmin' ||
+    id === 'systemadmin' ||
+    id === 'systemadministrator' ||
+    id === 'admin'
+  );
+}
+
+/** True when this login must never hit attempt locks or permanent ID block. */
+export function isLoginLockExempt(params: {
+  identifier?: string | null;
+  username?: string | null;
+  roleName?: string | null;
+}): boolean {
+  return (
+    isExemptIdentifier(params.identifier) ||
+    isExemptIdentifier(params.username) ||
+    isSuperAdminRole(params.roleName) ||
+    isSuperAdminRole(params.username) ||
+    isSystemAdminRole(params.roleName)
+  );
 }
 
 const STAGE_ATTEMPTS = [3, 2, 1] as const;
@@ -155,12 +176,12 @@ export async function assertNotLocked(params: {
   roleName?: string | null;
   username?: string | null;
 }): Promise<LockDenial | null> {
-  if (
-    isExemptIdentifier(params.identifier) ||
-    isExemptIdentifier(params.username) ||
-    isSuperAdminRole(params.roleName) ||
-    isSystemAdminRole(params.roleName)
-  ) {
+  if (isLoginLockExempt(params)) {
+    // Clear any stale lock rows/keys so superadmin never stays blocked from older attempts
+    await clearLoginLock({
+      userId: params.userId,
+      aliases: [params.identifier, params.username ?? ''].filter(Boolean),
+    });
     return null;
   }
   if (params.userId) {
@@ -232,12 +253,8 @@ export async function recordLoginFailure(params: {
   roleName?: string | null;
   username?: string | null;
 }): Promise<LockDenial> {
-  if (
-    isExemptIdentifier(params.identifier) ||
-    isExemptIdentifier(params.username) ||
-    isSuperAdminRole(params.roleName) ||
-    isSystemAdminRole(params.roleName)
-  ) {
+  if (isLoginLockExempt(params)) {
+    // Never increment fail counters / never permanent-block exempt accounts
     return { error: 'Invalid username or password', status: 401 };
   }
   let current: GuardState | null = null;

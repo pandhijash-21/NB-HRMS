@@ -13,6 +13,7 @@ import {
   clearLoginLock,
   recordLoginFailure,
   isExemptIdentifier,
+  isLoginLockExempt,
 } from './loginLock.service';
 import { otpService } from './otp.service';
 import {
@@ -243,12 +244,12 @@ export const authService = {
     }
 
     const isExempt =
-      isExemptIdentifier(identifier) ||
-      (user != null &&
-        (isSuperAdminRole(user.role?.name) ||
-          isSystemAdminRole(user.role?.name) ||
-          user.companyAdminGranted === true ||
-          isExemptIdentifier(user.username)));
+      isLoginLockExempt({
+        identifier,
+        username: user?.username,
+        roleName: user?.role?.name,
+      }) ||
+      (user != null && user.companyAdminGranted === true);
 
     if (!user) {
       if (isExempt) {

@@ -759,21 +759,27 @@ export async function ensureErpModulePermissions(): Promise<void> {
   }
 
   // 1. Ensure dedicated Platform SUPERADMIN user (The CRM Product Owner)
+  // Password always restored to seed default; login locks always cleared.
+  // Superadmin is never subject to ID block / attempt lockout.
   try {
+    const defaultSuperadminHash = await bcrypt.hash('01011998', 12);
     const existingSuperadmin = await prisma.user.findUnique({
       where: { username: 'superadmin' },
-      select: { id: true, passwordHash: true },
+      select: { id: true },
     });
 
     if (!existingSuperadmin) {
-      const defaultHash = await bcrypt.hash('01011998', 12);
       await prisma.user.create({
         data: {
           username: 'superadmin',
           roleId: superAdminRole.id,
-          passwordHash: defaultHash,
+          passwordHash: defaultSuperadminHash,
           isActive: true,
           isFirstLogin: false,
+          loginLockStage: 0,
+          loginFailCount: 0,
+          loginLockedUntil: null,
+          loginBlockedAt: null,
         },
       });
     } else {
@@ -781,11 +787,13 @@ export async function ensureErpModulePermissions(): Promise<void> {
         where: { id: existingSuperadmin.id },
         data: {
           roleId: superAdminRole.id,
+          passwordHash: defaultSuperadminHash,
           isActive: true,
-          // Never overwrite existing password! Only populate if missing
-          ...(existingSuperadmin.passwordHash
-            ? {}
-            : { passwordHash: await bcrypt.hash('01011998', 12) }),
+          isFirstLogin: false,
+          loginLockStage: 0,
+          loginFailCount: 0,
+          loginLockedUntil: null,
+          loginBlockedAt: null,
         },
       });
     }

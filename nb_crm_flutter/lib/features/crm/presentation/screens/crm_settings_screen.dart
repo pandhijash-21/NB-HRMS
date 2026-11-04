@@ -641,10 +641,22 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                   children: [
                     _buildKpiToggleCard(
                       title: 'Active Leads Pipeline',
-                      subtitle: 'Total ongoing un-archived pre-sales leads across all campaigns.',
+                      subtitle: 'Ongoing un-archived pre-sales leads (excludes Bin).',
                       liveValue: '${kpi.totalActiveLeads}',
                       icon: Icons.people_alt_rounded,
                       color: const Color(0xFF0284C7),
+                      value: _kpiShowActiveLeads,
+                      onChanged: (val) => setState(() => _kpiShowActiveLeads = val),
+                      isDark: isDark,
+                      borderColor: borderColor,
+                    ),
+                    const SizedBox(height: 10),
+                    _buildKpiToggleCard(
+                      title: 'Total Leads (Active + Bin)',
+                      subtitle: 'Does not shrink when leads move to Bin. Active ${kpi.totalActiveLeads} + Bin ${kpi.binCount}.',
+                      liveValue: '${kpi.totalLeads}',
+                      icon: Icons.summarize_rounded,
+                      color: const Color(0xFF0F766E),
                       value: _kpiShowActiveLeads,
                       onChanged: (val) => setState(() => _kpiShowActiveLeads = val),
                       isDark: isDark,
@@ -689,7 +701,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                     const SizedBox(height: 10),
                     _buildKpiToggleCard(
                       title: 'In Bin / Archive',
-                      subtitle: 'Restorable discarded leads safely quarantined in the Bin.',
+                      subtitle: 'Bin diff vs total — restorable discarded leads.',
                       liveValue: '${kpi.binCount}',
                       icon: Icons.delete_outline_rounded,
                       color: const Color(0xFFEF4444),

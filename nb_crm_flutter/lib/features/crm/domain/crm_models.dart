@@ -69,7 +69,12 @@ class CrmCampaign {
   final String module;
   final bool isActive;
   final int columnsCount;
+  /// Active (non-bin) leads — matches Pre-Sales list.
   final int leadsCount;
+  final int activeLeadsCount;
+  final int binLeadsCount;
+  /// Active + bin — does not shrink when leads move to Bin.
+  final int totalLeadsCount;
   final List<int> assignedTelecallerIds;
   final String assignmentMode;
 
@@ -88,6 +93,9 @@ class CrmCampaign {
     this.isActive = true,
     this.columnsCount = 0,
     this.leadsCount = 0,
+    this.activeLeadsCount = 0,
+    this.binLeadsCount = 0,
+    this.totalLeadsCount = 0,
     this.assignedTelecallerIds = const [],
     this.assignmentMode = 'ROUND_ROBIN',
   });
@@ -131,6 +139,16 @@ class CrmCampaign {
       leadsCount: (json['leadsCount'] as num?)?.toInt() ??
           ((json['_count'] is Map ? (json['_count'] as Map)['leads'] : null) as num?)?.toInt() ??
           0,
+      activeLeadsCount: (json['activeLeadsCount'] as num?)?.toInt() ??
+          (json['leadsCount'] as num?)?.toInt() ??
+          ((json['_count'] is Map ? (json['_count'] as Map)['leads'] : null) as num?)?.toInt() ??
+          0,
+      binLeadsCount: (json['binLeadsCount'] as num?)?.toInt() ?? 0,
+      totalLeadsCount: (json['totalLeadsCount'] as num?)?.toInt() ??
+          (((json['activeLeadsCount'] as num?)?.toInt() ??
+                  (json['leadsCount'] as num?)?.toInt() ??
+                  0) +
+              ((json['binLeadsCount'] as num?)?.toInt() ?? 0)),
       assignedTelecallerIds: (json['assignedTelecallerIds'] as List?)
               ?.map((e) => (e as num).toInt())
               .toList() ??
@@ -1647,6 +1665,8 @@ class CrmTelecallerTelephonyList {
 
 class CrmKpiMetrics {
   final int totalActiveLeads;
+  /// Active + bin — stable when leads move to Bin.
+  final int totalLeads;
   final int todayFollowUps;
   final int interestedDeals;
   final int binCount;
@@ -1661,6 +1681,7 @@ class CrmKpiMetrics {
 
   const CrmKpiMetrics({
     required this.totalActiveLeads,
+    this.totalLeads = 0,
     required this.todayFollowUps,
     required this.interestedDeals,
     required this.binCount,
@@ -1675,11 +1696,14 @@ class CrmKpiMetrics {
   });
 
   factory CrmKpiMetrics.fromJson(Map<String, dynamic> json) {
+    final active = (json['totalActiveLeads'] as num?)?.toInt() ?? 0;
+    final bin = (json['binCount'] as num?)?.toInt() ?? 0;
     return CrmKpiMetrics(
-      totalActiveLeads: (json['totalActiveLeads'] as num?)?.toInt() ?? 0,
+      totalActiveLeads: active,
+      totalLeads: (json['totalLeads'] as num?)?.toInt() ?? (active + bin),
       todayFollowUps: (json['todayFollowUps'] as num?)?.toInt() ?? 0,
       interestedDeals: (json['interestedDeals'] as num?)?.toInt() ?? 0,
-      binCount: (json['binCount'] as num?)?.toInt() ?? 0,
+      binCount: bin,
       freshLeads: (json['freshLeads'] as num?)?.toInt() ?? 0,
       followUpLeads: (json['followUpLeads'] as num?)?.toInt() ?? 0,
       totalCalls: (json['totalCalls'] as num?)?.toInt() ?? 0,

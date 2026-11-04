@@ -655,7 +655,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       ...campaigns.map((c) => DropdownMenuItem(
                             value: c.id,
                             child: Text(
-                              '${c.name} (${c.leadsCount})',
+                              c.binLeadsCount > 0
+                                  ? '${c.name} (${c.activeLeadsCount} active · ${c.totalLeadsCount} tot)'
+                                  : '${c.name} (${c.leadsCount})',
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                             ),

@@ -476,26 +476,53 @@ export const crmService = {
       orderBy: { createdAt: 'asc' },
     });
 
-    return campaigns.map((c) => ({
-      id: c.id,
-      projectId: c.projectId,
-      projectName: c.project?.name || null,
-      name: c.name,
-      code: c.code,
-      adId: c.adId,
-      platform: (c as any).platform || 'WEBHOOK',
-      webhookToken: c.webhookToken,
-      description: c.description,
-      startDate: c.startDate,
-      module: c.module,
-      assignedTelecallerIds: (c as any).assignedTelecallerIds || [],
-      assignmentMode: (c as any).assignmentMode || 'ROUND_ROBIN',
-      isActive: c.isActive,
-      columnsCount: c._count.columns,
-      leadsCount: c._count.leads,
-      createdAt: c.createdAt,
-      updatedAt: c.updatedAt,
-    }));
+    const campaignIds = campaigns.map((c) => c.id);
+    const binGroups =
+      campaignIds.length > 0
+        ? await prisma.crmLead.groupBy({
+            by: ['campaignId'],
+            where: {
+              campaignId: { in: campaignIds },
+              isDeleted: true,
+              scope,
+            },
+            _count: { id: true },
+          })
+        : [];
+    const binByCampaign = new Map(
+      binGroups
+        .filter((g) => g.campaignId != null)
+        .map((g) => [g.campaignId as string, g._count.id]),
+    );
+
+    return campaigns.map((c) => {
+      const activeLeads = c._count.leads;
+      const binLeads = binByCampaign.get(c.id) || 0;
+      return {
+        id: c.id,
+        projectId: c.projectId,
+        projectName: c.project?.name || null,
+        name: c.name,
+        code: c.code,
+        adId: c.adId,
+        platform: (c as any).platform || 'WEBHOOK',
+        webhookToken: c.webhookToken,
+        description: c.description,
+        startDate: c.startDate,
+        module: c.module,
+        assignedTelecallerIds: (c as any).assignedTelecallerIds || [],
+        assignmentMode: (c as any).assignmentMode || 'ROUND_ROBIN',
+        isActive: c.isActive,
+        columnsCount: c._count.columns,
+        // Active pipeline (matches Pre-Sales list). totalLeadsCount does not shrink on bin.
+        leadsCount: activeLeads,
+        activeLeadsCount: activeLeads,
+        binLeadsCount: binLeads,
+        totalLeadsCount: activeLeads + binLeads,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+      };
+    });
   },
 
   _normalizeCampaignPlatform(raw?: string | null): 'META' | 'GOOGLE' | 'WEBHOOK' {
@@ -5080,15 +5107,21 @@ export const crmService = {
       ? (campaign as any).assignedTelecallerIds.map(Number).filter((n: number) => !isNaN(n) && n > 0)
       : [];
 
-    const groups = await prisma.crmLead.groupBy({
-      by: ['telecallerId'],
-      where: {
-        campaignId,
-        isDeleted: false,
-        scope: campaign.scope || 'NB_DEVELOPER',
-      },
-      _count: { id: true },
-    });
+    const scope = campaign.scope || 'NB_DEVELOPER';
+    const [groups, binCount] = await Promise.all([
+      prisma.crmLead.groupBy({
+        by: ['telecallerId'],
+        where: {
+          campaignId,
+          isDeleted: false,
+          scope,
+        },
+        _count: { id: true },
+      }),
+      prisma.crmLead.count({
+        where: { campaignId, isDeleted: true, scope },
+      }),
+    ]);
 
     const countByEmp = new Map<number, number>();
     let unallocatedCount = 0;
@@ -5140,13 +5173,17 @@ export const crmService = {
       }
     }
 
-    const totalLeads = assignees.reduce((s, a) => s + a.leadCount, 0) + unallocatedCount;
+    const activeLeads = assignees.reduce((s, a) => s + a.leadCount, 0) + unallocatedCount;
+    // Total stays stable when leads move to Bin (active + bin).
+    const totalLeads = activeLeads + binCount;
 
     return {
       campaignId: campaign.id,
       campaignName: campaign.name,
       assignmentMode: (campaign as any).assignmentMode || 'ROUND_ROBIN',
       assignedTelecallerIds: assignedIds,
+      activeLeads,
+      binCount,
       totalLeads,
       unallocatedCount,
       assignees,
@@ -6082,12 +6119,15 @@ export const crmService = {
 
     const totalSeconds = callDurationSum._sum.duration || 0;
     const totalTalkTimeMinutes = Math.round(totalSeconds / 60);
+    // Total never shrinks when leads move to Bin — Active + Bin.
+    const totalLeads = totalActiveLeads + binCount;
     const conversionRate = totalActiveLeads > 0
       ? parseFloat(((interestedDeals / totalActiveLeads) * 100).toFixed(1))
       : 0;
 
     return {
       totalActiveLeads,
+      totalLeads,
       todayFollowUps,
       interestedDeals,
       binCount,

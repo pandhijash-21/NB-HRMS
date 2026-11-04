@@ -557,7 +557,9 @@ class _CrmHeadersView extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
-                                    '${camp.leadsCount} leads',
+                                    camp.binLeadsCount > 0
+                                        ? '${camp.activeLeadsCount} active · ${camp.totalLeadsCount} total'
+                                        : '${camp.leadsCount} leads',
                                     style: TextStyle(
                                       fontSize: 10,
                                       color: isSelected ? Colors.white : textMuted,
@@ -2357,7 +2359,9 @@ class _CampaignAllocationPanelState extends State<_CampaignAllocationPanel> {
             Text('Could not load allocation: $_error', style: const TextStyle(fontSize: 12, color: Colors.redAccent))
           else ...[
             Text(
-              'Total ${_stats?['totalLeads'] ?? 0} leads'
+              'Active ${_stats?['activeLeads'] ?? _stats?['totalLeads'] ?? 0}'
+              ' · Bin ${_stats?['binCount'] ?? 0}'
+              ' · Total ${_stats?['totalLeads'] ?? 0}'
               '${(_stats?['unallocatedCount'] ?? 0) > 0 ? ' · ${_stats!['unallocatedCount']} on Waiting List' : ''}',
               style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: widget.textMuted),
             ),

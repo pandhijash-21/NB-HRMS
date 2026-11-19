@@ -217,7 +217,7 @@ class TelephonyService {
       api_key,
       api_secret,
       provider_key: (provider_key || 'indiavoice').toLowerCase(),
-      display_name: display_name || (scope === 'NB_FINSERVE' ? 'NB Finserve Dialer' : 'NB Developer Dialer'),
+      display_name: display_name || (scope === 'NB_FINSERVE' ? 'NB Capital Dialer' : 'NB Developer Dialer'),
       access_token,
       refresh_token,
       webhook_token,
@@ -498,7 +498,7 @@ class TelephonyService {
       create: {
         key,
         value: JSON.stringify(map),
-        description: `Per-telecaller 9ance agent mapping for ${scope === 'NB_FINSERVE' ? 'NB Finserve' : 'NB Developer'}`,
+        description: `Per-telecaller 9ance agent mapping for ${scope === 'NB_FINSERVE' ? 'NB Capital' : 'NB Developer'}`,
         updatedBy,
       },
     });

@@ -69,6 +69,13 @@ class _AdminAttendanceView extends StatelessWidget {
             ),
           ),
           leading: const AppBackButton(fallbackLocation: '/attendance'),
+          actions: [
+            IconButton(
+              tooltip: 'Attendance Report',
+              icon: const Icon(Icons.summarize_rounded),
+              onPressed: () => context.push('/admin/attendance/report'),
+            ),
+          ],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(1.5),
             child: Container(

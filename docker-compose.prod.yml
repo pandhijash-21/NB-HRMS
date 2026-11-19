@@ -78,9 +78,10 @@ services:
       - uploadsdata:/app/uploads
     labels:
       - traefik.enable=true
-      - traefik.http.routers.nbcrm-api.rule=(Host(`crm.nbsince1946.com`) || Host(`crm.nbdeveloper.co.in`)) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`) || PathPrefix(`/client-portal`))
+      - traefik.http.routers.nbcrm-api.rule=Host(`crm.nbsince1946.com`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`) || PathPrefix(`/client-portal`))
       - traefik.http.routers.nbcrm-api.entrypoints=websecure
       - traefik.http.routers.nbcrm-api.tls.certresolver=letsencrypt
+      - traefik.http.routers.nbcrm-api.tls.domains[0].main=crm.nbsince1946.com
       - traefik.http.routers.nbcrm-api.tls=true
       - traefik.http.routers.nbcrm-api.priority=20
       - traefik.http.routers.nbcrm-api.middlewares=nbcrm-secure-headers@docker
@@ -121,9 +122,16 @@ services:
       - ./deploy/nginx/vpn-blocked.html:/usr/share/nginx/html/vpn-blocked.html:ro
     labels:
       - traefik.enable=true
-      - traefik.http.routers.nbcrm-web.rule=(Host(`crm.nbsince1946.com`) || Host(`crm.nbdeveloper.co.in`))
+      - traefik.http.routers.nbcrm-web.rule=Host(`crm.nbsince1946.com`)
+      - traefik.http.routers.nbcrm-web-legacy.rule=Host(`crm.nbdeveloper.co.in`)
+      - traefik.http.routers.nbcrm-web-legacy.entrypoints=websecure
+      - traefik.http.routers.nbcrm-web-legacy.tls=true
+      - traefik.http.routers.nbcrm-web-legacy.priority=10
+      - traefik.http.routers.nbcrm-web-legacy.middlewares=nbcrm-secure-headers@docker
+      - traefik.http.routers.nbcrm-web-legacy.service=nbcrm-web
       - traefik.http.routers.nbcrm-web.entrypoints=websecure
       - traefik.http.routers.nbcrm-web.tls.certresolver=letsencrypt
+      - traefik.http.routers.nbcrm-web.tls.domains[0].main=crm.nbsince1946.com
       - traefik.http.routers.nbcrm-web.tls=true
       - traefik.http.routers.nbcrm-web.priority=10
       - traefik.http.routers.nbcrm-web.middlewares=nbcrm-secure-headers@docker
@@ -179,9 +187,10 @@ services:
       - redis
     labels:
       - traefik.enable=true
-      - traefik.http.routers.nbcrm-livekit.rule=(Host(`crm.nbsince1946.com`) || Host(`crm.nbdeveloper.co.in`)) && PathPrefix(`/rtc`)
+      - traefik.http.routers.nbcrm-livekit.rule=Host(`crm.nbsince1946.com`) && PathPrefix(`/rtc`)
       - traefik.http.routers.nbcrm-livekit.entrypoints=websecure
       - traefik.http.routers.nbcrm-livekit.tls.certresolver=letsencrypt
+      - traefik.http.routers.nbcrm-livekit.tls.domains[0].main=crm.nbsince1946.com
       - traefik.http.routers.nbcrm-livekit.tls=true
       - traefik.http.routers.nbcrm-livekit.priority=30
       - traefik.http.routers.nbcrm-livekit.middlewares=nbcrm-livekit-strip@docker,nbcrm-secure-headers@docker

@@ -215,7 +215,7 @@ const DEFAULT_FINSERVE_TRIGGERS: CrmWhatsappTrigger[] = [
     enabled: true,
     messageType: 'TEXT',
     messageTemplate:
-      'Hello {{customerName}},\n\nThank you for reaching out to *NB Finserve*! 💼\n\nWe have received your loan inquiry. Our financial advisor will connect with you shortly to assist you with the best loan options, competitive interest rates, and quick processing.\n\nWarm regards,\nNB Finserve Team',
+      'Hello {{customerName}},\n\nThank you for reaching out to *NB Capital*! 💼\n\nWe have received your loan inquiry. Our financial advisor will connect with you shortly to assist you with the best loan options, competitive interest rates, and quick processing.\n\nWarm regards,\nNB Capital Team',
     mediaUrl: '',
     includeCalendarLink: false,
     locationUrl: '',
@@ -227,7 +227,7 @@ const DEFAULT_FINSERVE_TRIGGERS: CrmWhatsappTrigger[] = [
     enabled: true,
     messageType: 'TEXT',
     messageTemplate:
-      'Dear {{customerName}},\n\nYour dedicated Financial Advisor at *NB Finserve* is *{{salespersonName}}* (Contact: {{salespersonPhone}}).\n\nThey will guide you through your {{loanType}} options and assist with eligibility and documentation.',
+      'Dear {{customerName}},\n\nYour dedicated Financial Advisor at *NB Capital* is *{{salespersonName}}* (Contact: {{salespersonPhone}}).\n\nThey will guide you through your {{loanType}} options and assist with eligibility and documentation.',
     mediaUrl: '',
     includeCalendarLink: false,
     locationUrl: '',
@@ -239,7 +239,7 @@ const DEFAULT_FINSERVE_TRIGGERS: CrmWhatsappTrigger[] = [
     enabled: false,
     messageType: 'TEXT',
     messageTemplate:
-      'Hello {{customerName}},\n\nFollowing up regarding your loan inquiry with *NB Finserve*. Please let us know if you have any questions or when would be a convenient time for a quick call.\n\nBest regards,\nNB Finserve Team',
+      'Hello {{customerName}},\n\nFollowing up regarding your loan inquiry with *NB Capital*. Please let us know if you have any questions or when would be a convenient time for a quick call.\n\nBest regards,\nNB Capital Team',
     mediaUrl: '',
     includeCalendarLink: false,
     locationUrl: '',
@@ -251,7 +251,7 @@ const DEFAULT_FINSERVE_TRIGGERS: CrmWhatsappTrigger[] = [
     enabled: true,
     messageType: 'TEXT',
     messageTemplate:
-      'Dear {{customerName}},\n\nWe tried reaching you from *NB Finserve* regarding your loan inquiry, but could not connect.\n\nPlease let us know a suitable time to call you back, or message us here directly.\n\nThank you,\nNB Finserve Team',
+      'Dear {{customerName}},\n\nWe tried reaching you from *NB Capital* regarding your loan inquiry, but could not connect.\n\nPlease let us know a suitable time to call you back, or message us here directly.\n\nThank you,\nNB Capital Team',
     mediaUrl: '',
     includeCalendarLink: false,
     locationUrl: '',
@@ -263,7 +263,7 @@ const DEFAULT_FINSERVE_TRIGGERS: CrmWhatsappTrigger[] = [
     enabled: true,
     messageType: 'TEXT',
     messageTemplate:
-      'Dear {{customerName}},\n\nYour consultation meeting with *NB Finserve* has been scheduled! 📅\n\n📅 Date: {{siteVisitDate}}\n⏰ Time: {{siteVisitTime}}\n👤 Advisor: {{salespersonName}}\n\nPlease keep your basic KYC documents handy for faster processing.',
+      'Dear {{customerName}},\n\nYour consultation meeting with *NB Capital* has been scheduled! 📅\n\n📅 Date: {{siteVisitDate}}\n⏰ Time: {{siteVisitTime}}\n👤 Advisor: {{salespersonName}}\n\nPlease keep your basic KYC documents handy for faster processing.',
     mediaUrl: '',
     includeCalendarLink: true,
     locationUrl: '',
@@ -275,7 +275,7 @@ const DEFAULT_FINSERVE_TRIGGERS: CrmWhatsappTrigger[] = [
     enabled: true,
     messageType: 'TEXT',
     messageTemplate:
-      'Dear {{customerName}},\n\nThank you for meeting with our *NB Finserve* team today! 🙏\n\nWe have recorded your loan requirements and our credit team is actively reviewing your profile. For any assistance, reply directly on this WhatsApp.',
+      'Dear {{customerName}},\n\nThank you for meeting with our *NB Capital* team today! 🙏\n\nWe have recorded your loan requirements and our credit team is actively reviewing your profile. For any assistance, reply directly on this WhatsApp.',
     mediaUrl: '',
     includeCalendarLink: false,
     locationUrl: '',
@@ -287,7 +287,7 @@ const DEFAULT_FINSERVE_TRIGGERS: CrmWhatsappTrigger[] = [
     enabled: true,
     messageType: 'TEXT',
     messageTemplate:
-      'Dear {{customerName}},\n\nTo proceed with your *NB Finserve* loan application, please share the required documents (PAN Card, Aadhaar Card, Bank Statements, Salary Slips / ITR).\n\nUpload securely or share them directly with your advisor {{salespersonName}}.',
+      'Dear {{customerName}},\n\nTo proceed with your *NB Capital* loan application, please share the required documents (PAN Card, Aadhaar Card, Bank Statements, Salary Slips / ITR).\n\nUpload securely or share them directly with your advisor {{salespersonName}}.',
     mediaUrl: '',
     includeCalendarLink: false,
     locationUrl: '',
@@ -299,7 +299,7 @@ const DEFAULT_FINSERVE_TRIGGERS: CrmWhatsappTrigger[] = [
     enabled: true,
     messageType: 'TEXT',
     messageTemplate:
-      'Congratulations {{customerName}}! 🎉\n\nYour loan with *NB Finserve* has been approved/sanctioned! 💰\n\nOur team is coordinating the final agreement and disbursement process. Thank you for choosing NB Finserve!',
+      'Congratulations {{customerName}}! 🎉\n\nYour loan with *NB Capital* has been approved/sanctioned! 💰\n\nOur team is coordinating the final agreement and disbursement process. Thank you for choosing NB Capital!',
     mediaUrl: '',
     includeCalendarLink: false,
     locationUrl: '',
@@ -311,7 +311,7 @@ const DEFAULT_FINSERVE_TRIGGERS: CrmWhatsappTrigger[] = [
     enabled: true,
     messageType: 'TEXT',
     messageTemplate:
-      'Dear {{customerName}},\n\nWe are pleased to inform you that your loan amount has been successfully disbursed! 🎊\n\nWelcome to the NB Finserve family. For any service queries, we are always here to assist.',
+      'Dear {{customerName}},\n\nWe are pleased to inform you that your loan amount has been successfully disbursed! 🎊\n\nWelcome to the NB Capital family. For any service queries, we are always here to assist.',
     mediaUrl: '',
     includeCalendarLink: false,
     locationUrl: '',
@@ -323,7 +323,7 @@ const DEFAULT_FINSERVE_TRIGGERS: CrmWhatsappTrigger[] = [
     enabled: false,
     messageType: 'TEXT',
     messageTemplate:
-      'Dear {{customerName}},\n\nWe have noted that you are not looking to proceed with your loan inquiry at this time.\n\nWhenever you require financial services in the future, *NB Finserve* will be glad to assist you. Have a great day ahead!',
+      'Dear {{customerName}},\n\nWe have noted that you are not looking to proceed with your loan inquiry at this time.\n\nWhenever you require financial services in the future, *NB Capital* will be glad to assist you. Have a great day ahead!',
     mediaUrl: '',
     includeCalendarLink: false,
     locationUrl: '',
@@ -335,7 +335,7 @@ const DEFAULT_FINSERVE_TRIGGERS: CrmWhatsappTrigger[] = [
     enabled: false,
     messageType: 'TEXT',
     messageTemplate:
-      'Dear {{customerName}},\n\nThank you for speaking with our *NB Finserve* team today! 🙏\n\nIf you need any more details or have questions, please reach out to us directly on this WhatsApp.\n\nHave a wonderful day ahead!',
+      'Dear {{customerName}},\n\nThank you for speaking with our *NB Capital* team today! 🙏\n\nIf you need any more details or have questions, please reach out to us directly on this WhatsApp.\n\nHave a wonderful day ahead!',
     mediaUrl: '',
     includeCalendarLink: false,
     locationUrl: '',
@@ -656,7 +656,7 @@ export class WhatsappService {
         map.whatsapp_default_location_url ||
         (isFinserve ? '' : 'https://maps.google.com/?q=Legacy+Tower'),
       defaultProjectName:
-        map.whatsapp_default_project_name || (isFinserve ? 'NB Finserve' : 'Legacy Tower'),
+        map.whatsapp_default_project_name || (isFinserve ? 'NB Capital' : 'Legacy Tower'),
       lastVerifiedAt: map.whatsapp_last_verified_at,
       lastVerificationResult: map.whatsapp_last_verification_result,
       triggers,
@@ -795,7 +795,7 @@ export class WhatsappService {
         success: false,
         connectionStatus: 'NOT_CONFIGURED',
         message:
-          `BotBiz credentials for ${isFinserve ? 'NB Finserve' : 'NB Developer'} are not configured. Please supply your API Token and WhatsApp Phone Number ID.`,
+          `BotBiz credentials for ${isFinserve ? 'NB Capital' : 'NB Developer'} are not configured. Please supply your API Token and WhatsApp Phone Number ID.`,
       };
     }
 
@@ -878,7 +878,7 @@ export class WhatsappService {
           syncedAt: new Date().toISOString(),
           templates: sanitized,
         }),
-        description: `Cached Meta WhatsApp templates for ${isFinserve ? 'NB Finserve' : 'NB Developer'} synced from BotBiz`,
+        description: `Cached Meta WhatsApp templates for ${isFinserve ? 'NB Capital' : 'NB Developer'} synced from BotBiz`,
       },
     });
 
@@ -892,7 +892,7 @@ export class WhatsappService {
           create: {
             key: `${prefix}whatsapp_triggers`,
             value: JSON.stringify(bound.triggers),
-            description: `WhatsApp event triggers for ${isFinserve ? 'NB Finserve' : 'NB Developer'}`,
+            description: `WhatsApp event triggers for ${isFinserve ? 'NB Capital' : 'NB Developer'}`,
           },
         });
       }
@@ -1046,7 +1046,7 @@ export class WhatsappService {
         return 'Loan';
       }
       if (normalizedTag.includes('project') || normalizedTag.includes('entity') || normalizedTag.includes('brand')) {
-        return isFinserve ? 'NB Finserve' : 'Legacy Tower';
+        return isFinserve ? 'NB Capital' : 'Legacy Tower';
       }
       if (normalizedTag.includes('date')) {
         return 'the scheduled date';
@@ -1107,7 +1107,7 @@ export class WhatsappService {
         create: {
           key,
           value: JSON.stringify(logs),
-          description: `Recent dispatched CRM WhatsApp notifications for ${isFinserve ? 'NB Finserve' : 'NB Developer'}`,
+          description: `Recent dispatched CRM WhatsApp notifications for ${isFinserve ? 'NB Capital' : 'NB Developer'}`,
         },
       });
     } catch (err) {
@@ -1216,7 +1216,7 @@ export class WhatsappService {
         message: messageText,
         mediaUrl: params.mediaUrl,
         status: 'DISABLED',
-        error: `WhatsApp automation is currently disabled in ${scope === 'NB_FINSERVE' ? 'NB Finserve' : 'NB Developer'} settings`,
+        error: `WhatsApp automation is currently disabled in ${scope === 'NB_FINSERVE' ? 'NB Capital' : 'NB Developer'} settings`,
       }, scope);
       return { success: false, error: 'WhatsApp automation is disabled' };
     }
@@ -1465,7 +1465,7 @@ export class WhatsappService {
           const known = new Set([
             'legacy tower',
             'nb legacy tower',
-            'nb finserve',
+            'nb capital', 'nb finserve',
             'nb infra',
             'nb infra projects',
             'nb infra projects ltd',
@@ -1511,7 +1511,7 @@ export class WhatsappService {
         const known = new Set([
           'legacy tower',
           'nb legacy tower',
-          'nb finserve',
+          'nb capital', 'nb finserve',
           'nb infra',
           'nb infra projects',
           'nb infra projects ltd',
@@ -1536,7 +1536,7 @@ export class WhatsappService {
           const known = new Set([
             'legacy tower',
             'nb legacy tower',
-            'nb finserve',
+            'nb capital', 'nb finserve',
             'nb infra',
             'nb infra projects',
             'nb infra projects ltd',
@@ -1673,7 +1673,7 @@ export class WhatsappService {
         'Valued Customer';
 
       const projectName =
-        context?.projectName || raw.defaultProjectName || (isFinserve ? 'NB Finserve' : 'Legacy Tower');
+        context?.projectName || raw.defaultProjectName || (isFinserve ? 'NB Capital' : 'Legacy Tower');
       const locationUrl =
         trigger.locationUrl ||
         raw.defaultLocationUrl ||

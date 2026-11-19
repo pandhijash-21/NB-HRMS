@@ -1,7 +1,13 @@
 import type { Request, Response } from 'express';
 import { ok, fail } from '../../utils/response';
 import { authService } from './auth.service';
-import { LoginSchema, ChangePasswordSchema } from './auth.types';
+import {
+  LoginSchema,
+  ChangePasswordSchema,
+  ForgotPasswordRequestSchema,
+  ForgotPasswordVerifySchema,
+  ForgotPasswordResetSchema,
+} from './auth.types';
 
 export function detectClientPlatform(req: Request, bodyPlatform?: string): 'browser' | 'app' {
   const explicit = (bodyPlatform || (req.headers['x-client-platform'] as string) || '').toLowerCase().trim();
@@ -138,5 +144,41 @@ export const authController = {
     } catch (err: unknown) {
       return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to save tour progress'));
     }
+  },
+
+  async requestForgotPassword(req: Request, res: Response) {
+    const body = ForgotPasswordRequestSchema.safeParse(req.body);
+    if (!body.success) {
+      return res.status(400).json(fail(body.error.issues[0]?.message ?? 'Validation error'));
+    }
+    const result = await authService.requestForgotPassword(body.data);
+    if ('error' in result) {
+      return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));
+    }
+    return res.json(ok(result));
+  },
+
+  async verifyForgotPasswordOtp(req: Request, res: Response) {
+    const body = ForgotPasswordVerifySchema.safeParse(req.body);
+    if (!body.success) {
+      return res.status(400).json(fail(body.error.issues[0]?.message ?? 'Validation error'));
+    }
+    const result = await authService.verifyForgotPasswordOtp(body.data);
+    if ('error' in result) {
+      return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));
+    }
+    return res.json(ok(result));
+  },
+
+  async resetForgotPassword(req: Request, res: Response) {
+    const body = ForgotPasswordResetSchema.safeParse(req.body);
+    if (!body.success) {
+      return res.status(400).json(fail(body.error.issues[0]?.message ?? 'Validation error'));
+    }
+    const result = await authService.resetForgotPassword(body.data);
+    if ('error' in result) {
+      return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));
+    }
+    return res.json(ok(result));
   },
 };

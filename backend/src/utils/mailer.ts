@@ -209,7 +209,11 @@ export async function sendMeetingInviteEmail(opts: {
   });
 }
 
-export async function sendOtpEmail(to: string, otp: string): Promise<void> {
+export async function sendOtpEmail(
+  to: string,
+  otp: string,
+  opts?: { subject?: string; heading?: string; purpose?: string },
+): Promise<void> {
   const t = getTransporter();
   if (!t) {
     const err = new Error(
@@ -220,15 +224,19 @@ export async function sendOtpEmail(to: string, otp: string): Promise<void> {
   }
   if (!to) return;
 
+  const heading = opts?.heading || 'NB CRM';
+  const purpose = opts?.purpose || 'Email verification';
+  const subject = opts?.subject || 'Email verification code';
+
   await t.sendMail({
     from: `"NB CRM" <${env.SMTP_FROM ?? env.SMTP_USER}>`,
     to,
-    subject: 'Email verification code',
+    subject,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: #1d3459; padding: 24px; text-align: center;">
-          <h1 style="color: white; margin: 0; font-size: 22px;">NB Developer CRM</h1>
-          <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0;">Email verification</p>
+          <h1 style="color: white; margin: 0; font-size: 22px;">${escapeHtml(heading)}</h1>
+          <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0;">${escapeHtml(purpose)}</p>
         </div>
         <div style="padding: 28px; background: #f8fafc;">
           <p style="font-size: 16px; color: #333;">Your one-time password (OTP) is:</p>
@@ -253,13 +261,13 @@ export async function sendFinserveClientOtpEmail(to: string, clientName: string,
 
   const sender = env.FINSERVE_SMTP_FROM || env.FINSERVE_SMTP_USER || env.SMTP_FROM || env.SMTP_USER;
   await t.sendMail({
-    from: `"NB Finserve" <${sender}>`,
+    from: `"NB Capital" <${sender}>`,
     to,
-    subject: `Your NB Finserve Verification OTP: ${otp}`,
+    subject: `Your NB Capital Verification OTP: ${otp}`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-          <h1 style="color: #F59E0B; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px;">NB FINSERVE</h1>
+          <h1 style="color: #F59E0B; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px;">NB CAPITAL</h1>
           <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0; font-size: 14px;">Secure Client Document & Application Portal</p>
         </div>
         <div style="padding: 32px; background: #ffffff; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 12px 12px;">
@@ -272,7 +280,7 @@ export async function sendFinserveClientOtpEmail(to: string, clientName: string,
           </div>
           <p style="font-size: 13px; color: #64748B; margin-bottom: 4px;">⏰ This code is valid for <strong>10 minutes</strong>. For your security, do not share this OTP with anyone.</p>
           <hr style="border: none; border-top: 1px solid #E2E8F0; margin: 26px 0 18px 0;" />
-          <p style="font-size: 12px; color: #94A3B8; margin: 0; text-align: center;">NB Finserve • Financial Services & Loan Advisory</p>
+          <p style="font-size: 12px; color: #94A3B8; margin: 0; text-align: center;">NB Capital • Financial Services & Loan Advisory</p>
         </div>
       </div>
     `,

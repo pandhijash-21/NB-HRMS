@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+
 import '../../../core/network/dio_client.dart';
 import '../domain/attendance_models.dart';
 
@@ -354,5 +358,38 @@ class AttendanceRepository {
       },
       parse: (raw) {},
     );
+  }
+
+  Future<AttendanceReportMeta> getAttendanceReportMeta() {
+    return _dio.getEnvelope<AttendanceReportMeta>(
+      'attendance/admin/report/meta',
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid attendance report meta');
+        }
+        return AttendanceReportMeta.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<Uint8List> exportAttendanceReport({
+    required String mode,
+    required int year,
+    required int month,
+    required List<String> fields,
+    List<int>? employeeIds,
+  }) async {
+    final response = await _dio.dio.post<List<int>>(
+      'attendance/admin/report/export',
+      data: {
+        'mode': mode,
+        'year': year,
+        'month': month,
+        'fields': fields,
+        if (employeeIds != null && employeeIds.isNotEmpty) 'employeeIds': employeeIds,
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? []);
   }
 }

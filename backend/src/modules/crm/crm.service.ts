@@ -344,10 +344,10 @@ export const crmService = {
       try {
         campaign = await prisma.crmCampaign.create({
           data: {
-            name: isFinserve ? 'NB Finserve Primary Campaign' : 'Default Campaign',
+            name: isFinserve ? 'NB Capital Primary Campaign' : 'Default Campaign',
             code: defaultCode,
             description: isFinserve
-              ? 'Primary NB Finserve Campaign'
+              ? 'Primary NB Capital Campaign'
               : (module === 'PRE_SALES'
                 ? 'Primary Pre-Sales Campaign'
                 : `Primary ${module} Campaign`),
@@ -1047,7 +1047,7 @@ export const crmService = {
         // WhatsApp Automation on re-inquiry
         whatsappService
           .triggerEvent('LEAD_CREATED', updatedLead, {
-            projectName: campaign.project?.name || (campaign.scope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower'),
+            projectName: campaign.project?.name || (campaign.scope === 'NB_FINSERVE' ? 'NB Capital' : 'Legacy Tower'),
           })
           .catch((err) => console.error('[CRM WhatsApp Hook Error - Re-inquiry]:', err));
 
@@ -1140,7 +1140,7 @@ export const crmService = {
     // WhatsApp Automation: Auto-welcome message with brochure on new webhook lead
     whatsappService
       .triggerEvent('LEAD_CREATED', lead, {
-        projectName: campaign.project?.name || (campaign.scope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower'),
+        projectName: campaign.project?.name || (campaign.scope === 'NB_FINSERVE' ? 'NB Capital' : 'Legacy Tower'),
       })
       .catch((err) => console.error('[CRM WhatsApp Hook Error - Webhook]:', err));
 
@@ -2196,7 +2196,7 @@ export const crmService = {
     // WhatsApp Automation: Auto-welcome message with brochure on manual lead creation
     whatsappService
       .triggerEvent('LEAD_CREATED', newLead, {
-        projectName: (newLead.campaign as any)?.project?.name || (scope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower'),
+        projectName: (newLead.campaign as any)?.project?.name || (scope === 'NB_FINSERVE' ? 'NB Capital' : 'Legacy Tower'),
         agentName: newLead.assignedTo?.generalInfo?.fullName,
       })
       .catch((err) => console.error('[CRM WhatsApp Hook Error - Manual Lead]:', err));
@@ -2873,7 +2873,7 @@ export const crmService = {
       }
     }
 
-    const campaignProjectName = targetCampaign?.project?.name || (campaignScope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower');
+    const campaignProjectName = targetCampaign?.project?.name || (campaignScope === 'NB_FINSERVE' ? 'NB Capital' : 'Legacy Tower');
 
     if (leadsToInsert.length > 0) {
       for (const lead of leadsToInsert) {
@@ -4520,7 +4520,7 @@ export const crmService = {
       nineance_api_key: '',
       nineance_api_secret: '',
       nineance_provider_key: 'indiavoice',
-      nineance_display_name: isFinserve ? 'NB Finserve Dialer' : 'NB Developer Dialer',
+      nineance_display_name: isFinserve ? 'NB Capital Dialer' : 'NB Developer Dialer',
       nineance_webhook_token: '',
       nineance_webhook_url: '',
       nineance_default_did_id: '',
@@ -6257,7 +6257,7 @@ export const crmService = {
         phone,
         message:
           message ||
-          (tmpl ? `Test of template: ${tmpl.name}` : `Test template dispatch (${isFinserve ? 'NB Finserve' : 'NB Developer'})`),
+          (tmpl ? `Test of template: ${tmpl.name}` : `Test template dispatch (${isFinserve ? 'NB Capital' : 'NB Developer'})`),
         event: 'TEST',
         messageType: 'TEMPLATE',
         templateId: tmpl?.id || targetTemplateId,
@@ -6266,7 +6266,7 @@ export const crmService = {
           name: 'Jash',
           customerName: 'Jash',
           client_name: 'Jash',
-          pname: isFinserve ? 'NB Finserve' : 'Legacy Tower',
+          pname: isFinserve ? 'NB Capital' : 'Legacy Tower',
         },
         scope,
       });
@@ -6275,7 +6275,7 @@ export const crmService = {
     const text =
       message ||
       (isFinserve
-        ? 'Hello from NB Finserve WhatsApp Automation! 💼 Test notification for NB Finserve.'
+        ? 'Hello from NB Capital WhatsApp Automation! 💼 Test notification for NB Capital.'
         : 'Hello from NB CRM WhatsApp Automation! 🏢 Test notification for Legacy Tower.');
     return whatsappService.sendDirect({
       phone,
@@ -6319,7 +6319,7 @@ export const crmService = {
 
     if (payload.event) {
       const triggerRes = await whatsappService.triggerEvent(payload.event, lead, {
-        projectName: lead.campaign?.project?.name || (leadScope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower'),
+        projectName: lead.campaign?.project?.name || (leadScope === 'NB_FINSERVE' ? 'NB Capital' : 'Legacy Tower'),
         agentName: lead.assignedTo?.generalInfo?.fullName,
         scope: leadScope,
       });
@@ -6378,7 +6378,7 @@ export const crmService = {
       custom.project_name ||
       custom.Project_Name ||
       custom.project ||
-      (leadScope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower');
+      (leadScope === 'NB_FINSERVE' ? 'NB Capital' : 'Legacy Tower');
     const agentName = lead.assignedTo?.generalInfo?.fullName || 'Property Advisor';
 
     // Flatten CRM custom field headers into template variables (string values only).
@@ -6428,7 +6428,7 @@ export const crmService = {
     const knownProjects = new Set([
       'legacy tower',
       'nb legacy tower',
-      'nb finserve',
+      'nb capital', 'nb finserve',
       'nb infra',
       'nb infra projects',
       'nb infra projects ltd',

@@ -1208,7 +1208,7 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
                 ),
               )
             else if (category == 'CRM') ...[
-              // ── DUAL CRM CARDS: NB DEVELOPER CRM vs NB FINSERVE CRM ─────────
+              // ── DUAL CRM CARDS: NB DEVELOPER CRM vs NB CAPITAL CRM ─────────
               _buildCrmSubCard(
                 title: 'NB Developer CRM',
                 subtitle: 'Real estate pipeline, tower campaigns, site visits, and visitor desk',
@@ -1218,7 +1218,7 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
                 isDark: isDark,
               ),
               _buildCrmSubCard(
-                title: 'NB Finserve CRM',
+                title: 'NB Capital CRM',
                 subtitle: 'Financial services pre-sales, campaigns, pipelines, and 9ance telephony',
                 icon: Icons.account_balance_wallet_rounded,
                 color: const Color(0xFF2563EB), // Sapphire blue
@@ -1268,7 +1268,7 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
         (isFinserve
             ? const SystemModule(
                 key: 'FIN_CRM_SALES',
-                name: 'NB Finserve - Sales & Conversions',
+                name: 'NB Capital - Sales & Conversions',
                 description: 'Assigned client applications, product advisory, and loan/finserve conversions',
                 category: 'CRM',
                 sortOrder: 14,

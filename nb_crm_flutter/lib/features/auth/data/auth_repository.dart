@@ -41,6 +41,66 @@ class AuthRepository {
     );
   }
 
+  Future<({String message, String? maskedEmail, int cooldownSeconds})> requestForgotPassword(
+    String identifier,
+  ) {
+    return _dio.postEnvelope(
+      'auth/forgot-password',
+      data: {'identifier': identifier.trim()},
+      parse: (raw) {
+        final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+        return (
+          message: map['message']?.toString() ??
+              'If an account with a registered email exists, an OTP has been sent.',
+          maskedEmail: map['maskedEmail']?.toString(),
+          cooldownSeconds: (map['cooldownSeconds'] as num?)?.toInt() ?? 120,
+        );
+      },
+    );
+  }
+
+  Future<({String message, String resetToken})> verifyForgotPasswordOtp({
+    required String identifier,
+    required String otp,
+  }) {
+    return _dio.postEnvelope(
+      'auth/forgot-password/verify-otp',
+      data: {'identifier': identifier.trim(), 'otp': otp.trim()},
+      parse: (raw) {
+        final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+        final token = map['resetToken']?.toString() ?? '';
+        if (token.isEmpty) {
+          throw const FormatException('Missing reset token');
+        }
+        return (
+          message: map['message']?.toString() ?? 'OTP verified',
+          resetToken: token,
+        );
+      },
+    );
+  }
+
+  Future<String> resetForgotPassword({
+    required String resetToken,
+    required String newPassword,
+    required String confirmPassword,
+  }) {
+    return _dio.postEnvelope<String>(
+      'auth/forgot-password/reset',
+      data: {
+        'resetToken': resetToken,
+        'newPassword': newPassword,
+        'confirmPassword': confirmPassword,
+      },
+      parse: (raw) {
+        if (raw is Map && raw['message'] is String) {
+          return raw['message'] as String;
+        }
+        return 'Password reset successful. Please log in with your new password.';
+      },
+    );
+  }
+
   /// Backend: `POST auth/change-password` `{ currentPassword, newPassword }`.
   Future<String> changePassword({
     required String currentPassword,

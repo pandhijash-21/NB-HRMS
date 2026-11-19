@@ -862,7 +862,7 @@ export class BotBizApiClient {
         const known = new Set([
           'legacy tower',
           'nb legacy tower',
-          'nb finserve',
+          'nb capital', 'nb finserve',
           'nb infra',
           'nb infra projects',
           'nb infra projects ltd',

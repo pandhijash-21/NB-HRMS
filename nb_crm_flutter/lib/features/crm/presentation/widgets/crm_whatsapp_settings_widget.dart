@@ -158,7 +158,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
         _senderIdController.text = config.senderId;
         _projectNameController.text = config.defaultProjectName.isNotEmpty
             ? config.defaultProjectName
-            : (isFin ? 'NB Finserve' : 'Legacy Tower');
+            : (isFin ? 'NB Capital' : 'Legacy Tower');
         _calendarLinkController.text = config.defaultCalendarLink;
         _defaultLocationController.text = config.defaultLocationUrl;
         _triggers = List.from(config.triggers);
@@ -822,7 +822,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
                   children: [
                     Text(
                       _isFinserve
-                          ? 'BotBiz WhatsApp Integration (NB Finserve)'
+                          ? 'BotBiz WhatsApp Integration (NB Capital)'
                           : 'BotBiz WhatsApp Integration (NB Developer)',
                       style: TextStyle(
                         fontSize: 18,
@@ -1481,7 +1481,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
     final isFin = _isFinserve;
     final variables = [
       {'tag': '{{customerName}}', 'desc': isFin ? 'Applicant / Customer Name' : 'Lead / Customer Name'},
-      {'tag': '{{projectName}}', 'desc': isFin ? 'Company Name (NB Finserve)' : 'Project Name (Legacy Tower)'},
+      {'tag': '{{projectName}}', 'desc': isFin ? 'Company Name (NB Capital)' : 'Project Name (Legacy Tower)'},
       {'tag': isFin ? '{{consultationDate}}' : '{{siteVisitDate}}', 'desc': isFin ? 'Scheduled Consultation Date' : 'Scheduled Visit Date (e.g. 12 Oct 2026)'},
       {'tag': isFin ? '{{consultationTime}}' : '{{siteVisitTime}}', 'desc': isFin ? 'Scheduled Consultation Time' : 'Scheduled Visit Time (e.g. 11:30 AM)'},
       {'tag': '{{salespersonName}}', 'desc': isFin ? 'Assigned Financial Advisor Name' : 'Assigned Sales Agent Name'},

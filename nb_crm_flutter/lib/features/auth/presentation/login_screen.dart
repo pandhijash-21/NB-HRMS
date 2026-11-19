@@ -881,6 +881,23 @@ class _LoginCard extends StatelessWidget {
                         ],
                       ),
                     ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: submitting ? null : () => context.go('/forgot-password'),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        'Forgot password?',
+                        style: GoogleFonts.sourceSans3(
+                          color: _C.ink,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 if (auth.errorMessage != null) ...[

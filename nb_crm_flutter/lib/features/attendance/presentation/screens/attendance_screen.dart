@@ -543,6 +543,14 @@ class _AttendanceViewState extends State<_AttendanceView> {
               ),
               const SizedBox(height: 10),
               _AttendanceWorkspaceTile(
+                icon: Icons.summarize_rounded,
+                title: 'Attendance Report',
+                subtitle: 'Day-wise monthly or employee-wise Excel export',
+                color: const Color(0xFF0F766E),
+                onTap: () => context.go('/admin/attendance/report'),
+              ),
+              const SizedBox(height: 10),
+              _AttendanceWorkspaceTile(
                 icon: Icons.fingerprint_rounded,
                 title: 'Device Attendance',
                 subtitle: 'Raw biometric data & sync into calendar',

@@ -1743,6 +1743,183 @@ export const attendanceService = {
 
     return { success: true, resetCount: result.count };
   },
+
+  /** Catalog of exportable columns + active employees for the report UI. */
+  async getAttendanceReportMeta() {
+    const employees = await prisma.employee.findMany({
+      where: { status: 'ACTIVE' },
+      include: {
+        generalInfo: { select: { fullName: true, employeeCode: true, designation: true, department: true } },
+      },
+      orderBy: { id: 'asc' },
+    });
+    return {
+      modes: [
+        { key: 'DAY_WISE_MONTHLY', label: 'Day Wise (Monthly)', description: 'All employees × each day in the selected month' },
+        { key: 'EMPLOYEE_WISE', label: 'Employee Wise', description: 'Selected employee(s) for the selected month' },
+      ],
+      fields: ATTENDANCE_REPORT_FIELDS,
+      defaultFields: ATTENDANCE_REPORT_FIELDS.filter((f) => f.defaultOn).map((f) => f.key),
+      employees: employees.map((e) => ({
+        employeeId: e.id,
+        fullName: e.generalInfo?.fullName ?? `Employee #${e.id}`,
+        employeeCode: e.generalInfo?.employeeCode ?? null,
+        designation: e.generalInfo?.designation ?? null,
+        department: e.generalInfo?.department ?? null,
+      })),
+    };
+  },
+
+  /**
+   * Admin attendance Excel export.
+   * mode=DAY_WISE_MONTHLY → every active employee, every day in month.
+   * mode=EMPLOYEE_WISE → only selected employeeIds for that month.
+   * `fields` controls which columns appear (dynamic).
+   */
+  async exportAttendanceReport(params: {
+    mode: 'DAY_WISE_MONTHLY' | 'EMPLOYEE_WISE';
+    year: number;
+    month: number;
+    employeeIds?: number[];
+    fields?: string[];
+  }): Promise<{ buffer: Buffer; fileName: string }> {
+    const xlsx = await import('xlsx');
+    const mode = params.mode;
+    if (mode !== 'DAY_WISE_MONTHLY' && mode !== 'EMPLOYEE_WISE') {
+      throw new Error('mode must be DAY_WISE_MONTHLY or EMPLOYEE_WISE');
+    }
+
+    const fieldKeys = normalizeReportFields(params.fields);
+    const { from, to } = monthRangeYmd(params.year, params.month);
+
+    let employeeIds: number[] = [];
+    if (mode === 'EMPLOYEE_WISE') {
+      employeeIds = [...new Set((params.employeeIds || []).map(Number).filter((n) => n > 0))];
+      if (!employeeIds.length) throw new Error('Select at least one employee for Employee Wise report');
+    } else {
+      const emps = await prisma.employee.findMany({
+        where: { status: 'ACTIVE' },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      });
+      employeeIds = emps.map((e) => e.id);
+    }
+
+    const rows: Record<string, string | number | boolean | null>[] = [];
+    // Process in small batches to avoid hammering DB for large orgs
+    const batchSize = 8;
+    for (let i = 0; i < employeeIds.length; i += batchSize) {
+      const batch = employeeIds.slice(i, i + batchSize);
+      const histories = await Promise.all(
+        batch.map((employeeId) =>
+          this.getAdminEmployeeHistory({ employeeId, from, to }).catch((err: any) => {
+            console.warn(`[attendance report] employee ${employeeId}:`, err?.message || err);
+            return null;
+          }),
+        ),
+      );
+      for (const hist of histories) {
+        if (!hist) continue;
+        for (const day of hist.days) {
+          const raw: Record<string, string | number | boolean | null> = {
+            employeeId: hist.employee.employeeId,
+            employeeCode: hist.employee.employeeCode,
+            fullName: hist.employee.fullName,
+            designation: hist.employee.designation,
+            department: hist.employee.department,
+            date: day.date,
+            firstIn: formatIsoToIstHm(day.firstIn),
+            lastOut: formatIsoToIstHm(day.lastOut),
+            totalHours: formatMinutesAsHours(day.totalMinutes),
+            totalMinutes: day.totalMinutes ?? 0,
+            dayStatus: day.dayStatus,
+            isLate: day.isLate ? 'Yes' : 'No',
+            isHalfDay: day.isHalfDay ? 'Yes' : 'No',
+            meetsPunchOut: day.meetsPunchOut ? 'Yes' : 'No',
+            bufferGraceUsed: day.bufferGraceUsed ? 'Yes' : 'No',
+            punchCount: Array.isArray(day.punches) ? day.punches.length : 0,
+          };
+          const out: Record<string, string | number | boolean | null> = {};
+          for (const key of fieldKeys) {
+            const meta = ATTENDANCE_REPORT_FIELD_MAP.get(key);
+            if (!meta) continue;
+            out[meta.label] = raw[key] ?? '';
+          }
+          rows.push(out);
+        }
+      }
+    }
+
+    const wb = xlsx.utils.book_new();
+    const ws = xlsx.utils.json_to_sheet(
+      rows.length > 0
+        ? rows
+        : [
+            Object.fromEntries(
+              fieldKeys.map((k) => [ATTENDANCE_REPORT_FIELD_MAP.get(k)?.label ?? k, '']),
+            ),
+          ],
+    );
+    const sheetName = mode === 'DAY_WISE_MONTHLY' ? 'Day Wise' : 'Employee Wise';
+    xlsx.utils.book_append_sheet(wb, ws, sheetName);
+    const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    const fileName = `attendance_${mode === 'DAY_WISE_MONTHLY' ? 'daywise' : 'employee'}_${params.year}-${String(params.month).padStart(2, '0')}.xlsx`;
+    return { buffer, fileName };
+  },
 };
+
+type AttendanceReportFieldDef = {
+  key: string;
+  label: string;
+  description: string;
+  defaultOn: boolean;
+};
+
+const ATTENDANCE_REPORT_FIELDS: AttendanceReportFieldDef[] = [
+  { key: 'employeeId', label: 'Employee ID', description: 'Internal employee number', defaultOn: true },
+  { key: 'employeeCode', label: 'Employee Code', description: 'HR employee code', defaultOn: true },
+  { key: 'fullName', label: 'Full Name', description: 'Employee display name', defaultOn: true },
+  { key: 'designation', label: 'Designation', description: 'Job title', defaultOn: false },
+  { key: 'department', label: 'Department', description: 'Department name', defaultOn: false },
+  { key: 'date', label: 'Date', description: 'Attendance date (IST)', defaultOn: true },
+  { key: 'firstIn', label: 'First In', description: 'First punch-in time (IST)', defaultOn: true },
+  { key: 'lastOut', label: 'Last Out', description: 'Last punch-out time (IST)', defaultOn: true },
+  { key: 'totalHours', label: 'Total Hours', description: 'Worked duration as H:MM', defaultOn: true },
+  { key: 'totalMinutes', label: 'Total Minutes', description: 'Worked duration in minutes', defaultOn: false },
+  { key: 'dayStatus', label: 'Day Status', description: 'Present / Leave / Holiday / Absent', defaultOn: true },
+  { key: 'isLate', label: 'Late', description: 'Marked late after policy', defaultOn: true },
+  { key: 'isHalfDay', label: 'Half Day', description: 'Half-day evaluation', defaultOn: true },
+  { key: 'meetsPunchOut', label: 'Met Punch Out', description: 'Left after required punch-out', defaultOn: false },
+  { key: 'bufferGraceUsed', label: 'Buffer Used', description: 'Monthly buffer grace applied', defaultOn: false },
+  { key: 'punchCount', label: 'Punch Count', description: 'Number of punches that day', defaultOn: false },
+];
+
+const ATTENDANCE_REPORT_FIELD_MAP = new Map(
+  ATTENDANCE_REPORT_FIELDS.map((f) => [f.key, f]),
+);
+
+function normalizeReportFields(fields?: string[]): string[] {
+  const requested = (fields || []).map(String).filter(Boolean);
+  const valid = requested.filter((k) => ATTENDANCE_REPORT_FIELD_MAP.has(k));
+  if (valid.length) return valid;
+  return ATTENDANCE_REPORT_FIELDS.filter((f) => f.defaultOn).map((f) => f.key);
+}
+
+function formatIsoToIstHm(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const ist = new Date(d.getTime() + IST_OFFSET_MS);
+  const hh = String(ist.getUTCHours()).padStart(2, '0');
+  const mm = String(ist.getUTCMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+function formatMinutesAsHours(totalMinutes: number | null | undefined): string {
+  const m = Math.max(0, Number(totalMinutes) || 0);
+  const h = Math.floor(m / 60);
+  const mins = m % 60;
+  return `${h}:${String(mins).padStart(2, '0')}`;
+}
 
 

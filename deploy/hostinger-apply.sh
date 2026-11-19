@@ -119,9 +119,15 @@ if docker image inspect "${BACKEND_IMAGE_REPO}:latest" >/dev/null 2>&1; then
   docker tag "${BACKEND_IMAGE_REPO}:latest" "${BACKEND_IMAGE_REPO}:${SHA}" || true
 fi
 compose up -d whisper
-compose up -d backend
+# Force-recreate so Traefik re-reads Host/TLS labels and Let's Encrypt can issue for crm.nbsince1946.com
+compose up -d --force-recreate backend
 compose up -d --force-recreate frontend
-compose up -d minio livekit livekit-egress
+compose up -d --force-recreate livekit
+compose up -d minio livekit-egress
+
+echo "==> Bounce Traefik so ACME picks up new domain labels (data volumes untouched)"
+docker restart traefik-traefik-1 2>/dev/null || docker restart traefik 2>/dev/null || true
+sleep 8
 
 echo "==> Wait for local API health"
 i=0
@@ -185,4 +191,20 @@ echo "$SHA" > "$ROOT/deploy/frontend/deploy-sha.txt" 2>/dev/null || true
 
 curl -fsS http://127.0.0.1:4000/health
 echo
+
+echo "==> Wait for Let's Encrypt cert on crm.nbsince1946.com (not Traefik default)"
+# LETSENCRYPT_WAIT
+le_ok=0
+for n in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  subj=$(echo | openssl s_client -connect 127.0.0.1:443 -servername crm.nbsince1946.com 2>/dev/null | openssl x509 -noout -subject 2>/dev/null || true)
+  echo "  cert probe $n: $subj"
+  case "$subj" in
+    *nbsince1946*|*Let*Encrypt*|*R3*|*E1*|*ISRG*) le_ok=1; break ;;
+  esac
+  sleep 10
+done
+if [ "$le_ok" != "1" ]; then
+  echo "WARNING: still on Traefik default / untrusted cert — check: docker logs traefik-traefik-1 --tail 80"
+  docker logs traefik-traefik-1 --tail 80 2>/dev/null || true
+fi
 echo "==> Hostinger apply done (SHA $SHA). DB data preserved; migrate deploy only."

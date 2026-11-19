@@ -4588,11 +4588,11 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
         lead.customFields['loan_type']?.toString() ??
         'Loan';
     final message = 'Hello $clientName,\n\n'
-        'Greetings from NB Finserve!\n\n'
+        'Greetings from NB Capital!\n\n'
         'Please verify and submit your documents for your $loanType application using our secure Client Portal link:\n'
         '$link\n\n'
         '🔐 To access, enter your registered mobile number (${lead.phone}) and verify with the 6-digit OTP sent to your email.\n\n'
-        'Thank you,\nNB Finserve Team';
+        'Thank you,\nNB Capital Team';
 
     final uri = Uri.parse('https://wa.me/$pPhone?text=${Uri.encodeComponent(message)}');
     try {
@@ -6728,11 +6728,11 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
     final pPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
     final clientName = _currentLead.name.isNotEmpty ? _currentLead.name : 'Customer';
     final message = 'Hello $clientName,\n\n'
-        'Greetings from NB Finserve!\n\n'
+        'Greetings from NB Capital!\n\n'
         'Please verify and submit your documents for your $_selectedLoanType application using our secure Client Portal link:\n'
         '$_portalLink\n\n'
         '🔐 To access, enter your registered mobile number (${_currentLead.phone}) and verify with the 6-digit OTP sent to your email.\n\n'
-        'Thank you,\nNB Finserve Team';
+        'Thank you,\nNB Capital Team';
 
     final uri = Uri.parse('https://wa.me/$pPhone?text=${Uri.encodeComponent(message)}');
     try {
@@ -6778,11 +6778,11 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
     final pPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
     final clientName = _currentLead.name.isNotEmpty ? _currentLead.name : 'Customer';
     final message = 'Hello $clientName,\n\n'
-        'Greetings from NB Finserve!\n\n'
+        'Greetings from NB Capital!\n\n'
         'All required application documents for your $_selectedLoanType have been successfully received and verified.\n\n'
         '📦 You can download the complete archive of all submitted documents (ZIP) using this link:\n'
         '$url\n\n'
-        'Thank you,\nNB Finserve Team';
+        'Thank you,\nNB Capital Team';
 
     final uri = Uri.parse('https://wa.me/$pPhone?text=${Uri.encodeComponent(message)}');
     try {

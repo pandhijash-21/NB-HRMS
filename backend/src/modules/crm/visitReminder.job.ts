@@ -90,7 +90,7 @@ export async function runVisitReminders() {
       const scope = lead.scope || 'NB_DEVELOPER';
       const projectName =
         lead.campaign?.project?.name ||
-        (scope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower');
+        (scope === 'NB_FINSERVE' ? 'NB Capital' : 'Legacy Tower');
 
       try {
         const result = await whatsappService.triggerEvent(

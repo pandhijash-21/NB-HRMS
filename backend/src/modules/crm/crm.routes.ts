@@ -237,7 +237,7 @@ const visitorDeskGuard = (req: any, res: any, next: any) => {
   if (req.crmScope === 'NB_FINSERVE') {
     return res.status(403).json({
       success: false,
-      message: 'Visitor desk is not available for NB Finserve CRM',
+      message: 'Visitor desk is not available for NB Capital CRM',
     });
   }
   const modules = ['CRM_VISITOR_DESK', 'CRM', 'CRM_PRE_SALES', 'CRM_DASHBOARD'];

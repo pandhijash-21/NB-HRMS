@@ -8015,7 +8015,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'This action is exclusively for ITADMIN (emp code 1).\n\nIt will wipe all Real Estate CRM pre-sales leads, follow-ups, and unbind call logs from the database without wiping the entire HRMS database.\n\nNB Finserve leads will NOT be affected.',
+              'This action is exclusively for ITADMIN (emp code 1).\n\nIt will wipe all Real Estate CRM pre-sales leads, follow-ups, and unbind call logs from the database without wiping the entire HRMS database.\n\nNB Capital leads will NOT be affected.',
               style: TextStyle(fontSize: 13, height: 1.4),
             ),
             SizedBox(height: 12),

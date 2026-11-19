@@ -746,3 +746,87 @@ class DeviceSyncResult {
     );
   }
 }
+
+class AttendanceReportField {
+  const AttendanceReportField({
+    required this.key,
+    required this.label,
+    required this.description,
+    required this.defaultOn,
+  });
+
+  final String key;
+  final String label;
+  final String description;
+  final bool defaultOn;
+
+  factory AttendanceReportField.fromJson(Map<String, dynamic> json) {
+    return AttendanceReportField(
+      key: json['key']?.toString() ?? '',
+      label: json['label']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      defaultOn: json['defaultOn'] == true,
+    );
+  }
+}
+
+class AttendanceReportEmployee {
+  const AttendanceReportEmployee({
+    required this.employeeId,
+    required this.fullName,
+    this.employeeCode,
+    this.designation,
+    this.department,
+  });
+
+  final int employeeId;
+  final String fullName;
+  final String? employeeCode;
+  final String? designation;
+  final String? department;
+
+  factory AttendanceReportEmployee.fromJson(Map<String, dynamic> json) {
+    return AttendanceReportEmployee(
+      employeeId: (json['employeeId'] as num?)?.toInt() ?? 0,
+      fullName: json['fullName']?.toString() ?? 'Employee',
+      employeeCode: json['employeeCode']?.toString(),
+      designation: json['designation']?.toString(),
+      department: json['department']?.toString(),
+    );
+  }
+}
+
+class AttendanceReportMeta {
+  const AttendanceReportMeta({
+    required this.fields,
+    required this.defaultFields,
+    required this.employees,
+  });
+
+  final List<AttendanceReportField> fields;
+  final List<String> defaultFields;
+  final List<AttendanceReportEmployee> employees;
+
+  factory AttendanceReportMeta.fromJson(Map<String, dynamic> json) {
+    final fieldsRaw = json['fields'];
+    final defaultsRaw = json['defaultFields'];
+    final empsRaw = json['employees'];
+    return AttendanceReportMeta(
+      fields: fieldsRaw is List
+          ? fieldsRaw
+              .whereType<Map>()
+              .map((e) => AttendanceReportField.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+      defaultFields: defaultsRaw is List
+          ? defaultsRaw.map((e) => e.toString()).toList()
+          : const [],
+      employees: empsRaw is List
+          ? empsRaw
+              .whereType<Map>()
+              .map((e) => AttendanceReportEmployee.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+    );
+  }
+}

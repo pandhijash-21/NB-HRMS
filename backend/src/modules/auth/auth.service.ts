@@ -1,12 +1,19 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../config/prisma';
 import { redis, connectRedis } from '../../config/redis';
 import { env } from '../../config/env';
-import { sendPasswordResetEmail } from '../../utils/mailer';
+import { isSmtpConfigured, sendOtpEmail, sendPasswordResetEmail } from '../../utils/mailer';
 import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
 import { passwordFromBirthDate } from '../../utils/dobPassword';
-import type { LoginInput, ChangePasswordInput } from './auth.types';
+import type {
+  LoginInput,
+  ChangePasswordInput,
+  ForgotPasswordRequestInput,
+  ForgotPasswordVerifyInput,
+  ForgotPasswordResetInput,
+} from './auth.types';
 import { passwordMeetsPolicy, passwordPolicyIssue } from '../../utils/passwordPolicy';
 import {
   assertNotLocked,
@@ -772,4 +779,247 @@ export const authService = {
     });
     return { softwareTourSeen: true };
   },
+
+  /**
+   * Self-service forgot password — step 1: send OTP to personal/institute email.
+   * Response is deliberately generic when the account/email cannot be used.
+   */
+  async requestForgotPassword(input: ForgotPasswordRequestInput) {
+    const generic = {
+      message: 'If an account with a registered email exists, an OTP has been sent.',
+      maskedEmail: null as string | null,
+      cooldownSeconds: 120,
+    };
+
+    if (!isSmtpConfigured()) {
+      return {
+        error: 'Email is not configured on the server. Contact an administrator to reset your password.',
+        status: 503,
+      } as const;
+    }
+
+    const user = await resolveUserForForgotPassword(input.identifier.trim());
+    if (!user || !user.isActive) return generic;
+
+    const email = await resolveEmployeeLoginEmail(user.employeeId);
+    if (!email) return generic;
+
+    await connectRedis();
+    const otpKey = `forgot_otp:${user.id}`;
+    const cooldownKey = `forgot_otp_cd:${user.id}`;
+    const remaining = await redis.ttl(cooldownKey);
+    if (remaining > 0) {
+      return {
+        error: `Please wait ${remaining} seconds before requesting a new OTP`,
+        status: 429,
+      } as const;
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await redis.setEx(
+      otpKey,
+      300,
+      JSON.stringify({ otp, email, attempts: 0, createdAt: Date.now() }),
+    );
+    await redis.setEx(cooldownKey, 120, '1');
+
+    try {
+      await sendOtpEmail(email, otp, {
+        subject: 'Password reset OTP',
+        heading: 'NB CRM',
+        purpose: 'Password reset',
+      });
+    } catch (err) {
+      await redis.del(otpKey);
+      await redis.del(cooldownKey);
+      console.error('Forgot-password OTP send failed:', err);
+      return { error: 'Failed to send OTP email. Try again later.', status: 502 } as const;
+    }
+
+    return {
+      message: 'OTP sent to your registered email.',
+      maskedEmail: maskEmail(email),
+      cooldownSeconds: 120,
+    };
+  },
+
+  /** Step 2: verify OTP → short-lived reset token. */
+  async verifyForgotPasswordOtp(input: ForgotPasswordVerifyInput) {
+    const user = await resolveUserForForgotPassword(input.identifier.trim());
+    if (!user) {
+      return { error: 'Invalid or expired OTP. Please request a new code.', status: 400 } as const;
+    }
+
+    await connectRedis();
+    const otpKey = `forgot_otp:${user.id}`;
+    const raw = await redis.get(otpKey);
+    if (!raw) {
+      return { error: 'Invalid or expired OTP. Please request a new code.', status: 400 } as const;
+    }
+
+    const data = JSON.parse(raw) as { otp: string; email: string; attempts: number };
+    if (data.otp !== input.otp.trim()) {
+      data.attempts = (data.attempts || 0) + 1;
+      if (data.attempts >= 3) {
+        await redis.del(otpKey);
+        return {
+          error: 'Too many failed attempts. Please request a new OTP.',
+          status: 400,
+        } as const;
+      }
+      await redis.setEx(otpKey, 300, JSON.stringify(data));
+      const left = 3 - data.attempts;
+      return {
+        error: `Incorrect OTP. ${left} attempt${left === 1 ? '' : 's'} remaining.`,
+        status: 400,
+      } as const;
+    }
+
+    await redis.del(otpKey);
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    await redis.setEx(
+      `forgot_reset:${resetToken}`,
+      600,
+      JSON.stringify({ userId: user.id, email: data.email }),
+    );
+
+    return {
+      message: 'OTP verified. Set your new password.',
+      resetToken,
+    };
+  },
+
+  /** Step 3: set new password with the same policy as first-login change. */
+  async resetForgotPassword(input: ForgotPasswordResetInput) {
+    if (input.newPassword !== input.confirmPassword) {
+      return { error: 'Passwords do not match', status: 400 } as const;
+    }
+    const policyError = passwordPolicyIssue(input.newPassword);
+    if (policyError) return { error: policyError, status: 400 } as const;
+
+    await connectRedis();
+    const key = `forgot_reset:${input.resetToken}`;
+    const raw = await redis.get(key);
+    if (!raw) {
+      return {
+        error: 'Reset session expired. Please start forgot password again.',
+        status: 400,
+      } as const;
+    }
+
+    const data = JSON.parse(raw) as { userId: string };
+    const user = await prisma.user.findUnique({
+      where: { id: data.userId },
+      select: { id: true, roleId: true, passwordHash: true, isActive: true },
+    });
+    if (!user || !user.isActive) {
+      await redis.del(key);
+      return { error: 'Account not found or disabled', status: 404 } as const;
+    }
+
+    const sameAsOld = user.passwordHash
+      ? await bcrypt.compare(input.newPassword, user.passwordHash)
+      : false;
+    if (sameAsOld) {
+      return {
+        error: 'New password must be different from your current password',
+        status: 400,
+      } as const;
+    }
+
+    const newHash = await bcrypt.hash(input.newPassword, 12);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: newHash,
+        adminPasswordEnc: encryptPasswordForAdmin(input.newPassword),
+        isFirstLogin: false,
+        passwordChangedAt: new Date(),
+        loginLockStage: 0,
+        loginFailCount: 0,
+        loginLockedUntil: null,
+        loginBlockedAt: null,
+      },
+    });
+
+    await redis.del(key);
+    await deleteSession(user.id, user.roleId);
+    await clearLoginLock({
+      userId: user.id,
+      aliases: [user.id],
+    });
+
+    return { message: 'Password reset successful. Please log in with your new password.' };
+  },
 };
+
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!domain) return '***';
+  const keep = local.slice(0, Math.min(2, local.length));
+  return `${keep}***@${domain}`;
+}
+
+async function resolveEmployeeLoginEmail(employeeId: number | null): Promise<string | null> {
+  if (employeeId == null) return null;
+  const addr = await prisma.employeeAddress.findUnique({
+    where: { employeeId_addressType: { employeeId, addressType: 'LOCAL' } },
+    select: { personalEmail: true, instituteEmail: true },
+  });
+  const personal = addr?.personalEmail?.trim();
+  if (personal) return personal.toLowerCase();
+  const institute = addr?.instituteEmail?.trim();
+  if (institute) return institute.toLowerCase();
+  return null;
+}
+
+/** Same identity resolution as login (code / username / employee id / email). */
+async function resolveUserForForgotPassword(identifier: string) {
+  const id = identifier.trim();
+  if (!id) return null;
+
+  const byCode = await prisma.employeeGeneralInfo.findFirst({
+    where: { employeeCode: { equals: id, mode: 'insensitive' } },
+    select: { employeeId: true },
+  });
+  if (byCode?.employeeId != null) {
+    return prisma.user.findUnique({
+      where: { employeeId: byCode.employeeId },
+      select: { id: true, employeeId: true, isActive: true, username: true },
+    });
+  }
+
+  let user = await prisma.user.findFirst({
+    where: { username: { equals: id, mode: 'insensitive' } },
+    select: { id: true, employeeId: true, isActive: true, username: true },
+  });
+  if (user) return user;
+
+  if (/^\d+$/.test(id)) {
+    user = await prisma.user.findUnique({
+      where: { employeeId: Number(id) },
+      select: { id: true, employeeId: true, isActive: true, username: true },
+    });
+    if (user) return user;
+  }
+
+  if (id.includes('@')) {
+    const byEmail = await prisma.employeeAddress.findFirst({
+      where: {
+        OR: [
+          { instituteEmail: { equals: id, mode: 'insensitive' } },
+          { personalEmail: { equals: id, mode: 'insensitive' } },
+        ],
+      },
+      select: { employeeId: true },
+    });
+    if (byEmail?.employeeId != null) {
+      return prisma.user.findUnique({
+        where: { employeeId: byEmail.employeeId },
+        select: { id: true, employeeId: true, isActive: true, username: true },
+      });
+    }
+  }
+
+  return null;
+}

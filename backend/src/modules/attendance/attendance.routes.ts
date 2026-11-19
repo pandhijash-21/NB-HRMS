@@ -212,6 +212,59 @@ attendanceRouter.patch(
   },
 );
 
+// Admin: attendance report field catalog + employee list
+attendanceRouter.get(
+  '/admin/report/meta',
+  requireAuth,
+  requirePermission('ATTENDANCE', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      if (!requireAttendanceAdmin(req, res)) return;
+      const data = await attendanceService.getAttendanceReportMeta();
+      return res.json(ok(data));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
+// Admin: generate attendance Excel (day-wise monthly or employee-wise)
+attendanceRouter.post(
+  '/admin/report/export',
+  requireAuth,
+  requirePermission('ATTENDANCE', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      if (!requireAttendanceAdmin(req, res)) return;
+      const mode = String(req.body?.mode || '').toUpperCase();
+      const year = Number(req.body?.year);
+      const month = Number(req.body?.month);
+      const fields = Array.isArray(req.body?.fields) ? req.body.fields.map(String) : undefined;
+      const employeeIds = Array.isArray(req.body?.employeeIds)
+        ? req.body.employeeIds.map((n: any) => Number(n)).filter((n: number) => n > 0)
+        : undefined;
+      if (mode !== 'DAY_WISE_MONTHLY' && mode !== 'EMPLOYEE_WISE') {
+        return res.status(400).json(fail('mode must be DAY_WISE_MONTHLY or EMPLOYEE_WISE'));
+      }
+      const { buffer, fileName } = await attendanceService.exportAttendanceReport({
+        mode: mode as 'DAY_WISE_MONTHLY' | 'EMPLOYEE_WISE',
+        year,
+        month,
+        employeeIds,
+        fields,
+      });
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
 // Monthly attendance + leave summary (self or admin)
 attendanceRouter.get(
   '/employee/:employeeId/monthly-summary',

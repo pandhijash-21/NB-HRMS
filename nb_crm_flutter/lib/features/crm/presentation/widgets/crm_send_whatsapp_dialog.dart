@@ -247,7 +247,7 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
       const knownProjects = {
         'legacy tower',
         'nb legacy tower',
-        'nb finserve',
+        'nb capital', 'nb finserve',
         'nb infra',
         'nb infra projects',
         'nb infra projects ltd',

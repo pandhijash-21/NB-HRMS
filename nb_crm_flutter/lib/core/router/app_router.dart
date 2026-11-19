@@ -10,6 +10,7 @@ import 'go_router_refresh_stream.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/auth/domain/permissions.dart';
 import '../../features/auth/presentation/change_password_screen.dart';
+import '../../features/auth/presentation/forgot_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/superadmin_login_screen.dart';
 import '../../features/auth/presentation/verify_emails_screen.dart';
@@ -61,6 +62,7 @@ import '../../features/recruitment/presentation/screens/candidate_detail_screen.
 import '../../features/repository/presentation/screens/repository_hub_screen.dart';
 import '../../features/attendance/presentation/screens/attendance_screen.dart';
 import '../../features/attendance/presentation/screens/admin_attendance_screen.dart';
+import '../../features/attendance/presentation/screens/admin_attendance_report_screen.dart';
 import '../../features/attendance/presentation/screens/admin_employee_attendance_history_screen.dart';
 import '../../features/attendance/presentation/screens/device_attendance_screen.dart';
 import '../../features/attendance/presentation/screens/admin_locations_screen.dart';
@@ -190,6 +192,7 @@ GoRouter createAppRouter(AuthBloc authBloc) {
       final isSuperAdminLogin = loc == '/superadmin/login';
       final isSuperAdminPath = loc == '/superadmin' || loc.startsWith('/superadmin/');
       final changingPassword = loc == '/change-password';
+      final forgettingPassword = loc == '/forgot-password';
       final verifyingEmails = loc == '/verify-emails';
       final trackingSetup = loc == '/tracking/setup';
       final guestMeet = loc.startsWith('/meet/guest') || loc.startsWith('/meet/r/');
@@ -214,7 +217,7 @@ GoRouter createAppRouter(AuthBloc authBloc) {
         } else if (isSuperAdminLogin) {
           next = null;
         } else {
-          next = (loggingIn || guestMeet || isClientPortal) ? null : '/login';
+          next = (loggingIn || forgettingPassword || guestMeet || isClientPortal) ? null : '/login';
         }
       } else if (auth.isFirstLogin) {
         next = changingPassword ? null : '/change-password';
@@ -390,6 +393,10 @@ GoRouter createAppRouter(AuthBloc authBloc) {
     routes: [
       GoRoute(path: '/', redirect: (context, state) => '/login'),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
       GoRoute(path: '/superadmin', redirect: (context, state) => '/superadmin/login'),
       GoRoute(
         path: '/superadmin/login',
@@ -959,6 +966,10 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           GoRoute(
             path: '/admin/attendance',
             builder: (context, state) => const AdminAttendanceScreen(),
+          ),
+          GoRoute(
+            path: '/admin/attendance/report',
+            builder: (context, state) => const AdminAttendanceReportScreen(),
           ),
           GoRoute(
             path: '/admin/attendance/device',

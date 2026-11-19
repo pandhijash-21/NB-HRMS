@@ -152,7 +152,7 @@ jobs:
           # PRs may lack secrets — use a dummy protocol key only to prove the release compile.
           # Main/deploy uses the real TRANSPORT_SECRET (still client-visible by design).
           SECRET="${TRANSPORT_SECRET:-ci-transport-protocol-key}"
-          API="${API_BASE_URL:-https://crm.nbdeveloper.co.in/api}"
+          API="${API_BASE_URL:-https://crm.nbsince1946.com/api}"
           if [ "${{ github.ref }}" = "refs/heads/main" ] && [ -z "${TRANSPORT_SECRET}" ]; then
             echo "Missing TRANSPORT_SECRET for main web build"
             exit 1

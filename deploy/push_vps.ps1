@@ -22,4 +22,4 @@ sed -i 's/\r$//' /opt/nb-crm/deploy/remote_full_update.sh
 bash /opt/nb-crm/deploy/remote_full_update.sh
 "@
 
-Write-Host "DONE. Open https://crm.nbdeveloper.co.in and hard-refresh (Ctrl+Shift+R)."
+Write-Host "DONE. Open https://crm.nbsince1946.com and hard-refresh (Ctrl+Shift+R)."

@@ -30,7 +30,7 @@ export class HubApiService {
       baseUrl ||
       env.NB_HUB_API_URL ||
       process.env.NB_HUB_API_URL ||
-      'https://crm.nbdeveloper.co.in/hub-api/api';
+      'https://crm.nbsince1946.com/hub-api/api';
     this.baseUrl = raw.trim().replace(/\/+$/, '');
     this.timeoutMs = timeoutMs;
   }

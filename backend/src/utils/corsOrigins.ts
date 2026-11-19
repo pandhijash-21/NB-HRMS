@@ -11,12 +11,15 @@ export function isAllowedCorsOrigin(origin: string | undefined): boolean {
   if (configuredCorsOrigins.includes(origin)) return true;
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
   if (/^https:\/\/(www\.)?nbdeveloper\.co\.in$/i.test(origin)) return true;
+  if (/^https:\/\/(www\.)?nbsince1946\.com$/i.test(origin)) return true;
+  if (/^https:\/\/crm\.nbsince1946\.com$/i.test(origin)) return true;
   if (/^https:\/\/crm\.nbdeveloper\.co\.in$/i.test(origin)) return true;
   return false;
 }
 
 export function allowedCorsOriginList(): string[] {
   const set = new Set(configuredCorsOrigins);
+  set.add('https://crm.nbsince1946.com');
   set.add('https://crm.nbdeveloper.co.in');
   return [...set];
 }

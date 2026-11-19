@@ -377,8 +377,8 @@ erDiagram
 
 | Component | Production Target | Deployment Mode | Port / Routing |
 | :--- | :--- | :--- | :--- |
-| **API Server** | Hostinger VPS / Render | Docker Compose / Systemd | `https://crm.nbdeveloper.co.in/api` (:4000) |
-| **Flutter Web** | Netlify / Hostinger Web | Static WASM/HTML5 Distribution | `https://crm.nbdeveloper.co.in` |
+| **API Server** | Hostinger VPS / Render | Docker Compose / Systemd | `https://crm.nbsince1946.com/api` (:4000) |
+| **Flutter Web** | Netlify / Hostinger Web | Static WASM/HTML5 Distribution | `https://crm.nbsince1946.com` |
 | **PostgreSQL** | Linux VPS Hostinger | Dedicated Docker Container | Internal port 5434 |
 | **Redis** | Linux VPS Hostinger | Dedicated Docker Container | Internal port 6380 |
 | **LiveKit Meet** | Linux VPS Hostinger | Docker Container with UDP range | Port 7880 + WebRTC UDP ports |

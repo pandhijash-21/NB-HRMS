@@ -4,18 +4,18 @@
 #
 # Env (optional):
 #   DEPLOY_SHA          Git commit SHA for this release
-#   PUBLIC_HEALTH_URL   default https://crm.nbdeveloper.co.in/health
-#   PUBLIC_FRONTEND_URL default https://crm.nbdeveloper.co.in/
+#   PUBLIC_HEALTH_URL   default https://crm.nbsince1946.com/health
+#   PUBLIC_FRONTEND_URL default https://crm.nbsince1946.com/
 set -eu
 
 ROOT=/opt/nb-crm
 COMPOSE="$ROOT/docker-compose.prod.yml"
 ENV_FILE="$ROOT/backend/.env.production"
 SHA="${DEPLOY_SHA:-unknown}"
-PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://crm.nbdeveloper.co.in/health}"
-PUBLIC_FRONTEND_URL="${PUBLIC_FRONTEND_URL:-https://crm.nbdeveloper.co.in/}"
+PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://crm.nbsince1946.com/health}"
+PUBLIC_FRONTEND_URL="${PUBLIC_FRONTEND_URL:-https://crm.nbsince1946.com/}"
 # Probe path without VPN auth_request (curl from the VPS uses a hosting IP and would get 403→404).
-PUBLIC_FRONTEND_HEALTH_URL="${PUBLIC_FRONTEND_HEALTH_URL:-https://crm.nbdeveloper.co.in/frontend-health}"
+PUBLIC_FRONTEND_HEALTH_URL="${PUBLIC_FRONTEND_HEALTH_URL:-https://crm.nbsince1946.com/frontend-health}"
 BACKEND_IMAGE_REPO="nb-crm-backend"
 PREV_IMAGE_FILE="$ROOT/.deploy-prev-backend-image"
 CURRENT_SHA_FILE="$ROOT/.deploy-current-sha"

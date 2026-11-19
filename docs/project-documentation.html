@@ -141,7 +141,7 @@
             <path d="M440 145 H520" stroke="#f59e0b" stroke-width="2"/>
             <path d="M670 62 H740" stroke="#94a3b8" stroke-width="2"/>
             <path d="M670 142 H740" stroke="#94a3b8" stroke-width="2"/>
-            <text x="490" y="320" fill="#94a3b8" text-anchor="middle" font-size="12">Production host: https://crm.nbdeveloper.co.in  ·  Flutter web on Netlify</text>
+            <text x="490" y="320" fill="#94a3b8" text-anchor="middle" font-size="12">Production host: https://crm.nbsince1946.com  ·  Flutter web on Netlify</text>
           </svg>
           <div class="flow" style="margin-top:14px">
             <span>Login</span><span class="arrow">→</span><span>JWT in Redis session</span><span class="arrow">→</span>
@@ -249,7 +249,7 @@
 
         <section id="flutter">
           <h2>8. Flutter client</h2>
-          <p>Package <code>nb_crm_flutter</code>. Debug can switch local vs live from login / shell chips. Release always uses <code>https://crm.nbdeveloper.co.in/api</code> unless <code>--dart-define=API_BASE_URL</code>.</p>
+          <p>Package <code>nb_crm_flutter</code>. Debug can switch local vs live from login / shell chips. Release always uses <code>https://crm.nbsince1946.com/api</code> unless <code>--dart-define=API_BASE_URL</code>.</p>
           <div class="grid g2">
             <div class="card">
               <h3>Feature folders</h3>
@@ -301,7 +301,7 @@
         <section id="security">
           <h2>11. Security</h2>
           <ul>
-            <li>Helmet + CORS allowlist (localhost, Vercel, Netlify, <code>crm.nbdeveloper.co.in</code>)</li>
+            <li>Helmet + CORS allowlist (localhost, Vercel, Netlify, <code>crm.nbsince1946.com</code>)</li>
             <li>VPN/proxy block in production (<code>/vpn-gate</code>)</li>
             <li>AES-256 at rest for Aadhaar/PAN; transport AES-GCM between Flutter and API</li>
             <li>RBAC on every mutating module; tenant license gates HRMS/CRM/ERP routers</li>
@@ -319,7 +319,7 @@
           <div class="card" style="overflow:auto">
             <table>
               <tr><th>Target</th><th>How</th></tr>
-              <tr><td>Hostinger VPS</td><td><code>docker-compose.prod.yml</code> + Traefik → <code>https://crm.nbdeveloper.co.in</code>. GitHub Action <code>deploy-hostinger.yml</code> on <code>main</code>.</td></tr>
+              <tr><td>Hostinger VPS</td><td><code>docker-compose.prod.yml</code> + Traefik → <code>https://crm.nbsince1946.com</code>. GitHub Action <code>deploy-hostinger.yml</code> on <code>main</code>.</td></tr>
               <tr><td>Flutter web</td><td>Netlify builds <code>nb_crm_flutter</code> with live API define.</td></tr>
               <tr><td>Render</td><td><code>render.yaml</code> service <code>nb-crm-api</code>, health <code>/health</code>.</td></tr>
               <tr><td>Local Docker</td><td><code>docker-compose.yml</code> full stack.</td></tr>

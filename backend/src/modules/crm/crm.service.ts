@@ -674,7 +674,7 @@ export const crmService = {
     const testPhone = `9${stamp.padStart(9, '0')}`.slice(0, 10);
     const adId = (campaign.adId || '').trim() || `TEST_AD_${stamp}`;
     // Prefer crm-public (VPN-exempt). /api/crm/.../webhook also works (mounted before auth).
-    const webhookUrl = `https://crm.nbdeveloper.co.in/api/crm-public/campaigns/${campaign.webhookToken}/webhook`;
+    const webhookUrl = `https://crm.nbsince1946.com/api/crm-public/campaigns/${campaign.webhookToken}/webhook`;
 
     let requestPayload: Record<string, any>;
     if (platform === 'META') {
@@ -6478,7 +6478,7 @@ export const crmService = {
       fs.writeFileSync(path.join(dir, 'legacy-tower.pdf'), file.buffer);
     } catch (_) {}
 
-    let url = 'https://crm.nbdeveloper.co.in/api/crm-public/brochures/legacy-tower.pdf';
+    let url = 'https://crm.nbsince1946.com/api/crm-public/brochures/legacy-tower.pdf';
     try {
       const cloudUrl = await uploadService.uploadToCloudinary(file, 'crm/brochures');
       if (cloudUrl) url = cloudUrl;
@@ -7857,8 +7857,8 @@ export const crmService = {
         // 3. Fallback: fetch from live domain if local container disk missed it
         if (!fileBuffer) {
           const remoteCandidates = [
-            `https://crm.nbdeveloper.co.in${doc.fileUrl}`,
-            `https://crm.nbdeveloper.co.in/api${doc.fileUrl}`,
+            `https://crm.nbsince1946.com${doc.fileUrl}`,
+            `https://crm.nbsince1946.com/api${doc.fileUrl}`,
           ];
           for (const remoteUrl of remoteCandidates) {
             try {

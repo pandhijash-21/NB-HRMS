@@ -72,7 +72,7 @@ class AppConfig {
   }
 
   static const String localApiBaseUrl = 'http://localhost:4000/api';
-  static const String liveApiBaseUrl = 'https://crm.nbdeveloper.co.in/api';
+  static const String liveApiBaseUrl = 'https://crm.nbsince1946.com/api';
 
   /// API base URL (includes `/api` suffix).
   ///

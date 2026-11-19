@@ -1705,7 +1705,7 @@ class TelephonyService {
       webhook_token: token,
       webhook_url: token ? client.buildWebhookUrl(token, false) : s.webhook_url,
       live_calls_webhook_url: token ? client.buildWebhookUrl(token, true) : '',
-      crm_receiver_url: 'https://crm.nbdeveloper.co.in/api/crm/telephony/webhook',
+      crm_receiver_url: 'https://crm.nbsince1946.com/api/crm/telephony/webhook',
     };
   }
 }

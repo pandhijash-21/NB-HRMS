@@ -10,6 +10,6 @@ sleep 3
 curl -sS --max-time 20 http://127.0.0.1:4000/health
 echo
 echo '---WEB JS GATE---'
-curl -sS --max-time 20 https://crm.nbdeveloper.co.in/main.dart.js | grep -o "LOCATION REQUIRED" | head -1
+curl -sS --max-time 20 https://crm.nbsince1946.com/main.dart.js | grep -o "LOCATION REQUIRED" | head -1
 echo
 ls -l /opt/nb-crm/deploy/frontend/flutter_bootstrap.js /opt/nb-crm/deploy/frontend/main.dart.js

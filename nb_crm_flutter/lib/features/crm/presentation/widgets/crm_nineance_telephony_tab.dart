@@ -769,7 +769,7 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
                       _copyBox(_webhookUrl.isNotEmpty ? _webhookUrl : _webhookToken),
                       const SizedBox(height: 6),
                       Text(
-                        'Also keep our CRM receiver for inbound logs: https://crm.nbdeveloper.co.in/api/crm/telephony/webhook',
+                        'Also keep our CRM receiver for inbound logs: https://crm.nbsince1946.com/api/crm/telephony/webhook',
                         style: TextStyle(fontSize: 11, color: widget.textMuted),
                       ),
                     ],

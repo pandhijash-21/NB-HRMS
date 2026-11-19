@@ -91,7 +91,7 @@ class _Chip extends StatelessWidget {
     return Tooltip(
       message: isLocal
           ? 'Using local database (localhost:4000). Tap to use live.'
-          : 'Using live database (crm.nbdeveloper.co.in). Tap to use local.',
+          : 'Using live database (crm.nbsince1946.com). Tap to use local.',
       child: InkWell(
         onTap: enabled ? onToggle : null,
         borderRadius: BorderRadius.circular(20),

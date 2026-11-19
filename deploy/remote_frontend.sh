@@ -10,10 +10,10 @@ echo '---IP HEALTH---'
 curl -sS http://127.0.0.1:4000/health
 echo
 echo '---HTTPS HEALTH---'
-curl -sS -k --max-time 20 https://crm.nbdeveloper.co.in/health || true
+curl -sS -k --max-time 20 https://crm.nbsince1946.com/health || true
 echo
 echo '---HTTPS ROOT---'
-curl -sS -k --max-time 20 -o /dev/null -w '%{http_code} %{content_type}\n' https://crm.nbdeveloper.co.in/ || true
+curl -sS -k --max-time 20 -o /dev/null -w '%{http_code} %{content_type}\n' https://crm.nbsince1946.com/ || true
 echo '---HTTP ROOT---'
-curl -sS --max-time 15 -o /dev/null -w '%{http_code} redirect:%{redirect_url}\n' http://crm.nbdeveloper.co.in/ || true
+curl -sS --max-time 15 -o /dev/null -w '%{http_code} redirect:%{redirect_url}\n' http://crm.nbsince1946.com/ || true
 docker logs traefik-traefik-1 --tail 30 2>&1 | tail -30

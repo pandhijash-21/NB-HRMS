@@ -103,7 +103,7 @@ class CrmCampaign {
   String get webhookUrl {
     if (webhookToken == null || webhookToken!.isEmpty) return '';
     // crm-public is VPN-exempt for Meta / Google / n8n cloud hosts
-    return 'https://crm.nbdeveloper.co.in/api/crm-public/campaigns/$webhookToken/webhook';
+    return 'https://crm.nbsince1946.com/api/crm-public/campaigns/$webhookToken/webhook';
   }
 
   String get platformLabel {

@@ -38,6 +38,21 @@ import { notifyNewOrAllocatedLead } from './crmLeadNotify';
 import { sendFinserveClientOtpEmail } from '../../utils/mailer';
 import { effectiveCompanyAdminRoleName, isAdminRole } from '../auth/permissions-map';
 import { deriveDayInOut } from '../attendance/dayPunch.rules';
+import {
+  clearPortalOtp,
+  ensureLoanApplication,
+  findLoanByPortalToken,
+  getHydratedLeadById,
+  getPortalOtp,
+  getPortalOtpRateLimit,
+  hydrateLeadsWithLoanApplications,
+  migrateLoanDataFromCustomFields,
+  setPortalOtp,
+  setPortalOtpRateLimit,
+  stripLoanKeysFromCustomFields,
+  syncBankApplications,
+  syncTentativeDates,
+} from './loanApplication.helpers';
 
 interface TelecallerPresence {
   employeeId: number;
@@ -1802,6 +1817,10 @@ export const crmService = {
       };
     });
 
+    if (scope === 'NB_FINSERVE') {
+      enrichedItems = await hydrateLeadsWithLoanApplications(enrichedItems);
+    }
+
     const maskPhones = await this.shouldMaskPhones({
       role: query.userRole,
       permissions: query.userPermissions,
@@ -3220,7 +3239,7 @@ export const crmService = {
         },
       });
     }
-    updateData.customFields = nextCustom;
+    updateData.customFields = isFinserve ? stripLoanKeysFromCustomFields(nextCustom) : nextCustom;
 
     // Cancel pending follow-ups when lead is binned via Not Interested
     if (status === 'NOT_INTERESTED') {
@@ -3266,6 +3285,10 @@ export const crmService = {
       })
       .catch((err) => console.error('[CRM WhatsApp Hook Error - Status Update]:', err));
 
+    if (existing.scope === 'NB_FINSERVE') {
+      const [hydrated] = await hydrateLeadsWithLoanApplications([updatedLead]);
+      return hydrated;
+    }
     return updatedLead;
   },
 
@@ -3348,21 +3371,29 @@ export const crmService = {
     const rawNameVal = dto.name || (dto.customFields && (dto.customFields['Client_Name'] || dto.customFields['client_name'] || dto.customFields['name'] || dto.customFields['customer_name']));
     const resolvedName = rawNameVal ? String(rawNameVal).trim() : undefined;
 
+    const shouldWriteCustom =
+      !!(dto.customFields || (!isStatusValid && dto.status) || resolvedPhone || resolvedName);
+    let nextCustomFields: Record<string, any> | undefined;
+    if (shouldWriteCustom) {
+      nextCustomFields = {
+        ...((existing.customFields as Record<string, any>) || {}),
+        ...(dto.customFields || {}),
+        ...(resolvedPhone ? { Phone: resolvedPhone, phone: resolvedPhone } : {}),
+        ...(resolvedName ? { Client_Name: resolvedName, client_name: resolvedName } : {}),
+        ...(!isStatusValid && dto.status ? { status: dto.status } : {}),
+      };
+      if (isFinserve) {
+        nextCustomFields = stripLoanKeysFromCustomFields(nextCustomFields);
+      }
+    }
+
     const updated = await prisma.crmLead.update({
       where: { id: leadId },
       data: {
         ...(resolvedName ? { name: resolvedName } : {}),
         ...(resolvedPhone ? { phone: resolvedPhone } : {}),
         ...(targetStatus ? { status: targetStatus } : {}),
-        ...((dto.customFields || (!isStatusValid && dto.status) || resolvedPhone || resolvedName) && {
-          customFields: {
-            ...((existing.customFields as Record<string, any>) || {}),
-            ...(dto.customFields || {}),
-            ...(resolvedPhone ? { Phone: resolvedPhone, phone: resolvedPhone } : {}),
-            ...(resolvedName ? { Client_Name: resolvedName, client_name: resolvedName } : {}),
-            ...(!isStatusValid && dto.status ? { status: dto.status } : {}),
-          },
-        }),
+        ...(nextCustomFields ? { customFields: nextCustomFields } : {}),
         ...(safeAssignedToId !== undefined && { assignedToId: safeAssignedToId }),
         ...(dto.notInterestedReason !== undefined && { notInterestedReason: dto.notInterestedReason }),
         ...(dto.notInterestedRemark !== undefined && { notInterestedRemark: dto.notInterestedRemark }),
@@ -3425,6 +3456,10 @@ export const crmService = {
       console.error('[CRM WhatsApp Hook Error in updateLead]:', whErr);
     }
 
+    if (existing.scope === 'NB_FINSERVE') {
+      const [hydrated] = await hydrateLeadsWithLoanApplications([updated]);
+      return hydrated;
+    }
     return updated;
   },
 
@@ -3951,7 +3986,7 @@ export const crmService = {
     const thresholdDate = new Date();
     thresholdDate.setDate(thresholdDate.getDate() - retentionDays);
 
-    const items = await prisma.crmLead.findMany({
+    let items = await prisma.crmLead.findMany({
       where: {
         scope,
         OR: [
@@ -3972,6 +4007,9 @@ export const crmService = {
         },
       },
     });
+    if (scope === 'NB_FINSERVE') {
+      items = await hydrateLeadsWithLoanApplications(items);
+    }
 
     const maskPhones = await this.shouldMaskPhones({
       role: maskOpts?.role,
@@ -6882,8 +6920,12 @@ export const crmService = {
   },
 
   // ---------------------------------------------------------------------------
-  // Finserve Application Form, Details & Client Portal
+  // Finserve Application Form, Details & Client Portal (CrmLoan* tables)
   // ---------------------------------------------------------------------------
+  async migrateFinserveLoanTables() {
+    return migrateLoanDataFromCustomFields();
+  },
+
   async updateLeadApplicationDetails(
     leadId: string,
     dto: UpdateLeadApplicationDetailsDto,
@@ -6892,44 +6934,43 @@ export const crmService = {
     const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
     if (!lead) throw new Error('Lead not found');
 
-    const currentCustom = (lead.customFields as any) || {};
-    const updatedCustom = {
-      ...currentCustom,
-      ...(dto.loanType && { loanType: dto.loanType }),
-      applicationDetails: {
-        ...(currentCustom.applicationDetails || {}),
-        ...(dto.applicationDetails || {}),
-        ...(dto.loanType && { loanType: dto.loanType }),
-      },
+    const loan = await ensureLoanApplication(leadId);
+    const currentDetails =
+      loan.applicationDetails && typeof loan.applicationDetails === 'object' && !Array.isArray(loan.applicationDetails)
+        ? { ...(loan.applicationDetails as Record<string, any>) }
+        : {};
+    const mergedDetails = {
+      ...currentDetails,
+      ...(dto.applicationDetails || {}),
+      ...(dto.loanType ? { loanType: dto.loanType } : {}),
     };
 
-    if (dto.applicationDetails?.personalEmail) {
-      updatedCustom.email = dto.applicationDetails.personalEmail;
-    }
-
-    const updateData: any = {
-      customFields: updatedCustom,
-      updatedAt: new Date(),
-    };
-
-    if (dto.status) {
-      updateData.status = dto.status;
-    }
-
-    const updated = await prisma.crmLead.update({
-      where: { id: leadId },
-      data: updateData,
-      include: {
-        assignedTo: {
-          include: { generalInfo: { select: { fullName: true } } },
-        },
-        telecaller: {
-          include: { generalInfo: { select: { fullName: true } } },
-        },
+    await prisma.crmLoanApplication.update({
+      where: { id: loan.id },
+      data: {
+        loanType: dto.loanType || loan.loanType,
+        applicationDetails: mergedDetails,
       },
     });
 
-    return updated;
+    const leadUpdate: any = {};
+    if (dto.status) leadUpdate.status = dto.status;
+    // Keep a denormalized email on lead customFields for search/display (non-loan key).
+    if (dto.applicationDetails?.personalEmail) {
+      const custom =
+        lead.customFields && typeof lead.customFields === 'object'
+          ? { ...(lead.customFields as Record<string, any>) }
+          : {};
+      custom.email = dto.applicationDetails.personalEmail;
+      leadUpdate.customFields = custom;
+    }
+    if (Object.keys(leadUpdate).length) {
+      await prisma.crmLead.update({ where: { id: leadId }, data: leadUpdate });
+    }
+
+    const hydrated = await getHydratedLeadById(leadId);
+    if (!hydrated) throw new Error('Lead not found');
+    return hydrated;
   },
 
   async updateFinservePipeline(
@@ -6940,71 +6981,76 @@ export const crmService = {
     const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
     if (!lead) throw new Error('Lead not found');
 
-    const currentCustom = (lead.customFields as any) || {};
-    const updatedCustom: any = {
-      ...currentCustom,
-    };
+    const loan = await ensureLoanApplication(leadId);
+    const data: Record<string, any> = {};
 
     if (dto.forwardedForProcessing) {
-      updatedCustom.forwardedForProcessing = {
-        ...(currentCustom.forwardedForProcessing || {}),
-        ...dto.forwardedForProcessing,
-        forwardedAt: dto.forwardedForProcessing.forwardedAt || new Date().toISOString(),
-        forwardedBy: updatedByName || dto.forwardedForProcessing.forwardedBy || 'System',
-      };
-    }
-
-    if (dto.bankApplications) {
-      updatedCustom.bankApplications = dto.bankApplications;
+      data.forwardedToId =
+        dto.forwardedForProcessing.forwardedToId != null
+          ? Number(dto.forwardedForProcessing.forwardedToId)
+          : loan.forwardedToId;
+      data.forwardedToName = dto.forwardedForProcessing.forwardedToName || loan.forwardedToName;
+      data.forwardedAt = dto.forwardedForProcessing.forwardedAt
+        ? new Date(dto.forwardedForProcessing.forwardedAt)
+        : new Date();
+      data.forwardedBy =
+        updatedByName || dto.forwardedForProcessing.forwardedBy || loan.forwardedBy || 'System';
+      data.forwardedRemarks = dto.forwardedForProcessing.remarks ?? loan.forwardedRemarks;
     }
 
     if (dto.finalBank) {
-      updatedCustom.finalBank = {
-        ...(currentCustom.finalBank || {}),
-        ...dto.finalBank,
-        finalizedAt: dto.finalBank.finalizedAt || new Date().toISOString(),
-        finalizedBy: updatedByName || dto.finalBank.finalizedBy || 'System',
-      };
+      data.finalBankName = dto.finalBank.bankName || loan.finalBankName;
+      data.finalBankRoi = dto.finalBank.roi ?? loan.finalBankRoi;
+      data.finalBankApplicationId = dto.finalBank.applicationId ?? loan.finalBankApplicationId;
+      data.finalBankId = dto.finalBank.bankId ?? loan.finalBankId;
+      data.loanAgreementNumber = dto.finalBank.loanAgreementNumber ?? loan.loanAgreementNumber;
+      data.finalizedAt = dto.finalBank.finalizedAt
+        ? new Date(dto.finalBank.finalizedAt)
+        : new Date();
+      data.finalizedBy = updatedByName || dto.finalBank.finalizedBy || loan.finalizedBy || 'System';
     }
 
     if (dto.disbursementDetails) {
-      updatedCustom.disbursementDetails = {
-        ...(currentCustom.disbursementDetails || {}),
-        ...dto.disbursementDetails,
-      };
+      const disb = dto.disbursementDetails;
+      if (disb.currentTentativeDate != null) {
+        data.currentTentativeDate = disb.currentTentativeDate
+          ? new Date(disb.currentTentativeDate)
+          : null;
+      }
+      if (disb.isDisbursed != null) data.isDisbursed = !!disb.isDisbursed;
+      if (disb.disbursedAt != null) {
+        data.disbursedAt = disb.disbursedAt ? new Date(disb.disbursedAt) : null;
+      }
+      if (disb.disbursedAmount != null) data.disbursedAmount = disb.disbursedAmount;
+      if (disb.remarks != null) data.disbursementRemarks = disb.remarks;
+      if (disb.flowClosed != null) data.flowClosed = !!disb.flowClosed;
+      if (Array.isArray(disb.tentativeDates)) {
+        await syncTentativeDates(loan.id, disb.tentativeDates);
+      }
     }
 
-    if (dto.loanStage) {
-      updatedCustom.loanStage = dto.loanStage;
+    if (dto.loanStage) data.loanStage = dto.loanStage;
+
+    if (Object.keys(data).length) {
+      await prisma.crmLoanApplication.update({ where: { id: loan.id }, data });
     }
 
-    const updateData: any = {
-      customFields: updatedCustom,
-      updatedAt: new Date(),
-    };
+    if (dto.bankApplications) {
+      await syncBankApplications(loan.id, dto.bankApplications);
+    }
 
+    const leadUpdate: any = {};
     if (dto.forwardedForProcessing?.forwardedToId) {
-      updateData.assignedToId = Number(dto.forwardedForProcessing.forwardedToId);
+      leadUpdate.assignedToId = Number(dto.forwardedForProcessing.forwardedToId);
+    }
+    if (dto.status) leadUpdate.status = dto.status;
+    if (Object.keys(leadUpdate).length) {
+      await prisma.crmLead.update({ where: { id: leadId }, data: leadUpdate });
     }
 
-    if (dto.status) {
-      updateData.status = dto.status;
-    }
-
-    const updated = await prisma.crmLead.update({
-      where: { id: leadId },
-      data: updateData,
-      include: {
-        assignedTo: {
-          include: { generalInfo: { select: { fullName: true } } },
-        },
-        telecaller: {
-          include: { generalInfo: { select: { fullName: true } } },
-        },
-      },
-    });
-
-    return updated;
+    const hydrated = await getHydratedLeadById(leadId);
+    if (!hydrated) throw new Error('Lead not found');
+    return hydrated;
   },
 
   async addBankQuery(
@@ -7018,45 +7064,30 @@ export const crmService = {
       throw new Error('Query and Required details are mandatory');
     }
 
-    const currentCustom = (lead.customFields as any) || {};
-    const queries: BankQueryItem[] = Array.isArray(currentCustom.bankQueries)
-      ? [...currentCustom.bankQueries]
-      : [];
-
-    const newQuery: BankQueryItem = {
-      id: `query_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      query: dto.query.trim(),
-      required: dto.required.trim(),
-      stage: dto.stage || 'General',
-      status: 'OPEN',
-      raisedAt: new Date().toISOString(),
-      raisedBy: raisedByName || 'Staff',
-    };
-
-    queries.unshift(newQuery);
-
-    const updatedCustom = {
-      ...currentCustom,
-      bankQueries: queries,
-    };
-
-    const updated = await prisma.crmLead.update({
-      where: { id: leadId },
+    const loan = await ensureLoanApplication(leadId);
+    const created = await prisma.crmLoanBankQuery.create({
       data: {
-        customFields: updatedCustom,
-        updatedAt: new Date(),
-      },
-      include: {
-        assignedTo: {
-          include: { generalInfo: { select: { fullName: true } } },
-        },
-        telecaller: {
-          include: { generalInfo: { select: { fullName: true } } },
-        },
+        loanApplicationId: loan.id,
+        query: dto.query.trim(),
+        required: dto.required.trim(),
+        stage: dto.stage || 'General',
+        status: 'OPEN',
+        raisedBy: raisedByName || 'Staff',
       },
     });
 
-    return { updatedLead: updated, query: newQuery };
+    const newQuery: BankQueryItem = {
+      id: created.id,
+      query: created.query,
+      required: created.required,
+      stage: created.stage || 'General',
+      status: 'OPEN',
+      raisedAt: created.raisedAt.toISOString(),
+      raisedBy: created.raisedBy || 'Staff',
+    };
+
+    const hydrated = await getHydratedLeadById(leadId);
+    return { updatedLead: hydrated, query: newQuery };
   },
 
   async resolveBankQuery(
@@ -7068,67 +7099,59 @@ export const crmService = {
     const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
     if (!lead) throw new Error('Lead not found');
 
-    const currentCustom = (lead.customFields as any) || {};
-    const queries: BankQueryItem[] = Array.isArray(currentCustom.bankQueries)
-      ? [...currentCustom.bankQueries]
-      : [];
+    const loan = await ensureLoanApplication(leadId);
+    const existing = await prisma.crmLoanBankQuery.findFirst({
+      where: { id: queryId, loanApplicationId: loan.id },
+    });
+    if (!existing) throw new Error('Query not found');
 
-    const idx = queries.findIndex((q) => q.id === queryId);
-    if (idx === -1) throw new Error('Query not found');
-
-    queries[idx] = {
-      ...queries[idx],
-      status: 'RESOLVED',
-      resolvedAt: new Date().toISOString(),
-      resolvedBy: resolvedByName || 'Staff',
-      resolutionNotes: dto.resolutionNotes?.trim() || '',
-    };
-
-    const updatedCustom = {
-      ...currentCustom,
-      bankQueries: queries,
-    };
-
-    const updated = await prisma.crmLead.update({
-      where: { id: leadId },
+    const updatedQuery = await prisma.crmLoanBankQuery.update({
+      where: { id: queryId },
       data: {
-        customFields: updatedCustom,
-        updatedAt: new Date(),
-      },
-      include: {
-        assignedTo: {
-          include: { generalInfo: { select: { fullName: true } } },
-        },
-        telecaller: {
-          include: { generalInfo: { select: { fullName: true } } },
-        },
+        status: 'RESOLVED',
+        resolvedAt: new Date(),
+        resolvedBy: resolvedByName || 'Staff',
+        resolutionNotes: dto.resolutionNotes?.trim() || '',
       },
     });
 
-    return { updatedLead: updated, query: queries[idx] };
+    const query: BankQueryItem = {
+      id: updatedQuery.id,
+      query: updatedQuery.query,
+      required: updatedQuery.required,
+      stage: updatedQuery.stage || undefined,
+      status: 'RESOLVED',
+      raisedAt: updatedQuery.raisedAt.toISOString(),
+      raisedBy: updatedQuery.raisedBy || undefined,
+      resolvedAt: updatedQuery.resolvedAt?.toISOString(),
+      resolvedBy: updatedQuery.resolvedBy || undefined,
+      resolutionNotes: updatedQuery.resolutionNotes || undefined,
+    };
+
+    const hydrated = await getHydratedLeadById(leadId);
+    return { updatedLead: hydrated, query };
   },
 
   async generateClientPortalLink(leadId: string, baseUrl?: string) {
     const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
     if (!lead) throw new Error('Lead not found');
 
-    const custom = (lead.customFields as any) || {};
-    let token = custom.portalToken;
+    const loan = await ensureLoanApplication(leadId);
+    let token = loan.portalToken;
     if (!token) {
       token = crypto.randomBytes(16).toString('hex');
-      custom.portalToken = token;
     }
 
     const port = process.env.PORT || '4000';
     const base = (baseUrl || `http://localhost:${port}`).replace(/\/+$/, '');
     const link = `${base}/client-portal?token=${token}`;
-    custom.portalLink = link;
 
-    const updatedLead = await prisma.crmLead.update({
-      where: { id: leadId },
-      data: { customFields: custom },
+    await prisma.crmLoanApplication.update({
+      where: { id: loan.id },
+      data: { portalToken: token, portalLink: link },
     });
 
+    const hydrated = await getHydratedLeadById(leadId);
     return {
       token,
       link,
@@ -7136,20 +7159,21 @@ export const crmService = {
       leadId: lead.id,
       leadName: lead.name,
       phone: lead.phone,
-      lead: updatedLead,
+      lead: hydrated,
     };
   },
 
   async getClientPortalInfo(token: string) {
     if (!token) throw new Error('Portal token is required');
-    const leads = await prisma.crmLead.findMany({
-      where: { isDeleted: false },
-    });
-    const lead = leads.find((l) => (l.customFields as any)?.portalToken === token);
-    if (!lead) throw new Error('Invalid or expired application link');
+    const loan = await findLoanByPortalToken(token);
+    if (!loan?.lead || loan.lead.isDeleted) throw new Error('Invalid or expired application link');
 
+    const lead = loan.lead;
     const custom = (lead.customFields as any) || {};
-    const appDetails = custom.applicationDetails || {};
+    const appDetails =
+      loan.applicationDetails && typeof loan.applicationDetails === 'object'
+        ? (loan.applicationDetails as Record<string, any>)
+        : {};
     const candidatePhones = [
       appDetails.mobileNo,
       lead.phone,
@@ -7173,23 +7197,23 @@ export const crmService = {
       leadName: lead.name || custom.Client_Name || 'Valued Client',
       maskedPhone,
       phoneHint: primaryPhone.length >= 4 ? primaryPhone.slice(-4) : '',
-      loanType: custom.Loan_Type || custom.loanType || appDetails.loanType || 'Personal Loan',
+      loanType: loan.loanType || custom.Loan_Type || appDetails.loanType || 'Personal Loan',
     };
   },
 
   async sendClientPortalOtp(token: string, mobile: string) {
     if (!token || !mobile) throw new Error('Token and registered mobile number are required');
-    const leads = await prisma.crmLead.findMany({
-      where: { isDeleted: false },
-    });
-    const lead = leads.find((l) => (l.customFields as any)?.portalToken === token);
-    if (!lead) throw new Error('Invalid or expired application link');
+    const loan = await findLoanByPortalToken(token);
+    if (!loan?.lead || loan.lead.isDeleted) throw new Error('Invalid or expired application link');
 
+    const lead = loan.lead;
     const cleanInput = mobile.replace(/\D/g, '').slice(-10);
     const custom = (lead.customFields as any) || {};
-    const appDetails = custom.applicationDetails || {};
-    
-    // Support all lead phone sources: application details, lead record, and custom fields
+    const appDetails =
+      loan.applicationDetails && typeof loan.applicationDetails === 'object'
+        ? (loan.applicationDetails as Record<string, any>)
+        : {};
+
     const validPhones = [
       appDetails.mobileNo,
       lead.phone,
@@ -7214,12 +7238,10 @@ export const crmService = {
       appDetails.officialEmail ||
       custom.email ||
       custom.Email ||
-      (lead as any).email ||
       '';
 
-    // Rate Limiting: 30s cooldown between sends, max 3 attempts per 1-hour window, otherwise 1-hour lockout.
     const now = Date.now();
-    const rateLimit = custom.portalOtpRateLimit || { attempts: 0, firstAttemptAt: 0, lastSentAt: 0, lockoutUntil: 0 };
+    const rateLimit = await getPortalOtpRateLimit(token);
 
     if (rateLimit.lockoutUntil && now < rateLimit.lockoutUntil) {
       const remainingMins = Math.ceil((rateLimit.lockoutUntil - now) / 60000);
@@ -7245,29 +7267,20 @@ export const crmService = {
 
     if (rateLimit.attempts >= 3) {
       rateLimit.lockoutUntil = now + 60 * 60 * 1000;
-      custom.portalOtpRateLimit = rateLimit;
-      await prisma.crmLead.update({
-        where: { id: lead.id },
-        data: { customFields: custom },
-      });
+      await setPortalOtpRateLimit(token, rateLimit);
       throw new Error('Maximum verification attempts reached (3/3). Please try again after 1 hour.');
     }
 
     rateLimit.attempts += 1;
     if (!rateLimit.firstAttemptAt) rateLimit.firstAttemptAt = now;
     rateLimit.lastSentAt = now;
-    custom.portalOtpRateLimit = rateLimit;
+    await setPortalOtpRateLimit(token, rateLimit);
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    custom.portalOtp = {
+    await setPortalOtp(token, {
       code: otp,
       expiresAt: Date.now() + 10 * 60 * 1000,
       mobile: cleanInput,
-    };
-
-    await prisma.crmLead.update({
-      where: { id: lead.id },
-      data: { customFields: custom },
     });
 
     let emailSent = false;
@@ -7300,15 +7313,11 @@ export const crmService = {
 
   async verifyClientPortalOtp(token: string, mobile: string, otp: string) {
     if (!token || !mobile || !otp) throw new Error('Token, mobile number, and OTP are required');
-    const leads = await prisma.crmLead.findMany({
-      where: { isDeleted: false },
-    });
-    const lead = leads.find((l) => (l.customFields as any)?.portalToken === token);
-    if (!lead) throw new Error('Invalid or expired application link');
+    const loan = await findLoanByPortalToken(token);
+    if (!loan?.lead || loan.lead.isDeleted) throw new Error('Invalid or expired application link');
 
-    const cleanInput = mobile.replace(/\D/g, '').slice(-10);
-    const custom = (lead.customFields as any) || {};
-    const portalOtp = custom.portalOtp;
+    const lead = loan.lead;
+    const portalOtp = await getPortalOtp(token);
 
     if (!portalOtp || portalOtp.code !== otp.trim()) {
       throw new Error('Invalid verification code entered');
@@ -7316,36 +7325,34 @@ export const crmService = {
     if (Date.now() > portalOtp.expiresAt) {
       throw new Error('Verification code has expired. Please request a new code.');
     }
+    await clearPortalOtp(token);
 
     const settings = await this.getSettings('NB_FINSERVE');
     const loanTypeDocsMap: Record<string, string[]> = JSON.parse(settings.loan_type_docs_map || '{}');
     const loanDocTypes: any[] = JSON.parse(settings.loan_doc_types || '[]');
 
-    const rawAppDetails = custom.applicationDetails || {};
+    const custom = (lead.customFields as any) || {};
+    const rawAppDetails =
+      loan.applicationDetails && typeof loan.applicationDetails === 'object'
+        ? (loan.applicationDetails as Record<string, any>)
+        : {};
     const loanAmountVal =
       rawAppDetails.requiredLoanAmount ||
       custom.Amount ||
       custom.amount ||
       custom.loanAmount ||
       custom.Budget ||
-      (lead as any).value ||
       '';
 
     const appDetails = {
       requiredLoanAmount: loanAmountVal ? String(loanAmountVal) : '',
       loanPurpose:
         rawAppDetails.loanPurpose ||
+        loan.loanType ||
         custom.Loan_Type ||
-        custom.loanType ||
         custom.purpose ||
-        custom.Project_Type ||
         'Personal / Home Loan',
-      personalEmail:
-        rawAppDetails.personalEmail ||
-        custom.Email ||
-        custom.email ||
-        (lead as any).email ||
-        '',
+      personalEmail: rawAppDetails.personalEmail || custom.Email || custom.email || '',
       mobileNo:
         rawAppDetails.mobileNo ||
         lead.phone ||
@@ -7353,46 +7360,46 @@ export const crmService = {
         custom.phone ||
         custom.mobile ||
         '',
-      alternateNo:
-        rawAppDetails.alternateNo ||
-        custom.alternateNo ||
-        custom.Alternate_Phone ||
-        '',
+      alternateNo: rawAppDetails.alternateNo || custom.alternateNo || custom.Alternate_Phone || '',
       currentAddress:
         rawAppDetails.currentAddress ||
         custom.Address ||
         custom.address ||
         custom.Location ||
-        custom.location ||
         '',
       permanentAddress:
         rawAppDetails.permanentAddress ||
         custom.Address ||
         custom.address ||
         custom.Location ||
-        custom.location ||
         '',
-      companyName:
-        rawAppDetails.companyName ||
-        custom.Company ||
-        custom.company ||
-        custom.companyName ||
-        '',
-      companyAddress:
-        rawAppDetails.companyAddress ||
-        custom.Company_Address ||
-        custom.companyAddress ||
-        '',
+      companyName: rawAppDetails.companyName || custom.Company || custom.company || '',
+      companyAddress: rawAppDetails.companyAddress || custom.Company_Address || custom.companyAddress || '',
       ...rawAppDetails,
     };
     if (!appDetails.requiredLoanAmount && loanAmountVal) {
       appDetails.requiredLoanAmount = String(loanAmountVal);
     }
 
-    const loanType = custom.Loan_Type || custom.loanType || appDetails.loanType || 'Personal Loan';
-    const requiredDocIds = loanTypeDocsMap[loanType] || loanTypeDocsMap['Personal Loan'] || loanTypeDocsMap['Home Loan'] || [];
+    const loanType =
+      loan.loanType || custom.Loan_Type || (appDetails as any).loanType || 'Personal Loan';
+    const requiredDocIds =
+      loanTypeDocsMap[loanType] ||
+      loanTypeDocsMap['Personal Loan'] ||
+      loanTypeDocsMap['Home Loan'] ||
+      [];
 
-    const uploadedDocs: any[] = custom.documents || [];
+    const uploadedDocs = (loan.documents || []).map((d) => ({
+      id: d.id,
+      docTypeId: d.docTypeId,
+      docName: d.docName,
+      fileUrl: d.fileUrl,
+      fileName: d.fileName,
+      fileSize: d.fileSize ?? undefined,
+      uploadedAt: d.uploadedAt.toISOString(),
+      uploadedBy: d.uploadedBy || undefined,
+      status: d.status,
+    }));
 
     const requiredDocsList = requiredDocIds.map((docId) => {
       const docDef = loanDocTypes.find((d) => d.id === docId) || {
@@ -7422,66 +7429,57 @@ export const crmService = {
         applicationDetails: appDetails,
         requiredDocs: requiredDocsList,
         uploadedDocs,
-        isSubmitted: !!custom.clientPortalSubmitted,
-        submittedAt: custom.clientPortalSubmittedAt || null,
-        clientPortalStatus: custom.clientPortalStatus || 'DRAFT',
+        isSubmitted: loan.clientPortalStatus === 'SUBMITTED' || !!loan.clientPortalConfirmed,
+        submittedAt: loan.clientPortalSubmittedAt?.toISOString() || null,
+        clientPortalStatus: loan.clientPortalStatus || 'DRAFT',
       },
     };
   },
 
   async submitClientPortal(token: string) {
     if (!token) throw new Error('Application token is required');
-    const leads = await prisma.crmLead.findMany({
-      where: { isDeleted: false },
-    });
-    const lead = leads.find((l) => (l.customFields as any)?.portalToken === token);
-    if (!lead) throw new Error('Invalid or expired application link');
+    const loan = await findLoanByPortalToken(token);
+    if (!loan?.lead || loan.lead.isDeleted) throw new Error('Invalid or expired application link');
 
-    const custom = (lead.customFields as any) || {};
-    if (custom.clientPortalSubmitted) {
+    if (loan.clientPortalStatus === 'SUBMITTED' || loan.clientPortalConfirmed) {
       return {
         success: true,
         alreadySubmitted: true,
         message: 'Application has already been confirmed and submitted.',
-        submittedAt: custom.clientPortalSubmittedAt,
+        submittedAt: loan.clientPortalSubmittedAt?.toISOString(),
       };
     }
 
-    const documents = custom.documents || [];
-    if (!documents.length) {
+    const docCount = await prisma.crmLoanDocument.count({
+      where: { loanApplicationId: loan.id },
+    });
+    if (!docCount) {
       throw new Error('Please upload at least one required loan document before submitting.');
     }
 
-    const submittedAt = new Date().toISOString();
-    custom.clientPortalSubmitted = true;
-    custom.clientPortalStatus = 'SUBMITTED';
-    custom.clientPortalSubmittedAt = submittedAt;
-    custom.clientPortalConfirmed = true;
-
-    await prisma.crmLead.update({
-      where: { id: lead.id },
-      data: { customFields: custom },
+    const submittedAt = new Date();
+    await prisma.crmLoanApplication.update({
+      where: { id: loan.id },
+      data: {
+        clientPortalStatus: 'SUBMITTED',
+        clientPortalSubmittedAt: submittedAt,
+        clientPortalConfirmed: true,
+      },
     });
 
     return {
       success: true,
       message: 'Application confirmed and locked successfully. Your loan advisor can now review your file.',
-      submittedAt,
+      submittedAt: submittedAt.toISOString(),
     };
   },
 
   async uploadClientPortalDoc(token: string, docTypeId: string, docName: string, file: { originalname: string; buffer: Buffer; size: number; mimetype: string }) {
     if (!token || !docTypeId || !file) throw new Error('Token, document type, and file are required');
-    const leads = await prisma.crmLead.findMany({
-      where: { isDeleted: false },
-    });
-    const lead = leads.find((l) => (l.customFields as any)?.portalToken === token);
-    if (!lead) throw new Error('Invalid or expired application link');
+    const loan = await findLoanByPortalToken(token);
+    if (!loan?.lead || loan.lead.isDeleted) throw new Error('Invalid or expired application link');
 
-    const custom = (lead.customFields as any) || {};
-    // Allow updating or replacing documents so applicants and staff can update their file
-
-    // Verify file size & format against doc definition from settings
+    const lead = loan.lead;
     const settings = await this.getSettings('NB_FINSERVE');
     const loanDocTypes: any[] = JSON.parse(settings.loan_doc_types || '[]');
     const docDef = loanDocTypes.find((d) => d.id === docTypeId);
@@ -7521,38 +7519,59 @@ export const crmService = {
       }
     }
 
-    const documents: any[] = custom.documents || [];
+    const existing = await prisma.crmLoanDocument.findFirst({
+      where: { loanApplicationId: loan.id, docTypeId },
+    });
 
-    const existingIndex = documents.findIndex((d) => d.docTypeId === docTypeId);
-    const newDocItem = {
-      id: `doc_${Date.now()}`,
+    const docData = {
       docTypeId,
       docName: docName || docTypeId.replace(/_/g, ' ').toUpperCase(),
       fileName: file.originalname,
       fileUrl,
       fileSize: file.size,
-      uploadedAt: new Date().toISOString(),
+      uploadedAt: new Date(),
       uploadedBy: 'CLIENT',
       status: 'VERIFIED',
+      source: 'portal',
     };
 
-    if (existingIndex >= 0) {
-      documents[existingIndex] = newDocItem;
-    } else {
-      documents.push(newDocItem);
-    }
+    const saved = existing
+      ? await prisma.crmLoanDocument.update({ where: { id: existing.id }, data: docData })
+      : await prisma.crmLoanDocument.create({
+          data: { loanApplicationId: loan.id, ...docData },
+        });
 
-    custom.documents = documents;
-
-    await prisma.crmLead.update({
-      where: { id: lead.id },
-      data: { customFields: custom },
+    const documents = await prisma.crmLoanDocument.findMany({
+      where: { loanApplicationId: loan.id },
+      orderBy: { uploadedAt: 'desc' },
     });
+
+    const newDocItem = {
+      id: saved.id,
+      docTypeId: saved.docTypeId,
+      docName: saved.docName,
+      fileName: saved.fileName,
+      fileUrl: saved.fileUrl,
+      fileSize: saved.fileSize ?? undefined,
+      uploadedAt: saved.uploadedAt.toISOString(),
+      uploadedBy: saved.uploadedBy || 'CLIENT',
+      status: saved.status,
+    };
 
     return {
       success: true,
       document: newDocItem,
-      uploadedDocs: documents,
+      uploadedDocs: documents.map((d) => ({
+        id: d.id,
+        docTypeId: d.docTypeId,
+        docName: d.docName,
+        fileName: d.fileName,
+        fileUrl: d.fileUrl,
+        fileSize: d.fileSize ?? undefined,
+        uploadedAt: d.uploadedAt.toISOString(),
+        uploadedBy: d.uploadedBy || undefined,
+        status: d.status,
+      })),
     };
   },
 
@@ -7695,6 +7714,7 @@ export const crmService = {
     const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
     if (!lead) throw new Error('Lead not found');
 
+    const loan = await ensureLoanApplication(leadId);
     const ext = path.extname(file.originalname) || '.pdf';
     const safeName = `${lead.id}_${docTypeId}_${Date.now()}${ext}`;
     let fileUrl = '';
@@ -7718,53 +7738,86 @@ export const crmService = {
       }
     }
 
-    const custom = (lead.customFields as any) || {};
-    const documents: any[] = custom.documents || [];
+    const existing = await prisma.crmLoanDocument.findFirst({
+      where: { loanApplicationId: loan.id, docTypeId },
+    });
 
-    const existingIndex = documents.findIndex((d) => d.docTypeId === docTypeId);
-    const newDocItem = {
-      id: `doc_${Date.now()}`,
+    const docData = {
       docTypeId,
       docName: docName || docTypeId.replace(/_/g, ' ').toUpperCase(),
       fileName: file.originalname,
       fileUrl,
       fileSize: file.size,
-      uploadedAt: new Date().toISOString(),
+      uploadedAt: new Date(),
       uploadedBy: uploadedBy || 'SALES_REP',
       status: 'VERIFIED',
+      source: 'agent',
     };
 
-    if (existingIndex >= 0) {
-      documents[existingIndex] = newDocItem;
-    } else {
-      documents.push(newDocItem);
-    }
+    const saved = existing
+      ? await prisma.crmLoanDocument.update({ where: { id: existing.id }, data: docData })
+      : await prisma.crmLoanDocument.create({
+          data: { loanApplicationId: loan.id, ...docData },
+        });
 
-    custom.documents = documents;
-
-    await prisma.crmLead.update({
-      where: { id: lead.id },
-      data: { customFields: custom },
+    const documents = await prisma.crmLoanDocument.findMany({
+      where: { loanApplicationId: loan.id },
+      orderBy: { uploadedAt: 'desc' },
     });
+
+    const newDocItem = {
+      id: saved.id,
+      docTypeId: saved.docTypeId,
+      docName: saved.docName,
+      fileName: saved.fileName,
+      fileUrl: saved.fileUrl,
+      fileSize: saved.fileSize ?? undefined,
+      uploadedAt: saved.uploadedAt.toISOString(),
+      uploadedBy: saved.uploadedBy || 'SALES_REP',
+      status: saved.status,
+    };
 
     return {
       success: true,
       document: newDocItem,
-      uploadedDocs: documents,
+      uploadedDocs: documents.map((d) => ({
+        id: d.id,
+        docTypeId: d.docTypeId,
+        docName: d.docName,
+        fileName: d.fileName,
+        fileUrl: d.fileUrl,
+        fileSize: d.fileSize ?? undefined,
+        uploadedAt: d.uploadedAt.toISOString(),
+        uploadedBy: d.uploadedBy || undefined,
+        status: d.status,
+      })),
     };
   },
 
   async downloadLeadDocsZip(leadIdOrToken: string, res: Response, isToken: boolean = false) {
     let lead: any = null;
+    let documents: any[] = [];
+
     if (isToken) {
-      const leads = await prisma.crmLead.findMany({ where: { isDeleted: false } });
-      lead = leads.find((l) => (l.customFields as any)?.portalToken === leadIdOrToken);
+      const loan = await findLoanByPortalToken(leadIdOrToken);
+      if (loan?.lead && !loan.lead.isDeleted) {
+        lead = loan.lead;
+        documents = loan.documents || [];
+      }
     } else {
       lead = await prisma.crmLead.findUnique({ where: { id: leadIdOrToken } });
-      if (!lead) {
-        // Fallback: search by portalToken
-        const leads = await prisma.crmLead.findMany({ where: { isDeleted: false } });
-        lead = leads.find((l) => (l.customFields as any)?.portalToken === leadIdOrToken);
+      if (lead) {
+        const loan = await prisma.crmLoanApplication.findUnique({
+          where: { leadId: lead.id },
+          include: { documents: true },
+        });
+        documents = loan?.documents || [];
+      } else {
+        const loan = await findLoanByPortalToken(leadIdOrToken);
+        if (loan?.lead && !loan.lead.isDeleted) {
+          lead = loan.lead;
+          documents = loan.documents || [];
+        }
       }
     }
 
@@ -7773,13 +7826,24 @@ export const crmService = {
       return;
     }
 
-    const custom = (lead.customFields as any) || {};
-    const documents: any[] = custom.documents || [];
+    // Legacy fallback: documents still only in customFields
+    if (!documents.length) {
+      const custom = (lead.customFields as any) || {};
+      documents = Array.isArray(custom.documents) ? custom.documents : [];
+    }
 
     if (!documents || documents.length === 0) {
       res.status(400).send('No documents have been uploaded for this client application.');
       return;
     }
+
+    // Normalize Prisma rows to { fileUrl, fileName, docName, docTypeId }
+    documents = documents.map((d: any) => ({
+      fileUrl: d.fileUrl,
+      fileName: d.fileName,
+      docName: d.docName,
+      docTypeId: d.docTypeId,
+    }));
 
     const archive = initZipArchive({ zlib: { level: 9 } });
 

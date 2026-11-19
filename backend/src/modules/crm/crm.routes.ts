@@ -291,6 +291,7 @@ crmRouter.post('/leads/:id/transfer', generalCrmGuard, crmController.transferLea
 crmRouter.patch('/leads/:id/status', generalCrmGuard, crmController.updateLeadStatus);
 crmRouter.patch('/leads/:id', generalCrmGuard, crmController.updateLead);
 crmRouter.post('/admin/wipe-real-estate-presales', generalCrmGuard, crmController.wipeRealEstatePreSalesData);
+crmRouter.post('/admin/migrate-finserve-loan-tables', generalCrmGuard, crmController.migrateFinserveLoanTables);
 crmRouter.post('/leads/:id/whatsapp', generalCrmGuard, crmController.sendLeadWhatsapp);
 crmRouter.delete('/leads/:id', generalCrmGuard, crmController.moveToBin);
 crmRouter.patch('/leads/:id/restore', generalCrmGuard, crmController.restoreFromBin);

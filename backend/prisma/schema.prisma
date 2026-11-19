@@ -3690,6 +3690,7 @@ model CrmLead {
   telecaller Employee?     @relation("CrmTelecaller", fields: [telecallerId], references: [id], onDelete: SetNull)
   followUps  CrmFollowUp[]
   callLogs   CrmCallLog[]
+  loanApplication CrmLoanApplication?
 
   @@index([scope])
   @@index([campaignId])
@@ -3699,6 +3700,144 @@ model CrmLead {
   @@index([assignedToId])
   @@index([telecallerId])
   @@map("crm_leads")
+}
+
+// =============================================================================
+// NB Capital / Finserve loan pipeline (dedicated tables; not lead customFields)
+// =============================================================================
+
+model CrmLoanApplication {
+  id     String @id @default(uuid())
+  leadId String @unique @map("lead_id")
+
+  loanType  String? @map("loan_type")
+  loanStage String? @map("loan_stage")
+
+  /// Configurable form answers (settings-driven keys)
+  applicationDetails Json @default("{}") @map("application_details")
+
+  forwardedToId      Int?      @map("forwarded_to_id")
+  forwardedToName    String?   @map("forwarded_to_name")
+  forwardedAt        DateTime? @map("forwarded_at")
+  forwardedBy        String?   @map("forwarded_by")
+  forwardedRemarks   String?   @map("forwarded_remarks") @db.Text
+
+  finalBankName           String?   @map("final_bank_name")
+  finalBankRoi            String?   @map("final_bank_roi")
+  finalBankApplicationId  String?   @map("final_bank_application_id")
+  finalBankId             String?   @map("final_bank_id")
+  loanAgreementNumber     String?   @map("loan_agreement_number")
+  finalizedAt             DateTime? @map("finalized_at")
+  finalizedBy             String?   @map("finalized_by")
+
+  currentTentativeDate DateTime? @map("current_tentative_date")
+  isDisbursed          Boolean   @default(false) @map("is_disbursed")
+  disbursedAt          DateTime? @map("disbursed_at")
+  disbursedAmount      String?   @map("disbursed_amount")
+  disbursementRemarks  String?   @map("disbursement_remarks") @db.Text
+  flowClosed           Boolean   @default(false) @map("flow_closed")
+
+  portalToken              String?   @unique @map("portal_token")
+  portalLink               String?   @map("portal_link") @db.Text
+  clientPortalStatus       String    @default("DRAFT") @map("client_portal_status")
+  clientPortalSubmittedAt  DateTime? @map("client_portal_submitted_at")
+  clientPortalConfirmed    Boolean   @default(false) @map("client_portal_confirmed")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lead            CrmLead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  bankApplications CrmLoanBankApplication[]
+  bankQueries     CrmLoanBankQuery[]
+  documents       CrmLoanDocument[]
+  tentativeDates  CrmLoanTentativeDate[]
+
+  @@index([loanStage])
+  @@index([clientPortalStatus])
+  @@map("crm_loan_applications")
+}
+
+model CrmLoanBankApplication {
+  id                String    @id @default(uuid())
+  loanApplicationId String    @map("loan_application_id")
+  bankName          String    @map("bank_name")
+  appliedAt         DateTime? @map("applied_at")
+  status            String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  rejectionRemarks  String?   @map("rejection_remarks") @db.Text
+  roi               String?
+  approvedAmount    String?   @map("approved_amount")
+  tenureMonths      String?   @map("tenure_months")
+  isFinalSelected   Boolean   @default(false) @map("is_final_selected")
+  sortOrder         Int       @default(0) @map("sort_order")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  loanApplication CrmLoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+
+  @@index([loanApplicationId])
+  @@index([status])
+  @@map("crm_loan_bank_applications")
+}
+
+model CrmLoanBankQuery {
+  id                String    @id @default(uuid())
+  loanApplicationId String    @map("loan_application_id")
+  stage             String?   @default("General")
+  query             String    @db.Text
+  required          String    @db.Text
+  status            String    @default("OPEN") // OPEN | RESOLVED
+  raisedAt          DateTime  @default(now()) @map("raised_at")
+  raisedBy          String?   @map("raised_by")
+  resolvedAt        DateTime? @map("resolved_at")
+  resolvedBy        String?   @map("resolved_by")
+  resolutionNotes   String?   @map("resolution_notes") @db.Text
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  loanApplication CrmLoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+
+  @@index([loanApplicationId])
+  @@index([status])
+  @@map("crm_loan_bank_queries")
+}
+
+model CrmLoanDocument {
+  id                String   @id @default(uuid())
+  loanApplicationId String   @map("loan_application_id")
+  docTypeId         String   @map("doc_type_id")
+  docName           String   @map("doc_name")
+  fileUrl           String   @map("file_url") @db.Text
+  fileName          String   @map("file_name")
+  fileSize          Int?     @map("file_size")
+  uploadedAt        DateTime @default(now()) @map("uploaded_at")
+  uploadedBy        String?  @map("uploaded_by")
+  status            String   @default("PENDING") // PENDING | VERIFIED | REJECTED
+  source            String   @default("agent") // agent | portal
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  loanApplication CrmLoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+
+  @@index([loanApplicationId])
+  @@index([docTypeId])
+  @@map("crm_loan_documents")
+}
+
+model CrmLoanTentativeDate {
+  id                String   @id @default(uuid())
+  loanApplicationId String   @map("loan_application_id")
+  date              DateTime
+  setAt             DateTime @default(now()) @map("set_at")
+  setBy             String?  @map("set_by")
+  status            String   @default("PENDING") // PENDING | DISBURSED | DELAYED
+  delayReason       String?  @map("delay_reason") @db.Text
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  loanApplication CrmLoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+
+  @@index([loanApplicationId])
+  @@map("crm_loan_tentative_dates")
 }
 
 model CrmFollowUp {

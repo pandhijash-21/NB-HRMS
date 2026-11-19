@@ -1509,6 +1509,29 @@ export const crmController = {
     }
   },
 
+  /** One-time: copy Capital loan JSON from lead.customFields into CrmLoan* tables. */
+  async migrateFinserveLoanTables(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const empId = Number(authUser?.employeeId);
+      const role = String(authUser?.roleName || authUser?.role?.name || (typeof authUser?.role === 'string' ? authUser?.role : '')).toUpperCase();
+      const username = String(authUser?.username || '').toUpperCase();
+      const isAllowed =
+        empId === 1 &&
+        (role.includes('ITADMIN') ||
+          role.includes('ADMIN') ||
+          username.includes('ITADMIN') ||
+          username === '1');
+      if (!isAllowed) {
+        return res.status(403).json(fail('Forbidden: loan table migration is ITADMIN-only'));
+      }
+      const result = await crmService.migrateFinserveLoanTables();
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(500).json(fail(err.message || 'Failed to migrate Finserve loan tables'));
+    }
+  },
+
   async servePublicBrochure(req: Request, res: Response) {
     try {
       const rawName = String(req.params.filename || req.query.name || 'legacy-tower.pdf').toLowerCase();

@@ -228,41 +228,25 @@ class _GlobalMaintenanceScreenState extends State<GlobalMaintenanceScreen> {
                       ),
                     ],
                     const SizedBox(height: 32),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: _isRefreshing ? null : _refresh,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFFC5A059),
-                            foregroundColor: const Color(0xFF0F1412),
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          icon: _isRefreshing
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
-                                )
-                              : const Icon(Icons.refresh_rounded, size: 18),
-                          label: Text(
-                            _isRefreshing ? 'Checking...' : 'Check Status',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        OutlinedButton(
-                          onPressed: () => context.go('/login'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFFEDEDED),
-                            side: const BorderSide(color: Color(0xFF38463D)),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: const Text('Admin Access'),
-                        ),
-                      ],
+                    FilledButton.icon(
+                      onPressed: _isRefreshing ? null : _refresh,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFFC5A059),
+                        foregroundColor: const Color(0xFF0F1412),
+                        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: _isRefreshing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
+                            )
+                          : const Icon(Icons.refresh_rounded, size: 18),
+                      label: Text(
+                        _isRefreshing ? 'Checking...' : 'Check Status',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
                   ],
                 ),

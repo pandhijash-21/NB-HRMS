@@ -104,14 +104,8 @@ class DioClient {
             } catch (_) {}
           }
           final isLogin = path.contains('auth/login');
-          final hadToken = error.requestOptions.headers['Authorization'] != null;
-          if (status == 401 && !isLogin && hadToken) {
-            final body = error.response?.data;
-            final msg = body is Map ? '${body['error'] ?? body['message'] ?? ''}' : '';
-            final kick = msg.contains('Session expired') ||
-                msg.contains('logged in from another device') ||
-                msg.contains('Invalid or expired');
-            if (kick) await unauthorizedGate.notify();
+          if (status == 401 && !isLogin) {
+            await unauthorizedGate.notify();
           }
           handler.next(error);
         },

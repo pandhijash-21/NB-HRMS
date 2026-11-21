@@ -42,10 +42,10 @@ class PrivacyPolicyScreen extends StatelessWidget {
         ),
         actions: [
           TextButton.icon(
-            onPressed: () => context.go('/contactus'),
-            icon: const Icon(Icons.mail_outline_rounded, size: 16, color: goldColor),
+            onPressed: () => context.go('/termsofservice'),
+            icon: const Icon(Icons.description_outlined, size: 16, color: goldColor),
             label: Text(
-              'Contact Us',
+              'Terms of Service',
               style: GoogleFonts.sourceSans3(
                 fontWeight: FontWeight.w700,
                 color: goldColor,
@@ -290,8 +290,10 @@ class PrivacyPolicyScreen extends StatelessWidget {
                   const SizedBox(height: 28),
 
                   // Bottom Navigation
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 12,
                     children: [
                       OutlinedButton.icon(
                         onPressed: () => context.go('/login'),
@@ -304,7 +306,17 @@ class PrivacyPolicyScreen extends StatelessWidget {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      OutlinedButton.icon(
+                        onPressed: () => context.go('/termsofservice'),
+                        icon: const Icon(Icons.description_outlined, size: 16),
+                        label: const Text('Terms of Service'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: textPrimary,
+                          side: BorderSide(color: borderColor),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
                       FilledButton.icon(
                         onPressed: () => context.go('/contactus'),
                         icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),

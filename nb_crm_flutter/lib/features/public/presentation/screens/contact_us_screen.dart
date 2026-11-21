@@ -405,8 +405,10 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                   const SizedBox(height: 24),
 
                   // Bottom Navigation
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 12,
                     children: [
                       OutlinedButton.icon(
                         onPressed: () => context.go('/login'),
@@ -419,11 +421,21 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
-                      const SizedBox(width: 16),
                       OutlinedButton.icon(
                         onPressed: () => context.go('/privacypolicy'),
                         icon: const Icon(Icons.shield_outlined, size: 16),
                         label: const Text('Privacy Policy'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: textPrimary,
+                          side: BorderSide(color: borderColor),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => context.go('/termsofservice'),
+                        icon: const Icon(Icons.description_outlined, size: 16),
+                        label: const Text('Terms of Service'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: textPrimary,
                           side: BorderSide(color: borderColor),

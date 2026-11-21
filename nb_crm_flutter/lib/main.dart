@@ -175,10 +175,12 @@ class NbCrmApp extends StatelessWidget {
                   _syncWebSplash(state.status);
                 },
                 buildWhen: (previous, current) =>
-                    previous.status != current.status,
+                    previous.status != current.status ||
+                    previous.user?.role != current.user?.role,
                 builder: (context, auth) {
                   _syncWebSplash(auth.status);
                   return AppVersionGate(
+                    isSuperAdmin: auth.isSuperAdmin,
                     child: Stack(
                     fit: StackFit.expand,
                     children: [

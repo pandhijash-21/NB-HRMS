@@ -7,6 +7,8 @@ import '../network/dio_client.dart';
 import '../services/branding_config.dart';
 import '../services/in_app_update_service.dart';
 import '../utils/open_url.dart';
+import '../../features/auth/presentation/bloc/auth_bloc.dart';
+import '../../features/auth/presentation/bloc/auth_state.dart';
 
 /// Whether this device is a native mobile device (Android or iOS, not web).
 bool get _kIsMobileDevice {
@@ -30,9 +32,14 @@ bool get _kIsAndroidDevice {
 ///
 /// Falls back to external store/download links on failure, iOS, and web.
 class AppVersionGate extends StatefulWidget {
-  const AppVersionGate({super.key, required this.child});
+  const AppVersionGate({
+    super.key,
+    required this.child,
+    this.isSuperAdmin = false,
+  });
 
   final Widget child;
+  final bool isSuperAdmin;
 
   @override
   State<AppVersionGate> createState() => _AppVersionGateState();
@@ -46,6 +53,24 @@ class _AppVersionGateState extends State<AppVersionGate> with WidgetsBindingObse
   bool _inAppUpdateInProgress = false;
 
   final _inAppUpdate = InAppUpdateService.instance;
+
+  bool get _isSuperAdmin {
+    if (widget.isSuperAdmin) return true;
+    try {
+      final auth = context.read<AuthBloc>().state;
+      return auth.isSuperAdmin;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  void didUpdateWidget(AppVersionGate oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_isSuperAdmin && _hard) {
+      setState(() => _hard = false);
+    }
+  }
 
   @override
   void initState() {
@@ -62,6 +87,10 @@ class _AppVersionGateState extends State<AppVersionGate> with WidgetsBindingObse
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_isSuperAdmin) {
+      if (_hard) setState(() => _hard = false);
+      return;
+    }
     if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
       _softDismissedThisVisit = false;
       return;
@@ -78,10 +107,18 @@ class _AppVersionGateState extends State<AppVersionGate> with WidgetsBindingObse
 
   Future<void> _check() async {
     if (!mounted || _checking) return;
+    if (_isSuperAdmin) {
+      if (_hard) setState(() => _hard = false);
+      return;
+    }
     _checking = true;
     try {
       await BrandingConfig.fetch(context.read<DioClient>());
       if (!mounted) return;
+      if (_isSuperAdmin) {
+        if (_hard) setState(() => _hard = false);
+        return;
+      }
       final kind = appUpdateKind(
         current: kAppVersion,
         minVersion: BrandingConfig.minVersion,
@@ -254,13 +291,26 @@ class _AppVersionGateState extends State<AppVersionGate> with WidgetsBindingObse
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        widget.child,
-        if (_hard)
-          Positioned.fill(child: _HardUpdateWall(onInAppUpdate: _kIsMobileDevice ? _retryImmediateUpdate : null)),
-      ],
+    return BlocListener<AuthBloc, AuthState>(
+      listenWhen: (prev, curr) =>
+          prev.isSuperAdmin != curr.isSuperAdmin || prev.status != curr.status,
+      listener: (context, state) {
+        if (state.isSuperAdmin && _hard) {
+          setState(() => _hard = false);
+        }
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          widget.child,
+          if (_hard && !_isSuperAdmin)
+            Positioned.fill(
+              child: _HardUpdateWall(
+                onInAppUpdate: _kIsMobileDevice ? _retryImmediateUpdate : null,
+              ),
+            ),
+        ],
+      ),
     );
   }
 

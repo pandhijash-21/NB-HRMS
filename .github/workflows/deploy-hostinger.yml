@@ -1,4 +1,5 @@
 # CI quality gates, then Hostinger deploy (main only).
+# Trigger deployment for latest in-app update and version control changes.
 #
 # Mandatory (unchanged architecture):
 # - Backend + Flutter checks must pass before deploy

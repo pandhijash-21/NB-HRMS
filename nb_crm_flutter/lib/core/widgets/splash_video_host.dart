@@ -123,7 +123,7 @@ class _SplashVideoHostState extends State<SplashVideoHost>
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'Welcome to NB Group',
+                      'Welcome to NB Infra Projects LTD.',
                       style: TextStyle(
                         color: Color(0xFFE8C98A),
                         fontSize: 16,

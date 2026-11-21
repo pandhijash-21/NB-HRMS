@@ -4,6 +4,7 @@ import { requireSuperAdmin } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
 import { platformService } from './platform.service';
 import { brandingService } from './branding.service';
+import { maintenanceService } from './maintenance.service';
 
 export const platformRouter = Router();
 
@@ -305,6 +306,28 @@ platformRouter.put('/app-version', async (req: Request, res: Response) => {
     return res.json(ok(policy));
   } catch (err: unknown) {
     return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to save app version'));
+  }
+});
+
+/**
+ * Modular Maintenance Policy.
+ * Superadmin can put the whole system or specific modules (CRM, HRMS, ERP, COLLAB) under maintenance.
+ */
+platformRouter.get('/maintenance', async (_req: Request, res: Response) => {
+  try {
+    const policy = await maintenanceService.getPolicy();
+    return res.json(ok(policy));
+  } catch (err: unknown) {
+    return res.status(500).json(fail(err instanceof Error ? err.message : 'Failed to load maintenance policy'));
+  }
+});
+
+platformRouter.put('/maintenance', async (req: Request, res: Response) => {
+  try {
+    const policy = await maintenanceService.setPolicy(req.body ?? {}, req.user?.id ?? null);
+    return res.json(ok(policy));
+  } catch (err: unknown) {
+    return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to save maintenance policy'));
   }
 });
 

@@ -1,6 +1,7 @@
 import '../../../core/network/dio_client.dart';
 import '../../rbac/domain/rbac_models.dart';
 import '../domain/app_version_policy.dart';
+import '../domain/maintenance_policy.dart';
 import '../domain/platform_models.dart';
 
 class PlatformRepository {
@@ -270,6 +271,27 @@ class PlatformRepository {
             .whereType<Map>()
             .map((m) => CompanyPerson.fromJson(Map<String, dynamic>.from(m)))
             .toList();
+      },
+    );
+  }
+
+  Future<MaintenancePolicy> getMaintenancePolicy() async {
+    return _dio.getEnvelope<MaintenancePolicy>(
+      'platform/maintenance',
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid maintenance policy response');
+        return MaintenancePolicy.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<MaintenancePolicy> saveMaintenancePolicy(MaintenancePolicy policy) async {
+    return _dio.putEnvelope<MaintenancePolicy>(
+      'platform/maintenance',
+      data: policy.toJson(),
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid maintenance policy response');
+        return MaintenancePolicy.fromJson(Map<String, dynamic>.from(raw));
       },
     );
   }

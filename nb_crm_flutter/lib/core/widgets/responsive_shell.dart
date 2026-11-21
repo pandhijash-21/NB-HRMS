@@ -23,7 +23,9 @@ import '../theme/theme_cubit.dart';
 import '../tour/models/tour_models.dart';
 import '../tour/tour_desktop.dart';
 import '../tour/widgets/tour_target.dart';
+import '../services/branding_config.dart';
 import 'backend_env_switcher.dart';
+import 'maintenance_gate.dart';
 
 /// Sidebar palette — dark charcoal for stronger contrast with content.
 class _SideC {
@@ -67,7 +69,26 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     super.dispose();
   }
 
-  Widget _tourPageChild() => widget.child;
+  Widget _tourPageChild(AppModule module, String currentPath) {
+    final path = currentPath.toLowerCase();
+    if ((path.startsWith('/chat') || path.startsWith('/meeting') || path.startsWith('/tracking')) &&
+        BrandingConfig.isModuleInMaintenance('COLLAB')) {
+      return const ModuleMaintenanceView(moduleKey: 'COLLAB');
+    }
+    if ((module == AppModule.crm || path.startsWith('/crm')) &&
+        BrandingConfig.isModuleInMaintenance('CRM')) {
+      return const ModuleMaintenanceView(moduleKey: 'CRM');
+    }
+    if ((module == AppModule.erp || path.startsWith('/erp')) &&
+        BrandingConfig.isModuleInMaintenance('ERP')) {
+      return const ModuleMaintenanceView(moduleKey: 'ERP');
+    }
+    if ((module == AppModule.hrms || path.startsWith('/attendance') || path.startsWith('/leave') || path.startsWith('/salary') || path.startsWith('/home')) &&
+        BrandingConfig.isModuleInMaintenance('HRMS')) {
+      return const ModuleMaintenanceView(moduleKey: 'HRMS');
+    }
+    return widget.child;
+  }
 
   Widget _buildSpeedDial(
     BuildContext context,
@@ -1123,7 +1144,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         ),
         body: Stack(
           children: [
-            _tourPageChild(),
+            _tourPageChild(module, currentPath),
             if (!isSuperAdmin) _buildSpeedDial(context, accessibleSuites),
           ],
         ),
@@ -1152,7 +1173,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 module: module,
                 accessibleSuites: accessibleSuites,
               ),
-              Expanded(child: _tourPageChild()),
+              Expanded(child: _tourPageChild(module, currentPath)),
             ],
           ),
           if (!isSuperAdmin) _buildSpeedDial(context, accessibleSuites),

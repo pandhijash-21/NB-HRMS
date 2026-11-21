@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma';
+import { maintenanceService } from './maintenance.service';
 
 export const SPLASH_VIDEO_KEY = 'splash_video';
 export const APP_MIN_VERSION_KEY = 'app_min_version';
@@ -64,6 +65,7 @@ export const brandingService = {
       select: { key: true, url: true, meta: true },
     });
     const map = Object.fromEntries(rows.map((r) => [r.key, r.url]));
+    const maintenance = await maintenanceService.getPolicy();
     return {
       splashVideoUrl: map[SPLASH_VIDEO_KEY] ?? null,
       minVersion: map[APP_MIN_VERSION_KEY] ?? '',
@@ -71,6 +73,7 @@ export const brandingService = {
       updateUrlWeb: map[APP_UPDATE_URL_WEB_KEY] ?? '',
       updateUrlAndroid: map[APP_UPDATE_URL_ANDROID_KEY] ?? '',
       updateUrlIos: map[APP_UPDATE_URL_IOS_KEY] ?? '',
+      maintenance,
     };
   },
 

@@ -24,6 +24,7 @@ import 'core/theme/icon_font_bootstrap.dart';
 import 'core/theme/material_icon_keep_alive.dart';
 import 'core/theme/theme_cubit.dart';
 import 'core/widgets/app_version_gate.dart';
+import 'core/widgets/maintenance_gate.dart';
 import 'core/widgets/splash_video_audio.dart';
 import 'core/widgets/splash_video_host.dart';
 import 'core/tour/catalog/nb_platform_catalog.dart';
@@ -181,42 +182,45 @@ class NbCrmApp extends StatelessWidget {
                   _syncWebSplash(auth.status);
                   return AppVersionGate(
                     isSuperAdmin: auth.isSuperAdmin,
-                    child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      const MaterialIconKeepAlive(),
-                      Positioned.fill(
-                        child: Listener(
-                          behavior: HitTestBehavior.translucent,
-                          onPointerDown: (_) {
-                            LocationAlertSound.unlock();
-                            AppSounds.unlock();
-                            MrNbTourService.instance.unlock();
-                          },
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Positioned.fill(
-                                child: PermissionGuard(
-                                  child: AuthRiverpodBridge(
-                                    child: child ?? const SizedBox.shrink(),
+                    child: GlobalMaintenanceGate(
+                      isSuperAdmin: auth.isSuperAdmin,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          const MaterialIconKeepAlive(),
+                          Positioned.fill(
+                            child: Listener(
+                              behavior: HitTestBehavior.translucent,
+                              onPointerDown: (_) {
+                                LocationAlertSound.unlock();
+                                AppSounds.unlock();
+                                MrNbTourService.instance.unlock();
+                              },
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Positioned.fill(
+                                    child: PermissionGuard(
+                                      child: AuthRiverpodBridge(
+                                        child: child ?? const SizedBox.shrink(),
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  const IncomingCallHost(),
+                                  const TourOverlayHost(),
+                                  const FirstVisitHost(),
+                                  const TourDebugInspector(),
+                                ],
                               ),
-                              const IncomingCallHost(),
-                              const TourOverlayHost(),
-                              const FirstVisitHost(),
-                              const TourDebugInspector(),
-                            ],
+                            ),
                           ),
-                        ),
+                          if (!kIsWeb && auth.status == AuthStatus.unknown)
+                            const Positioned.fill(
+                              child: SplashVideoHost(),
+                            ),
+                        ],
                       ),
-                      if (!kIsWeb && auth.status == AuthStatus.unknown)
-                        const Positioned.fill(
-                          child: SplashVideoHost(),
-                        ),
-                    ],
-                  ),
+                    ),
                   );
                 },
               ),

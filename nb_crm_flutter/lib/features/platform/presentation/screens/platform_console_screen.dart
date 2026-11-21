@@ -13,6 +13,7 @@ import '../bloc/platform_console_bloc.dart';
 import '../bloc/platform_console_event.dart';
 import '../bloc/platform_console_state.dart';
 import 'app_version_policy_card.dart';
+import 'maintenance_policy_card.dart';
 import 'company_admin_access_sheet.dart';
 import 'company_grant_admin_sheet.dart';
 
@@ -245,7 +246,7 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'NB Suite',
+                      'NB Infra Projects LTD.',
                       style: TextStyle(
                         fontSize: isMobile ? 15 : 18,
                         fontWeight: FontWeight.w800,
@@ -1784,6 +1785,12 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            MaintenancePolicyCard(
+              surfaceColor: surfaceColor,
+              borderColor: borderColor,
+              textPrimary: textPrimary,
+              textSecondary: textSecondary,
+            ),
             AppVersionPolicyCard(
               surfaceColor: surfaceColor,
               borderColor: borderColor,

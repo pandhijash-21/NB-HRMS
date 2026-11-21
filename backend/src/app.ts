@@ -33,6 +33,7 @@ import { transportEncryptionMiddleware } from './middleware/transportEncryption'
 import { vpnBlockMiddleware } from './middleware/vpnBlock';
 import { collabUploadAuth } from './middleware/collabUploadAuth';
 import { isAllowedCorsOrigin } from './utils/corsOrigins';
+import { maintenanceMiddleware } from './middleware/maintenance';
 import { lettersRouter } from './modules/letters';
 import { reimbursementsRouter } from './modules/reimbursements';
 import { recruitmentRouter } from './modules/recruitment';
@@ -144,6 +145,8 @@ app.get('/system-health', sendLocalHtml('system-health.html'));
 app.get('/system-health.html', sendLocalHtml('system-health.html'));
 app.get('/docs', sendLocalHtml('project-documentation.html'));
 app.get('/project-documentation.html', sendLocalHtml('project-documentation.html'));
+
+app.use(maintenanceMiddleware);
 
 app.use('/actions', actionsRouter);
 app.use('/events', eventsRouter);

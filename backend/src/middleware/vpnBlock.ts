@@ -179,6 +179,8 @@ export function isPublicCrmIngressPath(pathname: string): boolean {
     p.startsWith('/client-portal') ||
     p.startsWith('/api/client-portal') ||
     p.startsWith('/privacypolicy') ||
+    p.startsWith('/termsofservice') ||
+    p.startsWith('/terms') ||
     p.startsWith('/contactus') ||
     p.startsWith('/api/contactus') ||
     p.startsWith('/api/contact-us') ||

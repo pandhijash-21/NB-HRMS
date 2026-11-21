@@ -25,6 +25,8 @@ function isPublicCrmEndpoint(req: Request): boolean {
     p.includes('/api/crm/public') ||
     p.includes('/client-portal') ||
     p.includes('/privacypolicy') ||
+    p.includes('/termsofservice') ||
+    p.includes('/terms') ||
     p.includes('/contactus') ||
     p.includes('/api/contactus') ||
     p.includes('/api/contact-us')

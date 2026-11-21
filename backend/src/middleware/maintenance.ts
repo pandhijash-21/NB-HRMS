@@ -11,6 +11,8 @@ const ALWAYS_EXEMPT_PATHS = [
   '/health',
   '/api/auth/branding',
   '/privacypolicy',
+  '/termsofservice',
+  '/terms',
   '/contactus',
   '/api/contactus',
   '/api/contact-us',

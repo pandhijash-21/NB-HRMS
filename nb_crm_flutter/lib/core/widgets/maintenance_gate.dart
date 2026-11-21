@@ -37,11 +37,16 @@ class _GlobalMaintenanceGateState extends State<GlobalMaintenanceGate> {
             final superAdmin = widget.isSuperAdmin || authState.isSuperAdmin;
             final isGlobalDown = BrandingConfig.isGlobalMaintenance;
 
-            if (isGlobalDown && !superAdmin) {
-              return const GlobalMaintenanceScreen();
-            }
-
-            return widget.child;
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                widget.child,
+                if (isGlobalDown && !superAdmin)
+                  const Positioned.fill(
+                    child: GlobalMaintenanceScreen(),
+                  ),
+              ],
+            );
           },
         );
       },
@@ -61,13 +66,18 @@ class _GlobalMaintenanceScreenState extends State<GlobalMaintenanceScreen> {
   Timer? _timer;
   Duration _remaining = Duration.zero;
   bool _isRefreshing = false;
+  bool _showSessionModal = false;
 
   @override
   void initState() {
     super.initState();
-    _calculateRemaining();
+    _remaining = _calcRemainingDuration();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) _calculateRemaining();
+      if (!mounted) return;
+      final next = _calcRemainingDuration();
+      if (next.inSeconds != _remaining.inSeconds) {
+        setState(() => _remaining = next);
+      }
     });
   }
 
@@ -77,19 +87,16 @@ class _GlobalMaintenanceScreenState extends State<GlobalMaintenanceScreen> {
     super.dispose();
   }
 
-  void _calculateRemaining() {
+  Duration _calcRemainingDuration() {
     final endStr = BrandingConfig.maintenanceEstimatedEndTime;
     if (endStr != null && endStr.isNotEmpty) {
       final end = DateTime.tryParse(endStr);
       if (end != null) {
         final diff = end.difference(DateTime.now());
-        setState(() {
-          _remaining = diff.isNegative ? Duration.zero : diff;
-        });
-        return;
+        return diff.isNegative ? Duration.zero : diff;
       }
     }
-    setState(() => _remaining = Duration.zero);
+    return Duration.zero;
   }
 
   Future<void> _refresh() async {
@@ -99,8 +106,10 @@ class _GlobalMaintenanceScreenState extends State<GlobalMaintenanceScreen> {
       await BrandingConfig.fetch(dio);
     } catch (_) {}
     if (mounted) {
-      _calculateRemaining();
-      setState(() => _isRefreshing = false);
+      setState(() {
+        _remaining = _calcRemainingDuration();
+        _isRefreshing = false;
+      });
     }
   }
 
@@ -123,308 +132,366 @@ class _GlobalMaintenanceScreenState extends State<GlobalMaintenanceScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F1412),
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 540),
-              child: Container(
-                padding: const EdgeInsets.all(36),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF181F1B),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0xFFC5A059).withValues(alpha: 0.35)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      blurRadius: 30,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Brand Icon
-                    Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFC5A059).withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFFC5A059)),
-                      ),
-                      child: const Icon(
-                        Icons.engineering_rounded,
-                        size: 38,
-                        color: Color(0xFFC5A059),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'NB INFRA PROJECTS LTD.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 2.0,
-                        color: Color(0xFFC5A059),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      title,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFEDEDED),
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      message,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFFA5B2A9),
-                        height: 1.5,
-                      ),
-                    ),
-                    if (_remaining > Duration.zero) ...[
-                      const SizedBox(height: 28),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F1412),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF263229)),
+        child: Stack(
+          children: [
+            Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 540),
+                  child: Container(
+                    padding: const EdgeInsets.all(36),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF181F1B),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: const Color(0xFFC5A059).withValues(alpha: 0.35)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          blurRadius: 30,
+                          offset: const Offset(0, 10),
                         ),
-                        child: Column(
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Brand Icon
+                        Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFC5A059).withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFFC5A059)),
+                          ),
+                          child: const Icon(
+                            Icons.engineering_rounded,
+                            size: 38,
+                            color: Color(0xFFC5A059),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'NB INFRA PROJECTS LTD.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 2.0,
+                            color: Color(0xFFC5A059),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          title,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFEDEDED),
+                            height: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          message,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Color(0xFFA5B2A9),
+                            height: 1.5,
+                          ),
+                        ),
+                        if (_remaining > Duration.zero) ...[
+                          const SizedBox(height: 28),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F1412),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFF263229)),
+                            ),
+                            child: Column(
+                              children: [
+                                const Text(
+                                  'ESTIMATED COMPLETION IN',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 1.2,
+                                    color: Color(0xFF8B988E),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  _formatDuration(_remaining),
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 3.0,
+                                    color: Color(0xFFC5A059),
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 32),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 12,
+                          runSpacing: 12,
                           children: [
-                            const Text(
-                              'ESTIMATED COMPLETION IN',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 1.2,
-                                color: Color(0xFF8B988E),
+                            FilledButton.icon(
+                              onPressed: _isRefreshing ? null : _refresh,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFFC5A059),
+                                foregroundColor: const Color(0xFF0F1412),
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              icon: _isRefreshing
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
+                                    )
+                                  : const Icon(Icons.refresh_rounded, size: 18),
+                              label: Text(
+                                _isRefreshing ? 'Checking...' : 'Check Status',
+                                style: const TextStyle(fontWeight: FontWeight.w700),
                               ),
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _formatDuration(_remaining),
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 3.0,
-                                color: Color(0xFFC5A059),
-                                fontFamily: 'monospace',
+                            OutlinedButton.icon(
+                              onPressed: () => setState(() => _showSessionModal = true),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFFC5A059),
+                                side: const BorderSide(color: Color(0xFFC5A059)),
+                                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              icon: const Icon(Icons.vpn_key_rounded, size: 18),
+                              label: const Text(
+                                'Session Access',
+                                style: TextStyle(fontWeight: FontWeight.w700),
                               ),
                             ),
                           ],
                         ),
-                      ),
-                    ],
-                    const SizedBox(height: 32),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: _isRefreshing ? null : _refresh,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFFC5A059),
-                            foregroundColor: const Color(0xFF0F1412),
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          icon: _isRefreshing
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
-                                )
-                              : const Icon(Icons.refresh_rounded, size: 18),
-                          label: Text(
-                            _isRefreshing ? 'Checking...' : 'Check Status',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: () => _showSessionAccessDialog(context),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFFC5A059),
-                            side: const BorderSide(color: Color(0xFFC5A059)),
-                            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          icon: const Icon(Icons.vpn_key_rounded, size: 18),
-                          label: const Text(
-                            'Session Access',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
+            if (_showSessionModal)
+              Positioned.fill(
+                child: SessionAccessModal(
+                  onClose: () {
+                    if (mounted) {
+                      setState(() => _showSessionModal = false);
+                    }
+                  },
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 }
 
-Future<void> _showSessionAccessDialog(BuildContext context) async {
-  final dio = AppRepositories().dioClient;
-  bool otpSent = false;
-  bool isSending = false;
-  bool isVerifying = false;
-  bool obscurePassword = true;
-  String? errorMsg;
-  int cooldown = 0;
-  Timer? cooldownTimer;
-  final passwordController = TextEditingController();
-  final otpController = TextEditingController();
+/// In-place Modal for 24-Hour Maintenance Session Access.
+class SessionAccessModal extends StatefulWidget {
+  const SessionAccessModal({
+    super.key,
+    required this.onClose,
+  });
 
-  await showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (dialogCtx) {
-      return StatefulBuilder(
-        builder: (ctx, setModalState) {
-          void startCooldown(int seconds) {
-            cooldown = seconds;
-            cooldownTimer?.cancel();
-            cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-              if (cooldown > 0) {
-                setModalState(() => cooldown--);
-              } else {
-                t.cancel();
-              }
-            });
-          }
+  final VoidCallback onClose;
 
-          Future<void> sendOtp() async {
-            final pass = passwordController.text.trim();
-            if (pass.isEmpty) {
-              setModalState(() => errorMsg = 'Please enter the Superadmin password.');
-              return;
-            }
-            setModalState(() {
-              isSending = true;
-              errorMsg = null;
-            });
-            try {
-              await dio.postEnvelope<Map<String, dynamic>>(
-                'platform/maintenance-bypass/request-otp',
-                data: {'superadminPassword': pass},
-                parse: (raw) => raw is Map ? Map<String, dynamic>.from(raw) : {},
-              );
-              setModalState(() {
-                isSending = false;
-                otpSent = true;
-              });
-              startCooldown(60);
-            } catch (e) {
-              setModalState(() {
-                isSending = false;
-                errorMsg = e.toString().replaceFirst('Exception: ', '');
-              });
-            }
-          }
+  @override
+  State<SessionAccessModal> createState() => _SessionAccessModalState();
+}
 
-          Future<void> verifyOtp() async {
-            final code = otpController.text.trim();
-            if (code.length != 6) {
-              setModalState(() => errorMsg = 'Please enter a 6-digit verification code.');
-              return;
-            }
-            setModalState(() {
-              isVerifying = true;
-              errorMsg = null;
-            });
-            try {
-              final res = await dio.postEnvelope<Map<String, dynamic>>(
-                'platform/maintenance-bypass/verify-otp',
-                data: {'otp': code},
-                parse: (raw) => raw is Map ? Map<String, dynamic>.from(raw) : {},
-              );
-              final token = res['token']?.toString();
-              final expiresAt = res['expiresAt']?.toString();
-              if (token != null && expiresAt != null) {
-                await BrandingConfig.saveMaintenanceBypass(token, expiresAt);
-                cooldownTimer?.cancel();
-                if (dialogCtx.mounted) {
-                  Navigator.of(dialogCtx).pop();
-                }
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('24-Hour Maintenance Session Access Granted! Unlocking platform...'),
-                      backgroundColor: Color(0xFF10B981),
-                    ),
-                  );
-                }
-              } else {
-                throw Exception('Invalid response from server.');
-              }
-            } catch (e) {
-              setModalState(() {
-                isVerifying = false;
-                errorMsg = e.toString().replaceFirst('Exception: ', '');
-              });
-            }
-          }
+class _SessionAccessModalState extends State<SessionAccessModal> {
+  final _passwordController = TextEditingController();
+  final _otpController = TextEditingController();
+  bool _otpSent = false;
+  bool _isSending = false;
+  bool _isVerifying = false;
+  bool _obscurePassword = true;
+  String? _errorMsg;
+  int _cooldown = 0;
+  Timer? _cooldownTimer;
 
-          return AlertDialog(
-            backgroundColor: const Color(0xFF181F1B),
-            shape: RoundedRectangleBorder(
+  @override
+  void dispose() {
+    _cooldownTimer?.cancel();
+    _passwordController.dispose();
+    _otpController.dispose();
+    super.dispose();
+  }
+
+  void _startCooldown(int seconds) {
+    setState(() => _cooldown = seconds);
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      if (_cooldown > 0) {
+        setState(() => _cooldown--);
+      } else {
+        t.cancel();
+      }
+    });
+  }
+
+  Future<void> _sendOtp() async {
+    final pass = _passwordController.text.trim();
+    if (pass.isEmpty) {
+      setState(() => _errorMsg = 'Please enter the Superadmin password.');
+      return;
+    }
+    setState(() {
+      _isSending = true;
+      _errorMsg = null;
+    });
+    try {
+      final dio = AppRepositories().dioClient;
+      await dio.postEnvelope<Map<String, dynamic>>(
+        'platform/maintenance-bypass/request-otp',
+        data: {'superadminPassword': pass},
+        parse: (raw) => raw is Map ? Map<String, dynamic>.from(raw) : {},
+      );
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+          _otpSent = true;
+        });
+        _startCooldown(60);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+          _errorMsg = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  Future<void> _verifyOtp() async {
+    final code = _otpController.text.trim();
+    if (code.length != 6) {
+      setState(() => _errorMsg = 'Please enter a 6-digit verification code.');
+      return;
+    }
+    setState(() {
+      _isVerifying = true;
+      _errorMsg = null;
+    });
+    try {
+      final dio = AppRepositories().dioClient;
+      final res = await dio.postEnvelope<Map<String, dynamic>>(
+        'platform/maintenance-bypass/verify-otp',
+        data: {'otp': code},
+        parse: (raw) => raw is Map ? Map<String, dynamic>.from(raw) : {},
+      );
+      final token = res['token']?.toString();
+      final expiresAt = res['expiresAt']?.toString();
+      if (token != null && expiresAt != null) {
+        await BrandingConfig.saveMaintenanceBypass(token, expiresAt);
+        if (mounted) {
+          widget.onClose();
+        }
+      } else {
+        throw Exception('Invalid response from server.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isVerifying = false;
+          _errorMsg = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black.withValues(alpha: 0.75),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: Material(
+        color: Colors.transparent,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: const Color(0xFF181F1B),
               borderRadius: BorderRadius.circular(20),
-              side: const BorderSide(color: Color(0xFF2E3D34)),
-            ),
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFC5A059).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.vpn_key_rounded, color: Color(0xFFC5A059), size: 20),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    '24-Hour Session Access',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
+              border: Border.all(color: const Color(0xFFC5A059).withValues(alpha: 0.4)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.6),
+                  blurRadius: 30,
+                  offset: const Offset(0, 10),
                 ),
               ],
             ),
-            content: SizedBox(
-              width: 440,
+            child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (!otpSent) ...[
+                  // Header
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFC5A059).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.vpn_key_rounded, color: Color(0xFFC5A059), size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          '24-Hour Session Access',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: widget.onClose,
+                        icon: const Icon(Icons.close_rounded, color: Color(0xFF8B988E), size: 20),
+                        splashRadius: 20,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  // Content
+                  if (!_otpSent) ...[
                     const Text(
                       'Request temporary 24-hour access to the live platform while maintenance is active.\n\nTo ensure security, please verify the Superadmin password before requesting the verification code:',
                       style: TextStyle(color: Color(0xFFA5B2A9), fontSize: 13.5, height: 1.5),
                     ),
                     const SizedBox(height: 14),
                     TextField(
-                      controller: passwordController,
-                      obscureText: obscurePassword,
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
                       autofocus: true,
                       textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => isSending ? null : sendOtp(),
+                      onSubmitted: (_) => _isSending ? null : _sendOtp(),
                       style: const TextStyle(color: Colors.white, fontSize: 14),
                       decoration: InputDecoration(
                         labelText: 'Superadmin Password',
@@ -434,11 +501,11 @@ Future<void> _showSessionAccessDialog(BuildContext context) async {
                         prefixIcon: const Icon(Icons.lock_outline_rounded, color: Color(0xFFC5A059), size: 20),
                         suffixIcon: IconButton(
                           icon: Icon(
-                            obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                            _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                             color: const Color(0xFF8B988E),
                             size: 20,
                           ),
-                          onPressed: () => setModalState(() => obscurePassword = !obscurePassword),
+                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                         ),
                         filled: true,
                         fillColor: const Color(0xFF0F1412),
@@ -500,11 +567,12 @@ Future<void> _showSessionAccessDialog(BuildContext context) async {
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: otpController,
+                      controller: _otpController,
                       autofocus: true,
                       keyboardType: TextInputType.number,
                       maxLength: 6,
                       textAlign: TextAlign.center,
+                      onSubmitted: (_) => _isVerifying ? null : _verifyOtp(),
                       style: const TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.bold,
@@ -539,20 +607,20 @@ Future<void> _showSessionAccessDialog(BuildContext context) async {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (cooldown > 0)
+                        if (_cooldown > 0)
                           Text(
-                            'Resend available in ${cooldown}s',
+                            'Resend available in ${_cooldown}s',
                             style: const TextStyle(fontSize: 12, color: Color(0xFF8B988E)),
                           )
                         else
                           TextButton(
-                            onPressed: isSending ? null : sendOtp,
+                            onPressed: _isSending ? null : _sendOtp,
                             child: const Text('Resend Code', style: TextStyle(color: Color(0xFFC5A059), fontSize: 12)),
                           ),
                       ],
                     ),
                   ],
-                  if (errorMsg != null) ...[
+                  if (_errorMsg != null) ...[
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.all(10),
@@ -561,59 +629,65 @@ Future<void> _showSessionAccessDialog(BuildContext context) async {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        errorMsg!,
+                        _errorMsg!,
                         style: const TextStyle(color: Colors.redAccent, fontSize: 12),
                         textAlign: TextAlign.center,
                       ),
                     ),
                   ],
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: widget.onClose,
+                        child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                      ),
+                      const SizedBox(width: 8),
+                      if (!_otpSent)
+                        FilledButton(
+                          onPressed: _isSending ? null : _sendOtp,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFC5A059),
+                            foregroundColor: const Color(0xFF0F1412),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: _isSending
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
+                                )
+                              : const Text('Verify & Send OTP', style: TextStyle(fontWeight: FontWeight.bold)),
+                        )
+                      else
+                        FilledButton(
+                          onPressed: _isVerifying ? null : _verifyOtp,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFC5A059),
+                            foregroundColor: const Color(0xFF0F1412),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: _isVerifying
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
+                                )
+                              : const Text('Verify & Unlock (24h)', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                    ],
+                  ),
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  cooldownTimer?.cancel();
-                  Navigator.of(dialogCtx).pop();
-                },
-                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-              ),
-              if (!otpSent)
-                FilledButton(
-                  onPressed: isSending ? null : sendOtp,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFC5A059),
-                    foregroundColor: const Color(0xFF0F1412),
-                  ),
-                  child: isSending
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
-                        )
-                      : const Text('Verify & Send OTP', style: TextStyle(fontWeight: FontWeight.bold)),
-                )
-              else
-                FilledButton(
-                  onPressed: isVerifying ? null : verifyOtp,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFC5A059),
-                    foregroundColor: const Color(0xFF0F1412),
-                  ),
-                  child: isVerifying
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
-                        )
-                      : const Text('Verify & Unlock (24h)', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-            ],
-          );
-        },
-      );
-    },
-  );
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// In-place view shown when an individual module (CRM, HRMS, ERP, COLLAB) is under maintenance.
@@ -633,13 +707,18 @@ class _ModuleMaintenanceViewState extends State<ModuleMaintenanceView> {
   Timer? _timer;
   Duration _remaining = Duration.zero;
   bool _isRefreshing = false;
+  bool _showSessionModal = false;
 
   @override
   void initState() {
     super.initState();
-    _calculateRemaining();
+    _remaining = _calcRemainingDuration();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) _calculateRemaining();
+      if (!mounted) return;
+      final next = _calcRemainingDuration();
+      if (next.inSeconds != _remaining.inSeconds) {
+        setState(() => _remaining = next);
+      }
     });
   }
 
@@ -649,19 +728,16 @@ class _ModuleMaintenanceViewState extends State<ModuleMaintenanceView> {
     super.dispose();
   }
 
-  void _calculateRemaining() {
+  Duration _calcRemainingDuration() {
     final endStr = BrandingConfig.maintenanceEstimatedEndTime;
     if (endStr != null && endStr.isNotEmpty) {
       final end = DateTime.tryParse(endStr);
       if (end != null) {
         final diff = end.difference(DateTime.now());
-        setState(() {
-          _remaining = diff.isNegative ? Duration.zero : diff;
-        });
-        return;
+        return diff.isNegative ? Duration.zero : diff;
       }
     }
-    setState(() => _remaining = Duration.zero);
+    return Duration.zero;
   }
 
   Future<void> _refresh() async {
@@ -671,8 +747,10 @@ class _ModuleMaintenanceViewState extends State<ModuleMaintenanceView> {
       await BrandingConfig.fetch(dio);
     } catch (_) {}
     if (mounted) {
-      _calculateRemaining();
-      setState(() => _isRefreshing = false);
+      setState(() {
+        _remaining = _calcRemainingDuration();
+        _isRefreshing = false;
+      });
     }
   }
 
@@ -699,174 +777,188 @@ class _ModuleMaintenanceViewState extends State<ModuleMaintenanceView> {
     final subtextColor = isDark ? const Color(0xFF9AA399) : const Color(0xFF5A665D);
     final borderColor = isDark ? const Color(0xFF2A322C) : const Color(0xFFE2E8E4);
 
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: borderColor),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFC5A059).withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.build_circle_outlined,
-                    size: 34,
-                    color: Color(0xFFC5A059),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFC5A059).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    'MODULE: ${widget.moduleKey.toUpperCase()}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.1,
-                      color: Color(0xFFC5A059),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  modTitle,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  modMessage,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: subtextColor,
-                    height: 1.5,
-                  ),
-                ),
-                if (_remaining > Duration.zero) ...[
-                  const SizedBox(height: 24),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF141916) : const Color(0xFFF4F6F4),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: borderColor),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          'ESTIMATED COMPLETION',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1.0,
-                            color: subtextColor,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatDuration(_remaining),
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 2.5,
-                            color: Color(0xFFC5A059),
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 28),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 10,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: _isRefreshing ? null : _refresh,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFC5A059),
-                        foregroundColor: const Color(0xFF0F1412),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      icon: _isRefreshing
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
-                            )
-                          : const Icon(Icons.refresh_rounded, size: 16),
-                      label: Text(_isRefreshing ? 'Checking...' : 'Refresh'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        // Switch to a safe fallback module (e.g. HRMS if CRM is down, or ERP)
-                        if (widget.moduleKey.toUpperCase() != 'HRMS' && !BrandingConfig.isModuleInMaintenance('HRMS')) {
-                          context.read<AppModuleCubit>().setModule(AppModule.hrms);
-                          context.go('/home');
-                        } else if (widget.moduleKey.toUpperCase() != 'ERP' && !BrandingConfig.isModuleInMaintenance('ERP')) {
-                          context.read<AppModuleCubit>().setModule(AppModule.erp);
-                          context.go('/erp/home');
-                        } else if (widget.moduleKey.toUpperCase() != 'CRM' && !BrandingConfig.isModuleInMaintenance('CRM')) {
-                          context.read<AppModuleCubit>().setModule(AppModule.crm);
-                          context.go('/crm/dashboard');
-                        } else {
-                          context.go('/home');
-                        }
-                      },
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      icon: const Icon(Icons.arrow_back_rounded, size: 16),
-                      label: const Text('Go to Active Module'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => _showSessionAccessDialog(context),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFC5A059),
-                        side: const BorderSide(color: Color(0xFFC5A059)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      icon: const Icon(Icons.vpn_key_rounded, size: 16),
-                      label: const Text('Session Access'),
+    return Stack(
+      children: [
+        Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Container(
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: borderColor),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
                     ),
                   ],
                 ),
-              ],
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFC5A059).withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.build_circle_outlined,
+                        size: 34,
+                        color: Color(0xFFC5A059),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFC5A059).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'MODULE: ${widget.moduleKey.toUpperCase()}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.1,
+                          color: Color(0xFFC5A059),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      modTitle,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      modMessage,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: subtextColor,
+                        height: 1.5,
+                      ),
+                    ),
+                    if (_remaining > Duration.zero) ...[
+                      const SizedBox(height: 24),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF141916) : const Color(0xFFF4F6F4),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'ESTIMATED COMPLETION',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 1.0,
+                                color: subtextColor,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatDuration(_remaining),
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 2.5,
+                                color: Color(0xFFC5A059),
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 28),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 10,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: _isRefreshing ? null : _refresh,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFC5A059),
+                            foregroundColor: const Color(0xFF0F1412),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: _isRefreshing
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
+                                )
+                              : const Icon(Icons.refresh_rounded, size: 16),
+                          label: Text(_isRefreshing ? 'Checking...' : 'Refresh'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            // Switch to a safe fallback module (e.g. HRMS if CRM is down, or ERP)
+                            if (widget.moduleKey.toUpperCase() != 'HRMS' && !BrandingConfig.isModuleInMaintenance('HRMS')) {
+                              context.read<AppModuleCubit>().setModule(AppModule.hrms);
+                              context.go('/home');
+                            } else if (widget.moduleKey.toUpperCase() != 'ERP' && !BrandingConfig.isModuleInMaintenance('ERP')) {
+                              context.read<AppModuleCubit>().setModule(AppModule.erp);
+                              context.go('/erp/home');
+                            } else if (widget.moduleKey.toUpperCase() != 'CRM' && !BrandingConfig.isModuleInMaintenance('CRM')) {
+                              context.read<AppModuleCubit>().setModule(AppModule.crm);
+                              context.go('/crm/dashboard');
+                            } else {
+                              context.go('/home');
+                            }
+                          },
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                          label: const Text('Go to Active Module'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => setState(() => _showSessionModal = true),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFC5A059),
+                            side: const BorderSide(color: Color(0xFFC5A059)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: const Icon(Icons.vpn_key_rounded, size: 16),
+                          label: const Text('Session Access'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
-      ),
+        if (_showSessionModal)
+          Positioned.fill(
+            child: SessionAccessModal(
+              onClose: () {
+                if (mounted) {
+                  setState(() => _showSessionModal = false);
+                }
+              },
+            ),
+          ),
+      ],
     );
   }
 }

@@ -33,7 +33,9 @@ import '../../features/tasks/data/tasks_repository.dart';
 
 /// Container that holds all core singleton services and repositories.
 class AppRepositories {
-  AppRepositories() {
+  factory AppRepositories() => _instance ??= AppRepositories._();
+
+  AppRepositories._() {
     storage = SecureStorageService();
     unauthorizedGate = UnauthorizedGate();
     dioClient = DioClient(
@@ -47,6 +49,8 @@ class AppRepositories {
     );
     lookupRepository = LookupRepository(dioClient: dioClient);
   }
+
+  static AppRepositories? _instance;
 
   late final SecureStorageService storage;
   late final UnauthorizedGate unauthorizedGate;

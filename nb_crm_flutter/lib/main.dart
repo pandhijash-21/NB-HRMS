@@ -155,7 +155,7 @@ class NbCrmApp extends StatelessWidget {
       buildWhen: (previous, current) => previous != current,
       builder: (context, themeMode) {
         return MaterialApp.router(
-          title: 'NB CRM',
+          title: 'NBSince1946',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),

@@ -35,6 +35,16 @@ class _MaintenancePolicyCardState extends State<MaintenancePolicyCard> {
   final _globalTitle = TextEditingController();
   final _globalMessage = TextEditingController();
 
+  // Baseline saved state to track unsaved edits
+  bool _savedGlobalEnabled = false;
+  String _savedGlobalPlatform = 'both';
+  String _savedGlobalTitle = '';
+  String _savedGlobalMessage = '';
+  final Map<String, bool> _savedModulesEnabled = {};
+  final Map<String, String> _savedModulesTitle = {};
+  final Map<String, String> _savedModulesMessage = {};
+  String _savedEstimatedEndTime = '';
+
   // Modules
   final Map<String, bool> _modulesEnabled = {
     'CRM': false,
@@ -46,6 +56,36 @@ class _MaintenancePolicyCardState extends State<MaintenancePolicyCard> {
   final Map<String, TextEditingController> _modulesMessage = {};
 
   final _estimatedEndTime = TextEditingController();
+
+  bool get hasUnsavedChanges {
+    if (_globalEnabled != _savedGlobalEnabled) return true;
+    if (_globalPlatform != _savedGlobalPlatform) return true;
+    if (_globalTitle.text.trim() != _savedGlobalTitle) return true;
+    if (_globalMessage.text.trim() != _savedGlobalMessage) return true;
+    if (_estimatedEndTime.text.trim() != _savedEstimatedEndTime) return true;
+    for (final key in ['CRM', 'HRMS', 'ERP', 'COLLAB']) {
+      if ((_modulesEnabled[key] ?? false) != (_savedModulesEnabled[key] ?? false)) return true;
+      if ((_modulesTitle[key]?.text.trim() ?? '') != (_savedModulesTitle[key] ?? '')) return true;
+      if ((_modulesMessage[key]?.text.trim() ?? '') != (_savedModulesMessage[key] ?? '')) return true;
+    }
+    return false;
+  }
+
+  void _discardChanges() {
+    setState(() {
+      _globalEnabled = _savedGlobalEnabled;
+      _globalPlatform = _savedGlobalPlatform;
+      _globalTitle.text = _savedGlobalTitle;
+      _globalMessage.text = _savedGlobalMessage;
+
+      for (final key in ['CRM', 'HRMS', 'ERP', 'COLLAB']) {
+        _modulesEnabled[key] = _savedModulesEnabled[key] ?? false;
+        _modulesTitle[key]?.text = _savedModulesTitle[key] ?? '';
+        _modulesMessage[key]?.text = _savedModulesMessage[key] ?? '';
+      }
+      _estimatedEndTime.text = _savedEstimatedEndTime;
+    });
+  }
 
   static const _moduleLabels = {
     'CRM': 'CRM (Sales, Leads, Visitors, Dialer)',
@@ -96,14 +136,24 @@ class _MaintenancePolicyCardState extends State<MaintenancePolicyCard> {
       _globalTitle.text = policy.global.title;
       _globalMessage.text = policy.global.message;
 
+      _savedGlobalEnabled = policy.global.enabled;
+      _savedGlobalPlatform = policy.global.platform;
+      _savedGlobalTitle = policy.global.title;
+      _savedGlobalMessage = policy.global.message;
+
       for (final key in ['CRM', 'HRMS', 'ERP', 'COLLAB']) {
         final mod = policy.modules[key] ?? const ModuleConfig();
         _modulesEnabled[key] = mod.enabled;
         _modulesTitle[key]?.text = mod.title;
         _modulesMessage[key]?.text = mod.message;
+
+        _savedModulesEnabled[key] = mod.enabled;
+        _savedModulesTitle[key] = mod.title;
+        _savedModulesMessage[key] = mod.message;
       }
 
       _estimatedEndTime.text = policy.estimatedEndTime ?? '';
+      _savedEstimatedEndTime = policy.estimatedEndTime ?? '';
 
       setState(() {
         _loading = false;
@@ -157,16 +207,27 @@ class _MaintenancePolicyCardState extends State<MaintenancePolicyCard> {
       if (!mounted) return;
 
       _globalEnabled = saved.global.enabled;
+      _globalPlatform = saved.global.platform;
       _globalTitle.text = saved.global.title;
       _globalMessage.text = saved.global.message;
+
+      _savedGlobalEnabled = saved.global.enabled;
+      _savedGlobalPlatform = saved.global.platform;
+      _savedGlobalTitle = saved.global.title;
+      _savedGlobalMessage = saved.global.message;
 
       for (final key in ['CRM', 'HRMS', 'ERP', 'COLLAB']) {
         final mod = saved.modules[key] ?? const ModuleConfig();
         _modulesEnabled[key] = mod.enabled;
         _modulesTitle[key]?.text = mod.title;
         _modulesMessage[key]?.text = mod.message;
+
+        _savedModulesEnabled[key] = mod.enabled;
+        _savedModulesTitle[key] = mod.title;
+        _savedModulesMessage[key] = mod.message;
       }
       _estimatedEndTime.text = saved.estimatedEndTime ?? '';
+      _savedEstimatedEndTime = saved.estimatedEndTime ?? '';
 
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -372,6 +433,23 @@ class _MaintenancePolicyCardState extends State<MaintenancePolicyCard> {
                                 }
                               },
                             ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Icon(Icons.info_outline_rounded, size: 14, color: widget.textSecondary),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'Platform selection is staged locally. You must click "Save Maintenance Policy" below to apply it to live users.',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontStyle: FontStyle.italic,
+                                      color: widget.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                         const SizedBox(height: 12),
@@ -537,29 +615,74 @@ class _MaintenancePolicyCardState extends State<MaintenancePolicyCard> {
                 ),
                 const SizedBox(height: 20),
 
-                // Save Button
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    onPressed: _saving ? null : _save,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFC5A059),
-                      foregroundColor: const Color(0xFF0F1412),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                // Unsaved changes banner
+                if (hasUnsavedChanges) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.35)),
                     ),
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
-                          )
-                        : const Icon(Icons.save_rounded, size: 18),
-                    label: Text(
-                      _saving ? 'Saving...' : 'Save Maintenance Policy',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.pending_actions_rounded, color: Color(0xFFF59E0B), size: 18),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'You have unsaved policy modifications. Click "Save Maintenance Policy" below to reflect changes.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFF59E0B),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  const SizedBox(height: 14),
+                ],
+
+                // Actions: Discard & Save
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (hasUnsavedChanges) ...[
+                      OutlinedButton.icon(
+                        onPressed: _saving ? null : _discardChanges,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: widget.textSecondary,
+                          side: BorderSide(color: widget.borderColor),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.undo_rounded, size: 16),
+                        label: const Text('Discard Changes'),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    FilledButton.icon(
+                      onPressed: _saving ? null : _save,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFFC5A059),
+                        foregroundColor: const Color(0xFF0F1412),
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: _saving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
+                            )
+                          : const Icon(Icons.save_rounded, size: 18),
+                      label: Text(
+                        _saving ? 'Saving...' : 'Save Maintenance Policy',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

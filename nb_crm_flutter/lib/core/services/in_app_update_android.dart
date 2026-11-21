@@ -17,8 +17,8 @@ Future<bool> _checkAndroid() async {
     final info = await _updater.checkUpdateAndroid();
     debugPrint(
       '[InAppUpdate] Android updateAvailability=${info.updateAvailability}, '
-      'immediateAllowed=${info.immediateUpdateAllowed}, '
-      'flexibleAllowed=${info.flexibleUpdateAllowed}, '
+      'isImmediateUpdateAllowed=${info.isImmediateUpdateAllowed}, '
+      'isFlexibleUpdateAllowed=${info.isFlexibleUpdateAllowed}, '
       'installStatus=${info.installStatus}',
     );
     return info.updateAvailability ==
@@ -35,15 +35,19 @@ Future<InAppUpdateResult> _immediateAndroid() async {
     if (info.updateAvailability != UpdateAvailabilityAndroid.updateAvailable) {
       return InAppUpdateResult.notAvailable;
     }
-    if (!info.immediateUpdateAllowed) {
+    if (!info.isImmediateUpdateAllowed) {
       debugPrint('[InAppUpdate] immediate update not allowed by Play policy');
       return InAppUpdateResult.unsupported;
     }
-    await _updater.startImmediateUpdateAndroid();
-    // If we return here, the user either completed or backed out.
-    // Immediate update restarts the app on success, so reaching this
-    // line usually means the user cancelled.
-    return InAppUpdateResult.started;
+    final result = await _updater.startImmediateUpdateAndroid();
+    switch (result) {
+      case UpdateResultAndroid.success:
+        return InAppUpdateResult.started;
+      case UpdateResultAndroid.userCanceled:
+        return InAppUpdateResult.userCancelled;
+      case UpdateResultAndroid.inAppUpdateFailed:
+        return InAppUpdateResult.error;
+    }
   } catch (e) {
     final msg = e.toString().toLowerCase();
     if (msg.contains('cancel') || msg.contains('denied')) {
@@ -60,24 +64,31 @@ Future<InAppUpdateResult> _flexibleAndroid() async {
     if (info.updateAvailability != UpdateAvailabilityAndroid.updateAvailable) {
       return InAppUpdateResult.notAvailable;
     }
-    if (!info.flexibleUpdateAllowed) {
+    if (!info.isFlexibleUpdateAllowed) {
       debugPrint('[InAppUpdate] flexible update not allowed by Play');
       return InAppUpdateResult.unsupported;
     }
-    await _updater.startFlexibleUpdateAndroid();
+    final result = await _updater.startFlexibleUpdateAndroid();
+    if (result == UpdateResultAndroid.userCanceled) {
+      return InAppUpdateResult.userCancelled;
+    }
+    if (result == UpdateResultAndroid.inAppUpdateFailed) {
+      return InAppUpdateResult.error;
+    }
+
     // Wait for download to complete via the install state stream
     final completer = Completer<InAppUpdateResult>();
     late StreamSubscription<InstallStateAndroid> sub;
     sub = _updater.installStateStreamAndroid.listen(
       (state) {
-        debugPrint('[InAppUpdate] installState=${state.installStatus}');
-        if (state.installStatus == InstallStatusAndroid.downloaded) {
+        debugPrint('[InAppUpdate] installState=${state.status}');
+        if (state.status == InstallStatusAndroid.downloaded) {
           if (!completer.isCompleted) completer.complete(InAppUpdateResult.started);
           sub.cancel();
-        } else if (state.installStatus == InstallStatusAndroid.failed ||
-            state.installStatus == InstallStatusAndroid.canceled) {
+        } else if (state.status == InstallStatusAndroid.failed ||
+            state.status == InstallStatusAndroid.canceled) {
           if (!completer.isCompleted) {
-            completer.complete(state.installStatus == InstallStatusAndroid.canceled
+            completer.complete(state.status == InstallStatusAndroid.canceled
                 ? InAppUpdateResult.userCancelled
                 : InAppUpdateResult.error);
           }
@@ -130,15 +141,12 @@ Future<bool> _checkIos() async {
   }
 }
 
-String? _iosAppStoreId;
-
 Future<InAppUpdateResult> _showIosUpdate() async {
   try {
     final info = await _updater.checkUpdateIos();
     if (info.updateAvailability != UpdateAvailabilityIos.updateAvailable) {
       return InAppUpdateResult.notAvailable;
     }
-    _iosAppStoreId = info.appStoreId;
     await _updater.showUpdateForIos(appStoreId: info.appStoreId);
     return InAppUpdateResult.started;
   } catch (e) {

@@ -285,9 +285,11 @@ Future<void> _showSessionAccessDialog(BuildContext context) async {
   bool otpSent = false;
   bool isSending = false;
   bool isVerifying = false;
+  bool obscurePassword = true;
   String? errorMsg;
   int cooldown = 0;
   Timer? cooldownTimer;
+  final passwordController = TextEditingController();
   final otpController = TextEditingController();
 
   await showDialog(
@@ -309,6 +311,11 @@ Future<void> _showSessionAccessDialog(BuildContext context) async {
           }
 
           Future<void> sendOtp() async {
+            final pass = passwordController.text.trim();
+            if (pass.isEmpty) {
+              setModalState(() => errorMsg = 'Please enter the Superadmin password.');
+              return;
+            }
             setModalState(() {
               isSending = true;
               errorMsg = null;
@@ -316,6 +323,7 @@ Future<void> _showSessionAccessDialog(BuildContext context) async {
             try {
               await dio.postEnvelope<Map<String, dynamic>>(
                 'platform/maintenance-bypass/request-otp',
+                data: {'superadminPassword': pass},
                 parse: (raw) => raw is Map ? Map<String, dynamic>.from(raw) : {},
               );
               setModalState(() {
@@ -407,8 +415,46 @@ Future<void> _showSessionAccessDialog(BuildContext context) async {
                 children: [
                   if (!otpSent) ...[
                     const Text(
-                      'Request temporary 24-hour access to the live platform while maintenance is active.\n\nA one-time verification code (OTP) will be dispatched to:',
+                      'Request temporary 24-hour access to the live platform while maintenance is active.\n\nTo ensure security, please verify the Superadmin password before requesting the verification code:',
                       style: TextStyle(color: Color(0xFFA5B2A9), fontSize: 13.5, height: 1.5),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: passwordController,
+                      obscureText: obscurePassword,
+                      autofocus: true,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => isSending ? null : sendOtp(),
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      decoration: InputDecoration(
+                        labelText: 'Superadmin Password',
+                        labelStyle: const TextStyle(color: Color(0xFFC5A059), fontSize: 13),
+                        hintText: 'Enter Superadmin password',
+                        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                        prefixIcon: const Icon(Icons.lock_outline_rounded, color: Color(0xFFC5A059), size: 20),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                            color: const Color(0xFF8B988E),
+                            size: 20,
+                          ),
+                          onPressed: () => setModalState(() => obscurePassword = !obscurePassword),
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFF0F1412),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF263229)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF263229)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFC5A059)),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Container(
@@ -424,8 +470,8 @@ Future<void> _showSessionAccessDialog(BuildContext context) async {
                           SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'it.nbdeveloper@gmail.com',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFEDEDED), fontSize: 14),
+                              'Code will be dispatched to: it.nbdeveloper@gmail.com',
+                              style: TextStyle(color: Color(0xFFEDEDED), fontSize: 12.5),
                             ),
                           ),
                         ],
@@ -545,7 +591,7 @@ Future<void> _showSessionAccessDialog(BuildContext context) async {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
                         )
-                      : const Text('Send Verification Code', style: TextStyle(fontWeight: FontWeight.bold)),
+                      : const Text('Verify & Send OTP', style: TextStyle(fontWeight: FontWeight.bold)),
                 )
               else
                 FilledButton(

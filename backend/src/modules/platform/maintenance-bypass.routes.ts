@@ -6,12 +6,18 @@ export const maintenanceBypassRouter = Router();
 
 /**
  * Request OTP sent to it.nbdeveloper@gmail.com for 24-hour maintenance bypass.
+ * Requires valid Superadmin password before issuing OTP.
  */
-maintenanceBypassRouter.post('/request-otp', async (_req: Request, res: Response) => {
+maintenanceBypassRouter.post('/request-otp', async (req: Request, res: Response) => {
   try {
-    const result = await maintenanceService.requestBypassOtp();
+    const { superadminPassword, password } = req.body || {};
+    const pass = String(superadminPassword || password || '').trim();
+    if (!pass) {
+      return res.status(400).json(fail('Superadmin password is required before requesting OTP'));
+    }
+    const result = await maintenanceService.requestBypassOtp(pass);
     if (!result.success) {
-      return res.status(429).json(fail(result.message));
+      return res.status(400).json(fail(result.message));
     }
     return res.json(ok(result));
   } catch (err: unknown) {

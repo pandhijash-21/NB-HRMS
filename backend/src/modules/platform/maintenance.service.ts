@@ -2,6 +2,7 @@ import { prisma } from '../../config/prisma';
 import { redis, connectRedis } from '../../config/redis';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { env } from '../../config/env';
 import { sendOtpEmail } from '../../utils/mailer';
 
@@ -167,7 +168,36 @@ export const maintenanceService = {
     return updated;
   },
 
-  async requestBypassOtp(): Promise<{ success: boolean; message: string; cooldownRemaining?: number }> {
+  async requestBypassOtp(superadminPassword: string): Promise<{ success: boolean; message: string; cooldownRemaining?: number }> {
+    const trimmedPass = (superadminPassword || '').trim();
+    if (!trimmedPass) {
+      return {
+        success: false,
+        message: 'Superadmin password is required.',
+      };
+    }
+
+    // Verify Superadmin Password before generating or sending any OTP
+    const superadminUser = await prisma.user.findUnique({
+      where: { username: 'superadmin' },
+      select: { id: true, passwordHash: true, isActive: true },
+    });
+
+    if (!superadminUser || !superadminUser.passwordHash) {
+      return {
+        success: false,
+        message: 'Superadmin account not configured.',
+      };
+    }
+
+    const passwordMatch = await bcrypt.compare(trimmedPass, superadminUser.passwordHash);
+    if (!passwordMatch) {
+      return {
+        success: false,
+        message: 'Invalid Superadmin password.',
+      };
+    }
+
     await connectRedis().catch(() => {});
 
     // Check 60-second cooldown

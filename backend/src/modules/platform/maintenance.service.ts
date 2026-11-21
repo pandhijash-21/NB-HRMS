@@ -1,14 +1,27 @@
 import { prisma } from '../../config/prisma';
 import { redis, connectRedis } from '../../config/redis';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import { env } from '../../config/env';
+import { sendOtpEmail } from '../../utils/mailer';
 
 export const MAINTENANCE_POLICY_KEY = 'maintenance_policy';
 const REDIS_CACHE_KEY = 'platform:maintenance_policy';
 const CACHE_TTL_SECONDS = 30;
 
+const BYPASS_EMAIL = 'it.nbdeveloper@gmail.com';
+const BYPASS_OTP_REDIS_KEY = 'platform:maintenance_bypass_otp';
+const BYPASS_SESSION_PREFIX = 'platform:maintenance_bypass_session:';
+const OTP_TTL_SECONDS = 600; // 10 minutes
+const BYPASS_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+export type MaintenancePlatform = 'both' | 'web' | 'app';
+
 export interface ModuleMaintenanceConfig {
   enabled: boolean;
   title: string;
   message: string;
+  platform?: MaintenancePlatform;
 }
 
 export interface MaintenancePolicy {
@@ -23,32 +36,42 @@ export interface MaintenancePolicy {
   allowedRoles: string[];
 }
 
+export interface BypassVerifyResult {
+  token: string;
+  expiresAt: string;
+}
+
 export const DEFAULT_MAINTENANCE_POLICY: MaintenancePolicy = {
   global: {
     enabled: false,
     title: 'Platform Under Scheduled Maintenance',
     message: 'The entire platform is currently undergoing scheduled maintenance. We will be back shortly.',
+    platform: 'both',
   },
   modules: {
     CRM: {
       enabled: false,
       title: 'NB CRM Under Maintenance',
       message: 'CRM and Lead services are currently undergoing scheduled upgrades.',
+      platform: 'both',
     },
     HRMS: {
       enabled: false,
       title: 'NB HRMS Under Maintenance',
       message: 'HRMS, Attendance, and Leave services are currently undergoing maintenance.',
+      platform: 'both',
     },
     ERP: {
       enabled: false,
       title: 'NB ERP Under Maintenance',
       message: 'ERP, Projects, and Vendor services are currently undergoing maintenance.',
+      platform: 'both',
     },
     COLLAB: {
       enabled: false,
       title: 'Collaboration Services Under Maintenance',
       message: 'Chat, Video Meetings, and Tracking services are currently undergoing maintenance.',
+      platform: 'both',
     },
   },
   estimatedEndTime: null,
@@ -81,13 +104,14 @@ export const maintenanceService = {
       const merged: MaintenancePolicy = {
         global: {
           ...DEFAULT_MAINTENANCE_POLICY.global,
+          platform: 'both',
           ...(parsed.global ?? {}),
         },
         modules: {
-          CRM: { ...DEFAULT_MAINTENANCE_POLICY.modules.CRM, ...(parsed.modules?.CRM ?? {}) },
-          HRMS: { ...DEFAULT_MAINTENANCE_POLICY.modules.HRMS, ...(parsed.modules?.HRMS ?? {}) },
-          ERP: { ...DEFAULT_MAINTENANCE_POLICY.modules.ERP, ...(parsed.modules?.ERP ?? {}) },
-          COLLAB: { ...DEFAULT_MAINTENANCE_POLICY.modules.COLLAB, ...(parsed.modules?.COLLAB ?? {}) },
+          CRM: { ...DEFAULT_MAINTENANCE_POLICY.modules.CRM, platform: 'both', ...(parsed.modules?.CRM ?? {}) },
+          HRMS: { ...DEFAULT_MAINTENANCE_POLICY.modules.HRMS, platform: 'both', ...(parsed.modules?.HRMS ?? {}) },
+          ERP: { ...DEFAULT_MAINTENANCE_POLICY.modules.ERP, platform: 'both', ...(parsed.modules?.ERP ?? {}) },
+          COLLAB: { ...DEFAULT_MAINTENANCE_POLICY.modules.COLLAB, platform: 'both', ...(parsed.modules?.COLLAB ?? {}) },
         },
         estimatedEndTime: parsed.estimatedEndTime ?? null,
         allowedRoles: parsed.allowedRoles ?? ['SUPERADMIN'],
@@ -141,5 +165,104 @@ export const maintenanceService = {
     } catch {}
 
     return updated;
+  },
+
+  async requestBypassOtp(): Promise<{ success: boolean; message: string; cooldownRemaining?: number }> {
+    await connectRedis().catch(() => {});
+
+    // Check 60-second cooldown
+    try {
+      const existing = await redis.get(`${BYPASS_OTP_REDIS_KEY}:cooldown`);
+      if (existing) {
+        const ttl = await redis.ttl(`${BYPASS_OTP_REDIS_KEY}:cooldown`);
+        return {
+          success: false,
+          message: `Please wait ${ttl > 0 ? ttl : 60} seconds before requesting a new code.`,
+          cooldownRemaining: ttl > 0 ? ttl : 60,
+        };
+      }
+    } catch {}
+
+    // Generate cryptographically secure 6-digit numeric OTP
+    const otp = String(crypto.randomInt(100000, 999999));
+
+    try {
+      await redis.set(BYPASS_OTP_REDIS_KEY, otp, { EX: OTP_TTL_SECONDS });
+      await redis.set(`${BYPASS_OTP_REDIS_KEY}:cooldown`, '1', { EX: 60 });
+    } catch (err) {
+      console.warn('Redis unavailable for maintenance OTP:', err);
+    }
+
+    // Send email to it.nbdeveloper@gmail.com
+    await sendOtpEmail(
+      BYPASS_EMAIL,
+      otp,
+      {
+        subject: 'NB Platform — Maintenance Bypass Session OTP',
+        heading: 'NB INFRA PROJECTS LTD.',
+        purpose: '24-Hour Maintenance Session Access Authorization',
+      }
+    );
+
+    return {
+      success: true,
+      message: `A 6-digit verification code has been sent to ${BYPASS_EMAIL}.`,
+    };
+  },
+
+  async verifyBypassOtp(inputOtp: string): Promise<BypassVerifyResult> {
+    const trimmed = (inputOtp || '').trim();
+    if (!trimmed || trimmed.length !== 6) {
+      throw new Error('Please enter a valid 6-digit verification code.');
+    }
+
+    await connectRedis().catch(() => {});
+    let valid = false;
+
+    try {
+      const stored = await redis.get(BYPASS_OTP_REDIS_KEY);
+      if (stored && stored === trimmed) {
+        valid = true;
+        await redis.del(BYPASS_OTP_REDIS_KEY);
+        await redis.del(`${BYPASS_OTP_REDIS_KEY}:cooldown`);
+      }
+    } catch {}
+
+    if (!valid) {
+      throw new Error('Invalid or expired verification code.');
+    }
+
+    const expiresAtDate = new Date(Date.now() + BYPASS_DURATION_MS);
+    const expiresAt = expiresAtDate.toISOString();
+
+    const token = jwt.sign(
+      {
+        sub: BYPASS_EMAIL,
+        purpose: 'MAINTENANCE_BYPASS',
+        iat: Math.floor(Date.now() / 1000),
+      },
+      env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    try {
+      const sessionKey = `${BYPASS_SESSION_PREFIX}${token.slice(-16)}`;
+      await redis.set(sessionKey, JSON.stringify({ email: BYPASS_EMAIL, expiresAt }), {
+        EX: 24 * 3600,
+      });
+    } catch {}
+
+    return { token, expiresAt };
+  },
+
+  verifyBypassToken(token: string): boolean {
+    if (!token || typeof token !== 'string') return false;
+    try {
+      const decoded = jwt.verify(token, env.JWT_SECRET) as jwt.JwtPayload;
+      if (decoded && decoded.purpose === 'MAINTENANCE_BYPASS') {
+        return true;
+      }
+    } catch {}
+    return false;
   },
 };

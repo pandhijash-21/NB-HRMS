@@ -31,6 +31,7 @@ class _MaintenancePolicyCardState extends State<MaintenancePolicyCard> {
 
   // Global
   bool _globalEnabled = false;
+  String _globalPlatform = 'both';
   final _globalTitle = TextEditingController();
   final _globalMessage = TextEditingController();
 
@@ -91,6 +92,7 @@ class _MaintenancePolicyCardState extends State<MaintenancePolicyCard> {
       if (!mounted) return;
 
       _globalEnabled = policy.global.enabled;
+      _globalPlatform = policy.global.platform;
       _globalTitle.text = policy.global.title;
       _globalMessage.text = policy.global.message;
 
@@ -137,6 +139,7 @@ class _MaintenancePolicyCardState extends State<MaintenancePolicyCard> {
           enabled: _globalEnabled,
           title: _globalTitle.text.trim(),
           message: _globalMessage.text.trim(),
+          platform: _globalPlatform,
         ),
         modules: mods,
         estimatedEndTime: _estimatedEndTime.text.trim().isEmpty ? null : _estimatedEndTime.text.trim(),
@@ -331,6 +334,46 @@ class _MaintenancePolicyCardState extends State<MaintenancePolicyCard> {
                         ],
                       ),
                       if (_globalEnabled) ...[
+                        const SizedBox(height: 14),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Target Platform Scope',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: widget.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            SegmentedButton<String>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: 'both',
+                                  label: Text('Both Web & App'),
+                                  icon: Icon(Icons.devices_rounded, size: 16),
+                                ),
+                                ButtonSegment(
+                                  value: 'web',
+                                  label: Text('Web Only'),
+                                  icon: Icon(Icons.language_rounded, size: 16),
+                                ),
+                                ButtonSegment(
+                                  value: 'app',
+                                  label: Text('App Only'),
+                                  icon: Icon(Icons.phone_android_rounded, size: 16),
+                                ),
+                              ],
+                              selected: {_globalPlatform},
+                              onSelectionChanged: (set) {
+                                if (set.isNotEmpty) {
+                                  setState(() => _globalPlatform = set.first);
+                                }
+                              },
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 12),
                         TextField(
                           controller: _globalTitle,

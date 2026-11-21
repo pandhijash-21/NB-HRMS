@@ -228,25 +228,46 @@ class _GlobalMaintenanceScreenState extends State<GlobalMaintenanceScreen> {
                       ),
                     ],
                     const SizedBox(height: 32),
-                    FilledButton.icon(
-                      onPressed: _isRefreshing ? null : _refresh,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFC5A059),
-                        foregroundColor: const Color(0xFF0F1412),
-                        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      icon: _isRefreshing
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
-                            )
-                          : const Icon(Icons.refresh_rounded, size: 18),
-                      label: Text(
-                        _isRefreshing ? 'Checking...' : 'Check Status',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: _isRefreshing ? null : _refresh,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFC5A059),
+                            foregroundColor: const Color(0xFF0F1412),
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: _isRefreshing
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
+                                )
+                              : const Icon(Icons.refresh_rounded, size: 18),
+                          label: Text(
+                            _isRefreshing ? 'Checking...' : 'Check Status',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => _showSessionAccessDialog(context),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFC5A059),
+                            side: const BorderSide(color: Color(0xFFC5A059)),
+                            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.vpn_key_rounded, size: 18),
+                          label: const Text(
+                            'Session Access',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -257,6 +278,296 @@ class _GlobalMaintenanceScreenState extends State<GlobalMaintenanceScreen> {
       ),
     );
   }
+}
+
+Future<void> _showSessionAccessDialog(BuildContext context) async {
+  final dio = AppRepositories().dioClient;
+  bool otpSent = false;
+  bool isSending = false;
+  bool isVerifying = false;
+  String? errorMsg;
+  int cooldown = 0;
+  Timer? cooldownTimer;
+  final otpController = TextEditingController();
+
+  await showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogCtx) {
+      return StatefulBuilder(
+        builder: (ctx, setModalState) {
+          void startCooldown(int seconds) {
+            cooldown = seconds;
+            cooldownTimer?.cancel();
+            cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+              if (cooldown > 0) {
+                setModalState(() => cooldown--);
+              } else {
+                t.cancel();
+              }
+            });
+          }
+
+          Future<void> sendOtp() async {
+            setModalState(() {
+              isSending = true;
+              errorMsg = null;
+            });
+            try {
+              await dio.postEnvelope<Map<String, dynamic>>(
+                'platform/maintenance-bypass/request-otp',
+                parse: (raw) => raw is Map ? Map<String, dynamic>.from(raw) : {},
+              );
+              setModalState(() {
+                isSending = false;
+                otpSent = true;
+              });
+              startCooldown(60);
+            } catch (e) {
+              setModalState(() {
+                isSending = false;
+                errorMsg = e.toString().replaceFirst('Exception: ', '');
+              });
+            }
+          }
+
+          Future<void> verifyOtp() async {
+            final code = otpController.text.trim();
+            if (code.length != 6) {
+              setModalState(() => errorMsg = 'Please enter a 6-digit verification code.');
+              return;
+            }
+            setModalState(() {
+              isVerifying = true;
+              errorMsg = null;
+            });
+            try {
+              final res = await dio.postEnvelope<Map<String, dynamic>>(
+                'platform/maintenance-bypass/verify-otp',
+                data: {'otp': code},
+                parse: (raw) => raw is Map ? Map<String, dynamic>.from(raw) : {},
+              );
+              final token = res['token']?.toString();
+              final expiresAt = res['expiresAt']?.toString();
+              if (token != null && expiresAt != null) {
+                await BrandingConfig.saveMaintenanceBypass(token, expiresAt);
+                cooldownTimer?.cancel();
+                if (dialogCtx.mounted) {
+                  Navigator.of(dialogCtx).pop();
+                }
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('24-Hour Maintenance Session Access Granted! Unlocking platform...'),
+                      backgroundColor: Color(0xFF10B981),
+                    ),
+                  );
+                }
+              } else {
+                throw Exception('Invalid response from server.');
+              }
+            } catch (e) {
+              setModalState(() {
+                isVerifying = false;
+                errorMsg = e.toString().replaceFirst('Exception: ', '');
+              });
+            }
+          }
+
+          return AlertDialog(
+            backgroundColor: const Color(0xFF181F1B),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: const BorderSide(color: Color(0xFF2E3D34)),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFC5A059).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.vpn_key_rounded, color: Color(0xFFC5A059), size: 20),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    '24-Hour Session Access',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 440,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!otpSent) ...[
+                    const Text(
+                      'Request temporary 24-hour access to the live platform while maintenance is active.\n\nA one-time verification code (OTP) will be dispatched to:',
+                      style: TextStyle(color: Color(0xFFA5B2A9), fontSize: 13.5, height: 1.5),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F1412),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFC5A059).withValues(alpha: 0.3)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.mail_outline_rounded, color: Color(0xFFC5A059), size: 18),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'it.nbdeveloper@gmail.com',
+                              style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFEDEDED), fontSize: 14),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.mark_email_read_rounded, color: Color(0xFF10B981), size: 20),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Verification code sent to it.nbdeveloper@gmail.com',
+                              style: TextStyle(color: Color(0xFF10B981), fontSize: 12.5, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: otpController,
+                      autofocus: true,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 8,
+                        color: Color(0xFFC5A059),
+                        fontFamily: 'monospace',
+                      ),
+                      decoration: InputDecoration(
+                        hintText: '000000',
+                        hintStyle: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          letterSpacing: 8,
+                        ),
+                        counterText: '',
+                        filled: true,
+                        fillColor: const Color(0xFF0F1412),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF263229)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF263229)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFC5A059)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (cooldown > 0)
+                          Text(
+                            'Resend available in ${cooldown}s',
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF8B988E)),
+                          )
+                        else
+                          TextButton(
+                            onPressed: isSending ? null : sendOtp,
+                            child: const Text('Resend Code', style: TextStyle(color: Color(0xFFC5A059), fontSize: 12)),
+                          ),
+                      ],
+                    ),
+                  ],
+                  if (errorMsg != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        errorMsg!,
+                        style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  cooldownTimer?.cancel();
+                  Navigator.of(dialogCtx).pop();
+                },
+                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              ),
+              if (!otpSent)
+                FilledButton(
+                  onPressed: isSending ? null : sendOtp,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFC5A059),
+                    foregroundColor: const Color(0xFF0F1412),
+                  ),
+                  child: isSending
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
+                        )
+                      : const Text('Send Verification Code', style: TextStyle(fontWeight: FontWeight.bold)),
+                )
+              else
+                FilledButton(
+                  onPressed: isVerifying ? null : verifyOtp,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFC5A059),
+                    foregroundColor: const Color(0xFF0F1412),
+                  ),
+                  child: isVerifying
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F1412)),
+                        )
+                      : const Text('Verify & Unlock (24h)', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+            ],
+          );
+        },
+      );
+    },
+  );
 }
 
 /// In-place view shown when an individual module (CRM, HRMS, ERP, COLLAB) is under maintenance.
@@ -492,6 +803,16 @@ class _ModuleMaintenanceViewState extends State<ModuleMaintenanceView> {
                       ),
                       icon: const Icon(Icons.arrow_back_rounded, size: 16),
                       label: const Text('Go to Active Module'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => _showSessionAccessDialog(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFC5A059),
+                        side: const BorderSide(color: Color(0xFFC5A059)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.vpn_key_rounded, size: 16),
+                      label: const Text('Session Access'),
                     ),
                   ],
                 ),

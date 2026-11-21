@@ -44,6 +44,7 @@ import { crmRouter, crmPublicRouter, clientPortalPageRouter } from './modules/cr
 import { publicPagesRouter } from './modules/public-pages/public-pages.routes';
 import { hubRouter } from './modules/hub';
 import { platformRouter } from './modules/platform/platform.routes';
+import { maintenanceBypassRouter } from './modules/platform/maintenance-bypass.routes';
 import { earthRouter } from './modules/earth';
 import { opsRouter } from './modules/ops/ops.routes';
 import { opsRequestLogMiddleware } from './modules/ops/ops-request-log.middleware';
@@ -72,6 +73,8 @@ app.use(cors({
     'x-nb-enc',
     'X-Client-Platform',
     'x-client-platform',
+    'X-Maintenance-Bypass',
+    'x-maintenance-bypass',
     'X-Requested-With',
     'X-CRM-Scope',
     'x-crm-scope',
@@ -179,6 +182,7 @@ app.use('/api/letters', lettersRouter);
 app.use('/api/reimbursements', reimbursementsRouter);
 app.use('/api/recruitment', recruitmentRouter);
 app.use('/api/repository', repositoryRouter);
+app.use('/api/platform/maintenance-bypass', maintenanceBypassRouter);
 app.use('/api/platform', platformRouter);
 app.use('/api/ops', opsRouter);
 app.use('/api', organizationRouter);

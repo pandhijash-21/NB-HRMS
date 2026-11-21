@@ -2,11 +2,13 @@ class ModuleConfig {
   final bool enabled;
   final String title;
   final String message;
+  final String platform; // 'both' | 'web' | 'app'
 
   const ModuleConfig({
     this.enabled = false,
     this.title = '',
     this.message = '',
+    this.platform = 'both',
   });
 
   factory ModuleConfig.fromJson(Map<String, dynamic>? json) {
@@ -15,6 +17,7 @@ class ModuleConfig {
       enabled: json['enabled'] == true,
       title: json['title']?.toString() ?? '',
       message: json['message']?.toString() ?? '',
+      platform: json['platform']?.toString() ?? 'both',
     );
   }
 
@@ -22,17 +25,20 @@ class ModuleConfig {
     'enabled': enabled,
     'title': title,
     'message': message,
+    'platform': platform,
   };
 
   ModuleConfig copyWith({
     bool? enabled,
     String? title,
     String? message,
+    String? platform,
   }) {
     return ModuleConfig(
       enabled: enabled ?? this.enabled,
       title: title ?? this.title,
       message: message ?? this.message,
+      platform: platform ?? this.platform,
     );
   }
 }

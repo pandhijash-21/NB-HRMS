@@ -18,6 +18,7 @@ class BrandingConfig {
 
   // Maintenance configuration
   static bool isGlobalMaintenance = false;
+  static String globalMaintenancePlatform = 'both';
   static String globalMaintenanceTitle = '';
   static String globalMaintenanceMessage = '';
   static String? maintenanceEstimatedEndTime;
@@ -27,6 +28,58 @@ class BrandingConfig {
     'ERP': const ModuleConfig(),
     'COLLAB': const ModuleConfig(),
   };
+
+  // 24-hour maintenance bypass session
+  static String? bypassToken;
+  static DateTime? bypassExpiresAt;
+
+  static const _bypassTokenKey = 'nb_crm_maintenance_bypass_token';
+  static const _bypassExpiresAtKey = 'nb_crm_maintenance_bypass_expires_at';
+
+  static bool get hasActiveBypass {
+    if (bypassToken == null || bypassToken!.isEmpty || bypassExpiresAt == null) {
+      return false;
+    }
+    return DateTime.now().isBefore(bypassExpiresAt!);
+  }
+
+  static Future<void> saveMaintenanceBypass(String token, String expiresAtIso) async {
+    bypassToken = token;
+    bypassExpiresAt = DateTime.tryParse(expiresAtIso);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_bypassTokenKey, token);
+    await prefs.setString(_bypassExpiresAtKey, expiresAtIso);
+
+    // Re-evaluate global maintenance status with bypass active
+    _recomputeGlobalMaintenance();
+    maintenanceNotifier.value++;
+  }
+
+  static Future<void> clearMaintenanceBypass() async {
+    bypassToken = null;
+    bypassExpiresAt = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_bypassTokenKey);
+    await prefs.remove(_bypassExpiresAtKey);
+
+    _recomputeGlobalMaintenance();
+    maintenanceNotifier.value++;
+  }
+
+  static void _recomputeGlobalMaintenance() {
+    if (hasActiveBypass) {
+      isGlobalMaintenance = false;
+      return;
+    }
+    final platformMatches = switch (globalMaintenancePlatform) {
+      'web' => kIsWeb,
+      'app' => !kIsWeb,
+      _ => true,
+    };
+    isGlobalMaintenance = _rawGlobalEnabled && platformMatches;
+  }
+
+  static bool _rawGlobalEnabled = false;
 
   /// Notifier triggered whenever maintenance status updates.
   static final ValueNotifier<int> maintenanceNotifier = ValueNotifier<int>(0);
@@ -51,6 +104,20 @@ class BrandingConfig {
     updateUrlAndroid = prefs.getString(_androidKey)?.trim() ?? '';
     updateUrlIos = prefs.getString(_iosKey)?.trim() ?? '';
 
+    // Restore 24h bypass token
+    final savedBypassToken = prefs.getString(_bypassTokenKey);
+    final savedExpiresAtIso = prefs.getString(_bypassExpiresAtKey);
+    if (savedBypassToken != null && savedExpiresAtIso != null) {
+      final exp = DateTime.tryParse(savedExpiresAtIso);
+      if (exp != null && DateTime.now().isBefore(exp)) {
+        bypassToken = savedBypassToken;
+        bypassExpiresAt = exp;
+      } else {
+        await prefs.remove(_bypassTokenKey);
+        await prefs.remove(_bypassExpiresAtKey);
+      }
+    }
+
     final mRaw = prefs.getString(_maintenanceKey);
     if (mRaw != null && mRaw.isNotEmpty) {
       try {
@@ -66,14 +133,18 @@ class BrandingConfig {
     maintenanceEstimatedEndTime = m['estimatedEndTime']?.toString();
     if (m['global'] is Map) {
       final g = Map<String, dynamic>.from(m['global'] as Map);
-      isGlobalMaintenance = g['enabled'] == true;
+      _rawGlobalEnabled = g['enabled'] == true;
+      globalMaintenancePlatform = g['platform']?.toString() ?? 'both';
       globalMaintenanceTitle = g['title']?.toString() ?? '';
       globalMaintenanceMessage = g['message']?.toString() ?? '';
     } else {
-      isGlobalMaintenance = false;
+      _rawGlobalEnabled = false;
+      globalMaintenancePlatform = 'both';
       globalMaintenanceTitle = '';
       globalMaintenanceMessage = '';
     }
+
+    _recomputeGlobalMaintenance();
 
     if (m['modules'] is Map) {
       final mods = Map<String, dynamic>.from(m['modules'] as Map);
@@ -128,8 +199,16 @@ class BrandingConfig {
 
   /// Whether a specific module is under maintenance.
   static bool isModuleInMaintenance(String moduleKey) {
+    if (hasActiveBypass) return false;
     final mod = modulesMaintenance[moduleKey.toUpperCase()];
-    return mod?.enabled == true;
+    if (mod?.enabled != true) return false;
+    final platform = mod?.platform ?? 'both';
+    final platformMatches = switch (platform) {
+      'web' => kIsWeb,
+      'app' => !kIsWeb,
+      _ => true,
+    };
+    return platformMatches;
   }
 
   /// Configuration for a specific module under maintenance.

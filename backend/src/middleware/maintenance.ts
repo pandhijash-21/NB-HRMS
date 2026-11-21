@@ -2,7 +2,6 @@ import type { Request, Response, NextFunction } from 'express';
 import { maintenanceService, type ModuleMaintenanceConfig } from '../modules/platform/maintenance.service';
 import { isSuperAdminRole } from '../modules/auth/permissions-map';
 import jwt from 'jsonwebtoken';
-import { env } from '../config/env';
 
 /**
  * Paths that are NEVER blocked by maintenance mode.
@@ -10,6 +9,7 @@ import { env } from '../config/env';
 const ALWAYS_EXEMPT_PATHS = [
   '/health',
   '/api/auth/branding',
+  '/api/platform/maintenance-bypass',
   '/privacypolicy',
   '/termsofservice',
   '/terms',
@@ -31,6 +31,17 @@ function isSuperAdminFromToken(req: Request): boolean {
     } catch {}
   }
   return false;
+}
+
+function matchesTargetPlatform(configPlatform?: string, req?: Request): boolean {
+  if (!configPlatform || configPlatform === 'both') return true;
+  const platformHeader = (req?.headers['x-client-platform'] as string)?.toLowerCase();
+  const isApp = platformHeader === 'app' || !!req?.headers['x-app-version'];
+  const isWeb = !isApp;
+
+  if (configPlatform === 'web' && isApp) return false; // App users allowed through
+  if (configPlatform === 'app' && isWeb) return false; // Web users allowed through
+  return true;
 }
 
 function matchModule(path: string): 'CRM' | 'HRMS' | 'ERP' | 'COLLAB' | null {
@@ -80,6 +91,7 @@ function sendMaintenanceBlock(res: Response, scope: string, config: ModuleMainte
       scope,
       title: config.title,
       message: config.message,
+      platform: config.platform || 'both',
       estimatedEndTime: estimatedEndTime ?? null,
     },
   });
@@ -89,6 +101,8 @@ function sendMaintenanceBlock(res: Response, scope: string, config: ModuleMainte
  * Global and Modular maintenance middleware.
  * - Global maintenance blocks all non-exempt API routes.
  * - Modular maintenance blocks only the specific module under maintenance.
+ * - Platform targeted: can selectively block web only, app only, or both.
+ * - 24-hour bypass token (via OTP) exempts the authorized session device.
  * - Superadmin is always exempt across all routes and modules.
  */
 export async function maintenanceMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -109,11 +123,17 @@ export async function maintenanceMiddleware(req: Request, res: Response, next: N
     return next();
   }
 
+  // 24-Hour Emergency Maintenance Bypass Check
+  const bypassToken = (req.headers['x-maintenance-bypass'] as string) || (req.query.maintenance_bypass as string);
+  if (bypassToken && maintenanceService.verifyBypassToken(bypassToken)) {
+    return next();
+  }
+
   try {
     const policy = await maintenanceService.getPolicy();
 
     // 1. Global / Platform-wide Maintenance
-    if (policy.global.enabled) {
+    if (policy.global.enabled && matchesTargetPlatform(policy.global.platform, req)) {
       // Allow login endpoint so Superadmin can authenticate
       if (path === '/api/auth/login' || path === '/api/auth/token') {
         return next();
@@ -123,7 +143,7 @@ export async function maintenanceMiddleware(req: Request, res: Response, next: N
 
     // 2. Modular Maintenance
     const moduleKey = matchModule(path);
-    if (moduleKey && policy.modules[moduleKey]?.enabled) {
+    if (moduleKey && policy.modules[moduleKey]?.enabled && matchesTargetPlatform(policy.modules[moduleKey].platform, req)) {
       return sendMaintenanceBlock(res, moduleKey, policy.modules[moduleKey], policy.estimatedEndTime);
     }
   } catch (err) {

@@ -6,6 +6,7 @@ import '../logging/app_logger.dart';
 import 'api_envelope.dart';
 import 'app_config.dart';
 import 'transport_crypto.dart';
+import '../services/branding_config.dart';
 
 /// Mutable hook so [DioClient] can notify auth without circular construction.
 class UnauthorizedGate {
@@ -49,6 +50,9 @@ class DioClient {
               : await readToken();
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
+          }
+          if (BrandingConfig.hasActiveBypass && BrandingConfig.bypassToken != null) {
+            options.headers['x-maintenance-bypass'] = BrandingConfig.bypassToken;
           }
           options.headers[transportEncHeader] = '$transportEncVersion';
           final data = options.data;

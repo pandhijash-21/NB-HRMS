@@ -318,6 +318,18 @@ class DioClient {
             statusCode: 404,
           );
         }
+        if (status == 502 || status == 503 || status == 504) {
+          return ApiException(
+            'Server is momentarily restarting or undergoing updates. Please try again in a few seconds.',
+            statusCode: status,
+          );
+        }
+        if (status == 500) {
+          return const ApiException(
+            'Server encountered an unexpected error. Please try again later.',
+            statusCode: 500,
+          );
+        }
         return ApiException(
           e.message ?? 'Something went wrong. Please try again.',
           statusCode: status,

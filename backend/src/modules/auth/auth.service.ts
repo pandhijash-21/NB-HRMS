@@ -446,9 +446,14 @@ export const authService = {
     });
 
     // First login OR a password that no longer meets policy → force a change
-    // before email OTP. Clients already gate on `isFirstLogin`.
+    // before email OTP. Clients already gate on `isFirstLogin`. Superadmin is exempt.
+    const isSuperAdminUser =
+      user.role?.name?.toUpperCase() === 'SUPERADMIN' ||
+      user.role?.name?.toUpperCase() === 'SUPER_ADMIN' ||
+      user.username?.toLowerCase() === 'superadmin';
+
     const mustChangePassword =
-      user.isFirstLogin || !passwordMeetsPolicy(input.password);
+      !isSuperAdminUser && (user.isFirstLogin || !passwordMeetsPolicy(input.password));
 
     const emailStatus = mustChangePassword
       ? { needsEmailVerification: false, emails: [] as Awaited<ReturnType<typeof otpService.getEmailVerificationStatus>>['emails'] }

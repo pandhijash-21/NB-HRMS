@@ -78,8 +78,8 @@ services:
       - uploadsdata:/app/uploads
     labels:
       - traefik.enable=true
-      - traefik.http.routers.nbcrm-api.rule=Host(`crm.nbsince1946.com`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`) || PathPrefix(`/client-portal`) || PathPrefix(`/privacypolicy`) || PathPrefix(`/contactus`))
-      - traefik.http.routers.nbcrm-api-legacy.rule=Host(`crm.nbdeveloper.co.in`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`) || PathPrefix(`/client-portal`) || PathPrefix(`/privacypolicy`) || PathPrefix(`/contactus`))
+      - traefik.http.routers.nbcrm-api.rule=Host(`crm.nbsince1946.com`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`) || PathPrefix(`/client-portal`) || PathPrefix(`/privacypolicy`) || PathPrefix(`/termsofservice`) || PathPrefix(`/terms`) || PathPrefix(`/contactus`))
+      - traefik.http.routers.nbcrm-api-legacy.rule=Host(`crm.nbdeveloper.co.in`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`) || PathPrefix(`/client-portal`) || PathPrefix(`/privacypolicy`) || PathPrefix(`/termsofservice`) || PathPrefix(`/terms`) || PathPrefix(`/contactus`))
       - traefik.http.routers.nbcrm-api-legacy.entrypoints=websecure
       - traefik.http.routers.nbcrm-api-legacy.tls=true
       - traefik.http.routers.nbcrm-api-legacy.priority=20

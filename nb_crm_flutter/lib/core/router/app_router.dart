@@ -225,6 +225,11 @@ GoRouter createAppRouter(AuthBloc authBloc) {
         } else {
           next = (loggingIn || forgettingPassword || guestMeet || isClientPortal || isPrivacyPolicy || isTermsOfService || isContactUs) ? null : '/login';
         }
+      } else if (isSuperAdmin) {
+        // SaaS Platform Superadmin is dedicated strictly to the platform console
+        if (!isPlatformPath) {
+          next = '/platform';
+        }
       } else if (auth.isFirstLogin) {
         next = changingPassword ? null : '/change-password';
       } else if (auth.needsEmailVerification) {
@@ -237,11 +242,6 @@ GoRouter createAppRouter(AuthBloc authBloc) {
                     '${auth.user?.employeeId ?? ''}');
         final onHome = loc == '/home';
         next = (onOwnProfileEdit || onHome) ? null : '/home';
-      } else if (isSuperAdmin) {
-        // SaaS Platform Superadmin is dedicated strictly to the platform console
-        if (!isPlatformPath) {
-          next = '/platform';
-        }
       } else {
         // Client company users and employees cannot access platform console or superadmin portal
         if (isPlatformPath || isSuperAdminPath) {

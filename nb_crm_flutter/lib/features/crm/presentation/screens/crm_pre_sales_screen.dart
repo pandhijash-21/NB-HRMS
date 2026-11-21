@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/bloc/load_status.dart';
+import '../../../../core/network/api_envelope.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/tour/models/tour_models.dart';
 import '../../../../core/tour/widgets/tour_target.dart';
@@ -5659,7 +5660,12 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               content: SizedBox(
                 width: 460,
                 child: loadError != null
-                    ? Text('Failed to load batches: $loadError')
+                    ? Text(
+                        loadError is ApiException
+                            ? loadError.message
+                            : 'Failed to load batches: $loadError',
+                        style: const TextStyle(color: Color(0xFFDC2626)),
+                      )
                     : batches.isEmpty
                         ? const Text(
                             'No Excel import batches found.\n\n'

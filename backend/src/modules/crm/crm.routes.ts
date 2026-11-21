@@ -265,8 +265,9 @@ crmRouter.post('/campaigns/:id/test-webhook', generalCrmGuard, crmController.tes
 
 // Admin-only operations within CRM (Excel import & export)
 const crmAdminGuard = (req: any, res: any, next: any) => {
-  const role = String(req.user?.roleName ?? req.user?.role ?? '').toUpperCase();
-  const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'ITADMIN'].some((r) => role.includes(r));
+  if (req.user?.companyAdminGranted) return next();
+  const role = String(req.user?.roleName ?? req.user?.role?.name ?? req.user?.role ?? '').toUpperCase();
+  const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'ITADMIN', 'DIRECTOR', 'CEO', 'COMPANY_ADMIN'].some((r) => role.includes(r));
   if (!isAdmin) {
     return res.status(403).json({
       success: false,

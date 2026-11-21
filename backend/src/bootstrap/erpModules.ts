@@ -765,7 +765,7 @@ export async function ensureErpModulePermissions(): Promise<void> {
     const defaultSuperadminHash = await bcrypt.hash('01011998', 12);
     const existingSuperadmin = await prisma.user.findUnique({
       where: { username: 'superadmin' },
-      select: { id: true },
+      select: { id: true, passwordHash: true },
     });
 
     if (!existingSuperadmin) {
@@ -787,7 +787,7 @@ export async function ensureErpModulePermissions(): Promise<void> {
         where: { id: existingSuperadmin.id },
         data: {
           roleId: superAdminRole.id,
-          passwordHash: defaultSuperadminHash,
+          ...(existingSuperadmin.passwordHash ? {} : { passwordHash: defaultSuperadminHash }),
           isActive: true,
           isFirstLogin: false,
           loginLockStage: 0,

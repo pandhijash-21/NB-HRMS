@@ -1728,7 +1728,7 @@ class _PunchMapDialog extends StatelessWidget {
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.nbdeveloper.hrms',
+                userAgentPackageName: 'com.nb.hrms',
               ),
               if (punch.location != null)
                 CircleLayer(

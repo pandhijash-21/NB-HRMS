@@ -2379,7 +2379,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       ];
     }
 
-    // Real Estate (NB Developer)
+    // Real Estate (NB Infra Projects LTD.)
     String siteVisitRep = 'Admin Only';
     if (_siteVisitDeskEmployeeId != null) {
       for (final e in employees) {

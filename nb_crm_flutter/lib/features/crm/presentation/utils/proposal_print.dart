@@ -163,7 +163,7 @@ void printProposalQuotation({
     <!-- Header Letterhead -->
     <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 2px solid #0f172a;">
       <div>
-        <div style="font-size: 24px; font-weight: 800; color: #0f172a; letter-spacing: 0.5px;">NB DEVELOPERS</div>
+        <div style="font-size: 24px; font-weight: 800; color: #0f172a; letter-spacing: 0.5px;">NB INFRA PROJECTS LTD.</div>
         <div style="font-size: 13px; font-weight: 600; color: #b45309; text-transform: uppercase; margin-top: 2px;">Official Property Price Quotation</div>
         <div style="font-size: 11px; color: #64748b; margin-top: 3px;">Real Estate & Infrastructure Development</div>
       </div>
@@ -318,7 +318,7 @@ void printProposalQuotation({
         <div style="border-top: 1px solid #0f172a; padding-top: 6px;">
           <div style="font-weight: 700; font-size: 11.5px; color: #0f172a;">${proposal.createdByName ?? 'Sales Executive'}</div>
           <div style="font-size: 10px; color: #64748b;">Authorized Sales Consultant</div>
-          <div style="font-size: 10px; color: #64748b; margin-top: 2px;">NB Developers</div>
+          <div style="font-size: 10px; color: #64748b; margin-top: 2px;">NB Infra Projects LTD.</div>
         </div>
       </div>
 

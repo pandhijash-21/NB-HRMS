@@ -10,7 +10,7 @@ import '../bloc/crm_leads_bloc.dart';
 const String kActiveCrmScopePrefKey = 'active_crm_scope';
 
 /// Interactive CRM Scope Switcher Dropdown
-/// Allows instant switching between NB Developer CRM (Real Estate) and NB Capital CRM (Financial Services).
+/// Allows instant switching between NB Infra Projects LTD. CRM (Real Estate) and NB Capital CRM (Financial Services).
 class CrmScopeSelectorWidget extends StatefulWidget {
   final VoidCallback? onScopeChanged;
   final bool compact;
@@ -100,7 +100,7 @@ class _CrmScopeSelectorWidgetState extends State<CrmScopeSelectorWidget> {
               Text(
                 isFinserve
                     ? 'Switched to NB Capital CRM'
-                    : 'Switched to NB Developer CRM',
+                    : 'Switched to NB Infra Projects LTD. CRM',
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ],
@@ -157,7 +157,7 @@ class _CrmScopeSelectorWidgetState extends State<CrmScopeSelectorWidget> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'NB Developer CRM',
+                          'NB Infra Projects LTD. CRM',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 13,
@@ -385,7 +385,7 @@ class _CrmScopeSelectorWidgetState extends State<CrmScopeSelectorWidget> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                isFinserve ? 'NB Capital CRM' : 'NB Developer CRM',
+                                isFinserve ? 'NB Capital CRM' : 'NB Infra Projects LTD. CRM',
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w800,
@@ -409,7 +409,7 @@ class _CrmScopeSelectorWidgetState extends State<CrmScopeSelectorWidget> {
                           )
                         else
                           Text(
-                            isFinserve ? 'NB Capital CRM' : 'NB Developer CRM',
+                            isFinserve ? 'NB Capital CRM' : 'NB Infra Projects LTD. CRM',
                             style: TextStyle(
                               fontSize: widget.compact ? 11.5 : 12.5,
                               fontWeight: FontWeight.w800,

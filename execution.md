@@ -20,7 +20,7 @@ The easiest way to start the infrastructure (DB, Redis, Hasura) is using Docker 
     ```
     This will start:
     - **PostgreSQL**: `localhost:5434` (User: `hrms_user`, Pass: `hrms_pass`)
-      - `nb_crm_db` — **this** NB Developer project (required)
+      - `nb_crm_db` — **this** NB Infra Projects LTD. project (required)
       - `hrms_db` — college HRMS only; do **not** point this app at it
     - **Redis**: `localhost:6380`
     - **Hasura GraphQL Engine**: `http://localhost:8080`

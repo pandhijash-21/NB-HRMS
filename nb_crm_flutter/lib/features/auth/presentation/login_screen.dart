@@ -410,7 +410,7 @@ class _BrandHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'NB DEVELOPER',
+              'NB INFRA PROJECTS LTD.',
               style: GoogleFonts.sourceSans3(
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
@@ -487,14 +487,48 @@ class _MobileBrandHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              Text(
-                'Version $kAppVersion',
-                style: GoogleFonts.sourceSans3(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.8,
-                  color: _C.goldSoft,
-                ),
+              Row(
+                children: [
+                  Text(
+                    'Version $kAppVersion',
+                    style: GoogleFonts.sourceSans3(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
+                      color: _C.goldSoft,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  InkWell(
+                    onTap: () => context.go('/privacypolicy'),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Text(
+                      'Privacy Policy',
+                      style: GoogleFonts.sourceSans3(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _C.onImage.withValues(alpha: 0.85),
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text('•', style: TextStyle(color: _C.onImage.withValues(alpha: 0.5), fontSize: 11)),
+                  const SizedBox(width: 10),
+                  InkWell(
+                    onTap: () => context.go('/contactus'),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Text(
+                      'Contact Us',
+                      style: GoogleFonts.sourceSans3(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _C.onImage.withValues(alpha: 0.85),
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1003,6 +1037,56 @@ class _LoginCard extends StatelessWidget {
                       style: GoogleFonts.sourceSans3(
                         fontSize: 12,
                         color: _C.mute,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    InkWell(
+                      onTap: () => context.go('/privacypolicy'),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Text(
+                          'Privacy Policy',
+                          style: GoogleFonts.sourceSans3(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _C.ink,
+                            decoration: TextDecoration.underline,
+                            decorationColor: _C.ink.withValues(alpha: 0.4),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Text(
+                        '•',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _C.mute.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => context.go('/contactus'),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Text(
+                          'Contact Us',
+                          style: GoogleFonts.sourceSans3(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _C.ink,
+                            decoration: TextDecoration.underline,
+                            decorationColor: _C.ink.withValues(alpha: 0.4),
+                          ),
+                        ),
                       ),
                     ),
                   ],

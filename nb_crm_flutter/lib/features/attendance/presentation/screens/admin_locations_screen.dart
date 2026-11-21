@@ -247,7 +247,7 @@ class _AdminLocationsScreenState extends ConsumerState<AdminLocationsScreen> {
                     children: [
                       TileLayer(
                         urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.nbdeveloper.hrms',
+                        userAgentPackageName: 'com.nb.hrms',
                       ),
                       CircleLayer(
                         circles: _locations.map((loc) {

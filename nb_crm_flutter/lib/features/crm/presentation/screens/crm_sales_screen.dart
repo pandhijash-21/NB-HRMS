@@ -5444,7 +5444,7 @@ class _ClientProposalsGroupCardState extends State<_ClientProposalsGroupCard> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('NB DEVELOPERS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFFC5A059))),
+                      const Text('NB INFRA PROJECTS LTD.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFFC5A059))),
                       Text('Official Property Price Quotation', style: TextStyle(fontSize: 12, color: widget.textMuted)),
                     ],
                   ),

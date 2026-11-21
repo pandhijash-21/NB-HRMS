@@ -1,7 +1,7 @@
 # Frontend Audit — Next.js HRMS → Flutter Rebuild Inventory
 
 **Repo:** `frontend/` (Next.js 16 App Router, React 19)  
-**Product direction:** Rebuild UI in Flutter for NB Developer CRM+HRMS+ERP  
+**Product direction:** Rebuild UI in Flutter for NB Infra Projects LTD. CRM+HRMS+ERP  
 **Scope of this doc:** Inventory only — no Flutter scaffolding, no backend/DB changes  
 **Date:** 2026-07-15  
 **Canonical API base:** `NEXT_PUBLIC_API_URL` (default `http://127.0.0.1:4000/api`)  

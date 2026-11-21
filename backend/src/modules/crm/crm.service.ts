@@ -703,7 +703,7 @@ export const crmService = {
         field_data: [
           { name: 'full_name', values: [`TEST PING Meta ${stamp}`] },
           { name: 'phone_number', values: [testPhone] },
-          { name: 'email', values: [`test.ping.${stamp}@nbdeveloper.co.in`] },
+          { name: 'email', values: [`test.ping.${stamp}@nbsince1946.com`] },
           { name: 'ad_id', values: [adId] },
         ],
       };
@@ -711,7 +711,7 @@ export const crmService = {
       requestPayload = {
         name: `TEST PING Google ${stamp}`,
         phone: testPhone,
-        email: `test.ping.${stamp}@nbdeveloper.co.in`,
+        email: `test.ping.${stamp}@nbsince1946.com`,
         gclid: `test_gclid_${stamp}`,
         google_key: adId,
         ad_id: adId,
@@ -722,7 +722,7 @@ export const crmService = {
       requestPayload = {
         name: `TEST PING Webhook ${stamp}`,
         phone: testPhone,
-        email: `test.ping.${stamp}@nbdeveloper.co.in`,
+        email: `test.ping.${stamp}@nbsince1946.com`,
         ad_id: adId,
         source: 'WEBHOOK',
         is_test_ping: true,
@@ -4558,7 +4558,7 @@ export const crmService = {
       nineance_api_key: '',
       nineance_api_secret: '',
       nineance_provider_key: 'indiavoice',
-      nineance_display_name: isFinserve ? 'NB Capital Dialer' : 'NB Developer Dialer',
+      nineance_display_name: isFinserve ? 'NB Capital Dialer' : 'NB Infra Projects LTD. Dialer',
       nineance_webhook_token: '',
       nineance_webhook_url: '',
       nineance_default_did_id: '',
@@ -4614,7 +4614,7 @@ export const crmService = {
       quotation_general_remarks: `1. Prices and availability are subject to change without prior notice.
 2. Applicable Government GST and Stamp Duty charges are subject to statutory revisions.
 3. Booking is subject to clearance of booking token and standard terms of agreement.
-4. All payments to be made via Cheque / Demand Draft / RTGS in favor of NB Developers.`,
+4. All payments to be made via Cheque / Demand Draft / RTGS in favor of NB Infra Projects LTD.`,
       /** CRM deal payment term templates: [{ id, name, lines: [{ name, percentage, months }] }] — each template lines must total 100% */
       payment_term_templates: JSON.stringify([
         {
@@ -6295,7 +6295,7 @@ export const crmService = {
         phone,
         message:
           message ||
-          (tmpl ? `Test of template: ${tmpl.name}` : `Test template dispatch (${isFinserve ? 'NB Capital' : 'NB Developer'})`),
+          (tmpl ? `Test of template: ${tmpl.name}` : `Test template dispatch (${isFinserve ? 'NB Capital' : 'NB Infra Projects LTD.'})`),
         event: 'TEST',
         messageType: 'TEMPLATE',
         templateId: tmpl?.id || targetTemplateId,

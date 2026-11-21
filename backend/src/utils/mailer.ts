@@ -61,7 +61,7 @@ export async function sendAccountCreatedEmail(
   if (!t || !to) return; // SMTP not configured or no email address — skip silently
 
   await t.sendMail({
-    from:    `"HRMS – Gandhinagar University" <${env.SMTP_FROM ?? env.SMTP_USER}>`,
+    from:    `"NB Infra Projects LTD." <${env.SMTP_FROM ?? env.SMTP_USER}>`,
     to,
     subject: 'Your HRMS Account Has Been Created',
     html: `
@@ -84,7 +84,7 @@ export async function sendPasswordResetEmail(
   if (!t || !to) return;
 
   await t.sendMail({
-    from:    `"HRMS – Gandhinagar University" <${env.SMTP_FROM ?? env.SMTP_USER}>`,
+    from:    `"NB Infra Projects LTD." <${env.SMTP_FROM ?? env.SMTP_USER}>`,
     to,
     subject: 'Your HRMS Password Has Been Reset',
     html: `
@@ -285,4 +285,70 @@ export async function sendFinserveClientOtpEmail(to: string, clientName: string,
       </div>
     `,
   });
+}
+
+export async function sendContactUsEmail(params: {
+  name: string;
+  email: string;
+  phone?: string;
+  subject?: string;
+  message: string;
+  ip?: string;
+}): Promise<boolean> {
+  const targetEmail = 'it.nbdeveloper@gmail.com';
+  const t = getTransporter();
+  const cleanSubject = (params.subject || '').trim() || 'New Inquiry via Contact Us';
+
+  if (!t) {
+    console.log(`[SMTP SIMULATED - DEV] Contact Us message to ${targetEmail}:`, params);
+    return true;
+  }
+
+  const sender = env.SMTP_FROM || env.SMTP_USER;
+  await t.sendMail({
+    from: `"NB Infra Projects LTD. - Contact Desk" <${sender}>`,
+    to: targetEmail,
+    replyTo: params.email,
+    subject: `[Contact Us] ${cleanSubject} - ${params.name}`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); padding: 26px; text-align: center; border-radius: 12px 12px 0 0;">
+          <h1 style="color: #F59E0B; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.5px;">NB INFRA PROJECTS LTD.</h1>
+          <p style="color: rgba(255,255,255,0.85); margin: 6px 0 0; font-size: 13px;">New Contact Us Form Submission</p>
+        </div>
+        <div style="padding: 28px; background: #ffffff; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 12px 12px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <tr>
+              <td style="padding: 8px 0; color: #64748B; width: 130px; font-weight: 600;">Name:</td>
+              <td style="padding: 8px 0; color: #0F172A; font-weight: 700;">${escapeHtml(params.name)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #64748B; font-weight: 600;">Email:</td>
+              <td style="padding: 8px 0; color: #0F172A;"><a href="mailto:${escapeHtml(params.email)}" style="color: #2563EB; text-decoration: none;">${escapeHtml(params.email)}</a></td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #64748B; font-weight: 600;">Phone:</td>
+              <td style="padding: 8px 0; color: #0F172A;">${escapeHtml(params.phone || 'Not provided')}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #64748B; font-weight: 600;">Subject:</td>
+              <td style="padding: 8px 0; color: #0F172A; font-weight: 600;">${escapeHtml(cleanSubject)}</td>
+            </tr>
+            ${params.ip ? `<tr><td style="padding: 8px 0; color: #64748B; font-weight: 600;">Client IP:</td><td style="padding: 8px 0; color: #64748B;">${escapeHtml(params.ip)}</td></tr>` : ''}
+          </table>
+
+          <div style="margin-top: 20px; padding: 16px; background: #F8FAFC; border-left: 4px solid #F59E0B; border-radius: 6px;">
+            <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 700; text-transform: uppercase; color: #64748B; letter-spacing: 0.5px;">Message:</p>
+            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #1E293B; white-space: pre-wrap;">${escapeHtml(params.message)}</p>
+          </div>
+
+          <hr style="border: none; border-top: 1px solid #E2E8F0; margin: 24px 0 16px 0;" />
+          <p style="font-size: 11px; color: #94A3B8; margin: 0; text-align: center;">
+            This email was sent from the public Contact Us form at NB Infra Projects LTD. portal.
+          </p>
+        </div>
+      </div>
+    `,
+  });
+  return true;
 }

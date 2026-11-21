@@ -264,7 +264,7 @@ export const employeeService = {
         (input.organization && input.organization.trim()) ||
         instituteRef.institute?.name ||
         targetSubOrg ||
-        'NB DEVELOPER';
+        'NB INFRA PROJECTS LTD.';
 
       await tx.employeeGeneralInfo.create({
         data: {

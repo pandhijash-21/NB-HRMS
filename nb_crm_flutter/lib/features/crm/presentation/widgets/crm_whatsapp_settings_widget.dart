@@ -823,7 +823,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
                     Text(
                       _isFinserve
                           ? 'BotBiz WhatsApp Integration (NB Capital)'
-                          : 'BotBiz WhatsApp Integration (NB Developer)',
+                          : 'BotBiz WhatsApp Integration (NB Infra Projects LTD.)',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,

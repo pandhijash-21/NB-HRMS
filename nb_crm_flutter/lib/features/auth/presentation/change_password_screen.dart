@@ -285,7 +285,7 @@ class _BrandHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'NB DEVELOPER',
+              'NB INFRA PROJECTS LTD.',
               style: GoogleFonts.sourceSans3(
                 fontSize: 14,
                 fontWeight: FontWeight.w800,

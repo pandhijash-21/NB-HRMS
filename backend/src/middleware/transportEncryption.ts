@@ -7,7 +7,7 @@ import {
   wantsTransportEncryption,
 } from '../utils/transportCrypto';
 
-const SKIP_PATHS = new Set(['/', '/health', '/vpn-gate', '/system-health', '/docs', '/system-health.html', '/project-documentation.html']);
+const SKIP_PATHS = new Set(['/', '/health', '/vpn-gate', '/system-health', '/docs', '/system-health.html', '/project-documentation.html', '/privacypolicy', '/contactus']);
 
 function isPublicCrmWebhook(path: string): boolean {
   return (
@@ -20,7 +20,15 @@ function isPublicCrmWebhook(path: string): boolean {
 
 function isPublicCrmEndpoint(req: Request): boolean {
   const p = req.originalUrl || req.path || '';
-  if (p.includes('/api/crm-public') || p.includes('/api/crm/public') || p.includes('/client-portal')) {
+  if (
+    p.includes('/api/crm-public') ||
+    p.includes('/api/crm/public') ||
+    p.includes('/client-portal') ||
+    p.includes('/privacypolicy') ||
+    p.includes('/contactus') ||
+    p.includes('/api/contactus') ||
+    p.includes('/api/contact-us')
+  ) {
     return true;
   }
   return isPublicCrmWebhook(req.path);

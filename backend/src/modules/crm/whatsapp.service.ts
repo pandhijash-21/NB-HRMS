@@ -117,7 +117,7 @@ const DEFAULT_TRIGGERS: CrmWhatsappTrigger[] = [
     messageType: 'TEMPLATE',
     templateName: 'visit_done',
     messageTemplate: 'Template: visit_done',
-    mediaUrl: 'https://nbdeveloper.co.in/brochures/legacy-tower.pdf',
+    mediaUrl: 'https://crm.nbsince1946.com/api/crm-public/brochures/legacy-tower.pdf',
     includeCalendarLink: false,
     locationUrl: '',
   },
@@ -141,7 +141,7 @@ const DEFAULT_TRIGGERS: CrmWhatsappTrigger[] = [
     messageType: 'TEMPLATE',
     templateName: 'newlead',
     messageTemplate: 'Template: newlead',
-    mediaUrl: 'https://nbdeveloper.co.in/brochures/legacy-tower.pdf',
+    mediaUrl: 'https://crm.nbsince1946.com/api/crm-public/brochures/legacy-tower.pdf',
     includeCalendarLink: false,
     locationUrl: 'https://maps.google.com/?q=Legacy+Tower',
   },
@@ -176,7 +176,7 @@ const DEFAULT_TRIGGERS: CrmWhatsappTrigger[] = [
     enabled: true,
     messageType: 'TEXT',
     messageTemplate:
-      'Heartiest Congratulations, {{customerName}}! 🎊\n\nYour booking at *{{projectName}}* has been confirmed. Welcome to the NB Developer family!\n\nOur relationship manager will coordinate the official agreement and documentation shortly.',
+      'Heartiest Congratulations, {{customerName}}! 🎊\n\nYour booking at *{{projectName}}* has been confirmed. Welcome to the NB Infra Projects LTD. family!\n\nOur relationship manager will coordinate the official agreement and documentation shortly.',
     mediaUrl: '',
     includeCalendarLink: false,
     locationUrl: '',
@@ -795,7 +795,7 @@ export class WhatsappService {
         success: false,
         connectionStatus: 'NOT_CONFIGURED',
         message:
-          `BotBiz credentials for ${isFinserve ? 'NB Capital' : 'NB Developer'} are not configured. Please supply your API Token and WhatsApp Phone Number ID.`,
+          `BotBiz credentials for ${isFinserve ? 'NB Capital' : 'NB Infra Projects LTD.'} are not configured. Please supply your API Token and WhatsApp Phone Number ID.`,
       };
     }
 
@@ -878,7 +878,7 @@ export class WhatsappService {
           syncedAt: new Date().toISOString(),
           templates: sanitized,
         }),
-        description: `Cached Meta WhatsApp templates for ${isFinserve ? 'NB Capital' : 'NB Developer'} synced from BotBiz`,
+        description: `Cached Meta WhatsApp templates for ${isFinserve ? 'NB Capital' : 'NB Infra Projects LTD.'} synced from BotBiz`,
       },
     });
 
@@ -892,7 +892,7 @@ export class WhatsappService {
           create: {
             key: `${prefix}whatsapp_triggers`,
             value: JSON.stringify(bound.triggers),
-            description: `WhatsApp event triggers for ${isFinserve ? 'NB Capital' : 'NB Developer'}`,
+            description: `WhatsApp event triggers for ${isFinserve ? 'NB Capital' : 'NB Infra Projects LTD.'}`,
           },
         });
       }
@@ -1107,7 +1107,7 @@ export class WhatsappService {
         create: {
           key,
           value: JSON.stringify(logs),
-          description: `Recent dispatched CRM WhatsApp notifications for ${isFinserve ? 'NB Capital' : 'NB Developer'}`,
+          description: `Recent dispatched CRM WhatsApp notifications for ${isFinserve ? 'NB Capital' : 'NB Infra Projects LTD.'}`,
         },
       });
     } catch (err) {
@@ -1216,7 +1216,7 @@ export class WhatsappService {
         message: messageText,
         mediaUrl: params.mediaUrl,
         status: 'DISABLED',
-        error: `WhatsApp automation is currently disabled in ${scope === 'NB_FINSERVE' ? 'NB Capital' : 'NB Developer'} settings`,
+        error: `WhatsApp automation is currently disabled in ${scope === 'NB_FINSERVE' ? 'NB Capital' : 'NB Infra Projects LTD.'} settings`,
       }, scope);
       return { success: false, error: 'WhatsApp automation is disabled' };
     }

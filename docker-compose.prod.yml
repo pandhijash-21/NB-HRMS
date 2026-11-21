@@ -78,7 +78,13 @@ services:
       - uploadsdata:/app/uploads
     labels:
       - traefik.enable=true
-      - traefik.http.routers.nbcrm-api.rule=Host(`crm.nbsince1946.com`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`) || PathPrefix(`/client-portal`))
+      - traefik.http.routers.nbcrm-api.rule=Host(`crm.nbsince1946.com`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`) || PathPrefix(`/client-portal`) || PathPrefix(`/privacypolicy`) || PathPrefix(`/contactus`))
+      - traefik.http.routers.nbcrm-api-legacy.rule=Host(`crm.nbdeveloper.co.in`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`) || PathPrefix(`/client-portal`) || PathPrefix(`/privacypolicy`) || PathPrefix(`/contactus`))
+      - traefik.http.routers.nbcrm-api-legacy.entrypoints=websecure
+      - traefik.http.routers.nbcrm-api-legacy.tls=true
+      - traefik.http.routers.nbcrm-api-legacy.priority=20
+      - traefik.http.routers.nbcrm-api-legacy.middlewares=nbcrm-secure-headers@docker
+      - traefik.http.routers.nbcrm-api-legacy.service=nbcrm-api
       - traefik.http.routers.nbcrm-api.entrypoints=websecure
       - traefik.http.routers.nbcrm-api.tls.certresolver=letsencrypt
       - traefik.http.routers.nbcrm-api.tls.domains[0].main=crm.nbsince1946.com
@@ -188,6 +194,12 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.nbcrm-livekit.rule=Host(`crm.nbsince1946.com`) && PathPrefix(`/rtc`)
+      - traefik.http.routers.nbcrm-livekit-legacy.rule=Host(`crm.nbdeveloper.co.in`) && PathPrefix(`/rtc`)
+      - traefik.http.routers.nbcrm-livekit-legacy.entrypoints=websecure
+      - traefik.http.routers.nbcrm-livekit-legacy.tls=true
+      - traefik.http.routers.nbcrm-livekit-legacy.priority=30
+      - traefik.http.routers.nbcrm-livekit-legacy.middlewares=nbcrm-livekit-strip@docker,nbcrm-secure-headers@docker
+      - traefik.http.routers.nbcrm-livekit-legacy.service=nbcrm-livekit
       - traefik.http.routers.nbcrm-livekit.entrypoints=websecure
       - traefik.http.routers.nbcrm-livekit.tls.certresolver=letsencrypt
       - traefik.http.routers.nbcrm-livekit.tls.domains[0].main=crm.nbsince1946.com

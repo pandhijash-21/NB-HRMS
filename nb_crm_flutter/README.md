@@ -1,4 +1,4 @@
-# NB Developer CRM+HRMS+ERP — Flutter client
+# NB Infra Projects LTD. CRM+HRMS+ERP — Flutter client
 
 REST-only Flutter frontend (sibling to `frontend/` and `backend/`).
 Talks directly to Express at `API_BASE_URL` (default: `http://127.0.0.1:4000/api`).

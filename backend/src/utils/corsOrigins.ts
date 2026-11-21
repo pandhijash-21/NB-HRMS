@@ -20,6 +20,8 @@ export function isAllowedCorsOrigin(origin: string | undefined): boolean {
 export function allowedCorsOriginList(): string[] {
   const set = new Set(configuredCorsOrigins);
   set.add('https://crm.nbsince1946.com');
+  set.add('https://nbsince1946.com');
+  set.add('https://www.nbsince1946.com');
   set.add('https://crm.nbdeveloper.co.in');
   return [...set];
 }

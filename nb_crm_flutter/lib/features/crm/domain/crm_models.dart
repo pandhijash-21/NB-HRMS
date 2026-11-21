@@ -1028,7 +1028,7 @@ class CrmSettings {
   final List<CrmPaymentTermTemplate> paymentTermTemplates;
 
   static const String defaultQuotationGeneralRemarks =
-      '1. Prices and availability are subject to change without prior notice.\n2. Applicable Government GST and Stamp Duty charges are subject to statutory revisions.\n3. Booking is subject to clearance of booking token and standard terms of agreement.\n4. All payments to be made via Cheque / Demand Draft / RTGS in favor of NB Developers.';
+      '1. Prices and availability are subject to change without prior notice.\n2. Applicable Government GST and Stamp Duty charges are subject to statutory revisions.\n3. Booking is subject to clearance of booking token and standard terms of agreement.\n4. All payments to be made via Cheque / Demand Draft / RTGS in favor of NB Infra Projects LTD.';
 
   static const List<CrmLoanDocType> defaultLoanDocTypes = [
     CrmLoanDocType(id: 'pan_card', name: 'PAN Card', maxFileSizeMb: 5),

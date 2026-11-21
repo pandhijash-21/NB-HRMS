@@ -1208,9 +1208,9 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
                 ),
               )
             else if (category == 'CRM') ...[
-              // ── DUAL CRM CARDS: NB DEVELOPER CRM vs NB CAPITAL CRM ─────────
+              // ── DUAL CRM CARDS: NB INFRA PROJECTS LTD. CRM vs NB CAPITAL CRM ─────────
               _buildCrmSubCard(
-                title: 'NB Developer CRM',
+                title: 'NB Infra Projects LTD. CRM',
                 subtitle: 'Real estate pipeline, tower campaigns, site visits, and visitor desk',
                 icon: Icons.apartment_rounded,
                 color: const Color(0xFF0D9488), // Teal

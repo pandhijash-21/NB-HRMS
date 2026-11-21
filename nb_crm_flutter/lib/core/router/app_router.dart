@@ -14,6 +14,8 @@ import '../../features/auth/presentation/forgot_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/superadmin_login_screen.dart';
 import '../../features/auth/presentation/verify_emails_screen.dart';
+import '../../features/public/presentation/screens/privacy_policy_screen.dart';
+import '../../features/public/presentation/screens/contact_us_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/profile_edit_screen.dart';
@@ -197,6 +199,8 @@ GoRouter createAppRouter(AuthBloc authBloc) {
       final trackingSetup = loc == '/tracking/setup';
       final guestMeet = loc.startsWith('/meet/guest') || loc.startsWith('/meet/r/');
       final isClientPortal = loc.startsWith('/client-portal') || state.uri.path.startsWith('/client-portal');
+      final isPrivacyPolicy = loc == '/privacypolicy' || state.uri.path == '/privacypolicy';
+      final isContactUs = loc == '/contactus' || state.uri.path == '/contactus';
       final authenticated = auth.isAuthenticated;
       final isSuperAdmin = Permissions.isSuperAdmin(auth.user?.role);
       final isPlatformPath = loc.startsWith('/platform');
@@ -217,7 +221,7 @@ GoRouter createAppRouter(AuthBloc authBloc) {
         } else if (isSuperAdminLogin) {
           next = null;
         } else {
-          next = (loggingIn || forgettingPassword || guestMeet || isClientPortal) ? null : '/login';
+          next = (loggingIn || forgettingPassword || guestMeet || isClientPortal || isPrivacyPolicy || isContactUs) ? null : '/login';
         }
       } else if (auth.isFirstLogin) {
         next = changingPassword ? null : '/change-password';
@@ -242,8 +246,8 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           next = '/home';
         } else if (changingPassword || verifyingEmails || loggingIn) {
           next = '/home';
-        } else if (trackingSetup) {
-          next = null; // allow full-screen tracking setup
+        } else if (trackingSetup || isPrivacyPolicy || isContactUs) {
+          next = null; // allow full-screen tracking setup or public policy/contact screens
         } else {
           // Suite access: company license ∩ user permission matrix
           final enabled = auth.user?.enabledModules ?? const ['HRMS', 'CRM', 'ERP'];
@@ -413,6 +417,14 @@ GoRouter createAppRouter(AuthBloc authBloc) {
       GoRoute(
         path: '/tracking/setup',
         builder: (context, state) => const AutostartOnboardingScreen(),
+      ),
+      GoRoute(
+        path: '/privacypolicy',
+        builder: (context, state) => const PrivacyPolicyScreen(),
+      ),
+      GoRoute(
+        path: '/contactus',
+        builder: (context, state) => const ContactUsScreen(),
       ),
       GoRoute(
         path: '/meet/recording/:id',

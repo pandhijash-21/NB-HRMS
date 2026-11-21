@@ -40,6 +40,7 @@ import { repositoryRouter } from './modules/repository';
 import { organizationRouter } from './modules/organization';
 import { orgTreeRouter } from './modules/org-tree';
 import { crmRouter, crmPublicRouter, clientPortalPageRouter } from './modules/crm/crm.routes';
+import { publicPagesRouter } from './modules/public-pages/public-pages.routes';
 import { hubRouter } from './modules/hub';
 import { platformRouter } from './modules/platform/platform.routes';
 import { earthRouter } from './modules/earth';
@@ -197,6 +198,7 @@ app.use('/api/dpr', ...erpLicenseGuard, dprRouter);
 app.use('/api/tracking', trackingRouter);
 app.use('/api/notifications', notificationsRouter);
 // Public CRM routes (client portal, dialer webhooks) - mounted before license guard
+app.use(publicPagesRouter);
 app.use('/api/crm-public', crmPublicRouter);
 app.use('/api/crm/public', crmPublicRouter);
 app.use('/client-portal', clientPortalPageRouter);

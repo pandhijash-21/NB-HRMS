@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/network/api_envelope.dart';
@@ -110,6 +111,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   String _leadsPageFilterKey = '';
   String? _focusLeadId;
   bool _focusLeadHandled = false;
+  bool _isFullScreenActive = false;
 
   @override
   void initState() {
@@ -404,15 +406,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               ),
               body: Column(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                    child: CrmNineanceDialerPanel(
-                      onIncomingLead: (leadId) {
-                        // Refresh leads so inbound match is visible
-                        context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
-                      },
+                  if (!_isFullScreenActive)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                      child: CrmNineanceDialerPanel(
+                        onIncomingLead: (leadId) {
+                          // Refresh leads so inbound match is visible
+                          context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
+                        },
+                      ),
                     ),
-                  ),
                   if (_isOnBreak && _isTelecallerUser())
                     Container(
                       width: double.infinity,
@@ -475,13 +478,17 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     );
   }
 
-  void _openFullScreenFocusMode() {
+  void _openFullScreenFocusMode() async {
+    setState(() => _isFullScreenActive = true);
     final bloc = context.read<CrmLeadsBloc>();
     final auth = context.read<AuthBloc>();
     final repo = context.read<CrmRepository>();
 
-    Navigator.of(context, rootNavigator: true).push(
+    await Navigator.of(context, rootNavigator: true).push(
       PageRouteBuilder(
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        opaque: true,
         pageBuilder: (fullscreenContext, animation, secondaryAnimation) {
           return MultiBlocProvider(
             providers: [
@@ -496,14 +503,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             ),
           );
         },
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(
-            opacity: CurvedAnimation(parent: animation, curve: Curves.easeInOut),
-            child: child,
-          );
-        },
       ),
     );
+    if (mounted) {
+      setState(() => _isFullScreenActive = false);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1334,7 +1338,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   offset: const Offset(0, 38),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   onSelected: (value) {
-                    if (value == 'merge') {
+                    if (value == 'headers') {
+                      _showManageHeadersDialog(context, primaryColor);
+                    } else if (value == 'merge') {
                       _showMergeColumnsDialog(context, primaryColor);
                     } else if (value == 'clean') {
                       _handleCleanCrmData(context);
@@ -1343,6 +1349,15 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     }
                   },
                   itemBuilder: (ctx) => [
+                    const PopupMenuItem(
+                      value: 'headers',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.view_column_rounded, size: 20, color: Color(0xFF0284C7)),
+                        title: Text('Manage Headers / Columns'),
+                      ),
+                    ),
                     const PopupMenuItem(
                       value: 'merge',
                       child: ListTile(
@@ -4001,6 +4016,252 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           ),
         );
       },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Modal: Manage Headers & Customize Columns
+  // ---------------------------------------------------------------------------
+  void _showManageHeadersDialog(BuildContext context, Color primaryColor) {
+    final state = context.read<CrmLeadsBloc>().state;
+    final repo = context.read<CrmRepository>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E1B18) : Colors.white;
+    final borderColor = isDark ? const Color(0xFFC5A059).withValues(alpha: 0.18) : const Color(0xFFE2E8F0);
+    final textMuted = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF64748B);
+
+    final columns = List<CrmColumnConfig>.from(state.columns);
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            backgroundColor: cardBg,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Icon(Icons.view_column_rounded, color: primaryColor, size: 22),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Manage Headers & Columns', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    Navigator.of(dialogCtx).pop();
+                    context.push('/crm/pre-sales/headers');
+                  },
+                  icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                  label: const Text('Full Manager', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 520,
+              height: 420,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Toggle visibility switch to show or hide headers in the Pre-Sales table. Edit or delete custom columns anytime.',
+                    style: TextStyle(fontSize: 12, color: textMuted),
+                  ),
+                  const SizedBox(height: 12),
+                  if (columns.isEmpty)
+                    Center(child: Text('No columns configured.', style: TextStyle(color: textMuted)))
+                  else
+                    Expanded(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: columns.length,
+                        separatorBuilder: (_, __) => Divider(height: 1, color: borderColor.withValues(alpha: 0.5)),
+                        itemBuilder: (c, idx) {
+                          final col = columns[idx];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            col.label,
+                                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                          ),
+                                          if (col.isSystem) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: const Text('System', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      Text(
+                                        'Key: ${col.columnKey} • Type: ${col.dataType}',
+                                        style: TextStyle(fontSize: 11, color: textMuted),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined, size: 18),
+                                      tooltip: 'Rename Column',
+                                      onPressed: isSaving ? null : () => _showEditColumnDialog(ctx, col, setDialogState, repo, primaryColor),
+                                    ),
+                                    if (!col.isSystem)
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                                        tooltip: 'Delete Column',
+                                        onPressed: isSaving ? null : () async {
+                                          final confirm = await showDialog<bool>(
+                                            context: ctx,
+                                            builder: (alertCtx) => AlertDialog(
+                                              title: const Text('Delete Column?'),
+                                              content: Text('Are you sure you want to delete "${col.label}"? Existing lead data in this column will be removed.'),
+                                              actions: [
+                                                TextButton(onPressed: () => Navigator.pop(alertCtx, false), child: const Text('Cancel')),
+                                                FilledButton(
+                                                  onPressed: () => Navigator.pop(alertCtx, true),
+                                                  style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                                                  child: const Text('Delete'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                          if (confirm == true) {
+                                            setDialogState(() => isSaving = true);
+                                            try {
+                                              await repo.deleteColumn(col.id);
+                                              columns.removeAt(idx);
+                                              if (context.mounted) {
+                                                context.read<CrmLeadsBloc>().add(const CrmLeadsRefreshRequested());
+                                              }
+                                            } catch (e) {
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
+                                                );
+                                              }
+                                            } finally {
+                                              setDialogState(() => isSaving = false);
+                                            }
+                                          }
+                                        },
+                                      ),
+                                    Tooltip(
+                                      message: col.isVisibleInTable ? 'Visible in Table' : 'Hidden from Table',
+                                      child: Switch(
+                                        value: col.isVisibleInTable,
+                                        activeThumbColor: primaryColor,
+                                        onChanged: isSaving ? null : (val) async {
+                                          setDialogState(() => isSaving = true);
+                                          try {
+                                            final updated = await repo.toggleColumnVisibility(col.id, val);
+                                            final cIdx = columns.indexWhere((c) => c.id == col.id);
+                                            if (cIdx >= 0) columns[cIdx] = updated;
+                                            if (context.mounted) {
+                                              context.read<CrmLeadsBloc>().add(const CrmLeadsRefreshRequested());
+                                            }
+                                          } catch (e) {
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text('Failed to toggle visibility: $e'), backgroundColor: Colors.red),
+                                              );
+                                            }
+                                          } finally {
+                                            setDialogState(() => isSaving = false);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showEditColumnDialog(
+    BuildContext context,
+    CrmColumnConfig col,
+    StateSetter parentSetState,
+    CrmRepository repo,
+    Color primaryColor,
+  ) {
+    final labelCtrl = TextEditingController(text: col.label);
+    showDialog(
+      context: context,
+      builder: (editCtx) => AlertDialog(
+        title: Text('Rename Column: ${col.label}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Column Header Name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: labelCtrl,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(editCtx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final newLabel = labelCtrl.text.trim();
+              if (newLabel.isEmpty) return;
+              Navigator.pop(editCtx);
+              try {
+                await repo.updateColumn(col.id, {'label': newLabel});
+                if (context.mounted) {
+                  context.read<CrmLeadsBloc>().add(const CrmLeadsRefreshRequested());
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to rename: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            style: FilledButton.styleFrom(backgroundColor: primaryColor),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -10600,38 +10861,61 @@ class _CrmPreSalesFullScreenStationState extends State<_CrmPreSalesFullScreenSta
         final activeFilterCount = _getActiveFilterCount(state);
         final hasActiveFilters = activeFilterCount > 0;
 
-        return Focus(
-          autofocus: true,
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
-              if (_isFilterSidebarOpen) {
-                setState(() => _isFilterSidebarOpen = false);
-                return KeyEventResult.handled;
-              } else {
-                Navigator.of(context).pop();
-                return KeyEventResult.handled;
-              }
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) return;
+            if (_isFilterSidebarOpen) {
+              setState(() => _isFilterSidebarOpen = false);
+            } else {
+              Navigator.of(context).pop();
             }
-            return KeyEventResult.ignored;
           },
-          child: Scaffold(
-            backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
-            body: SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // 1. Focus Station Header Bar
-                  Container(
-                    height: 52,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
-                      border: Border(bottom: BorderSide(color: borderColor)),
-                    ),
-                    child: Row(
-                      children: [
-                        // Focus Mode Badge
-                        Container(
+          child: Focus(
+            autofocus: true,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
+                if (_isFilterSidebarOpen) {
+                  setState(() => _isFilterSidebarOpen = false);
+                  return KeyEventResult.handled;
+                } else {
+                  Navigator.of(context).pop();
+                  return KeyEventResult.handled;
+                }
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Scaffold(
+              backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
+              body: SafeArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // 1. Focus Station Header Bar
+                    Container(
+                      height: 52,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                        border: Border(bottom: BorderSide(color: borderColor)),
+                      ),
+                      child: Row(
+                        children: [
+                          // Back / Exit Focus Button
+                          IconButton(
+                            tooltip: 'Exit Focus Mode (Back / Esc)',
+                            icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                            onPressed: () {
+                              if (_isFilterSidebarOpen) {
+                                setState(() => _isFilterSidebarOpen = false);
+                              } else {
+                                Navigator.of(context).pop();
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          // Focus Mode Badge
+                          Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
                             color: const Color(0xFFC5A059).withValues(alpha: 0.15),
@@ -10857,8 +11141,9 @@ class _CrmPreSalesFullScreenStationState extends State<_CrmPreSalesFullScreenSta
               ),
             ),
           ),
-        );
-      },
+        ),
+      );
+    },
     );
   }
 
@@ -11212,6 +11497,16 @@ class _CrmPreSalesFullScreenStationState extends State<_CrmPreSalesFullScreenSta
                     onPressed: () => widget.parentState._showMergeColumnsDialog(context, primaryColor),
                     icon: const Icon(Icons.call_merge_rounded, size: 16),
                     label: const Text('Merge Columns'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => widget.parentState._showManageHeadersDialog(context, primaryColor),
+                    icon: const Icon(Icons.view_column_rounded, size: 16, color: Color(0xFF0284C7)),
+                    label: const Text('Manage Headers & Columns'),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

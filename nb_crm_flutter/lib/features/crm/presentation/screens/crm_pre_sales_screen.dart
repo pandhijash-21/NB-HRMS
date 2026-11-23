@@ -2237,75 +2237,97 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               _buildStatusDropdown(context, lead, canAlterLead, salesUsers),
                             ),
 
-                            // Allocated To Column (Telecaller with Transfer button)
+                            // Allocated To Column (Telecaller with Transfer button & History Info Icon)
                             DataCell(
-                              (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
-                                  ? InkWell(
-                                      borderRadius: BorderRadius.circular(6),
-                                      onTap: (isAdmin || (canAlterLead && canTransfer && userEmployeeId != null && userEmployeeId == lead.telecallerId))
-                                          ? () => _showTransferLeadModal(context, lead, salesUsers)
-                                          : null,
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Tooltip(
+                                    message: 'View Lead History & Previous Assignees',
+                                    child: InkWell(
+                                      onTap: () => _showDuplicateLeadHistoryModal(context, lead, isDark: isDark),
+                                      borderRadius: BorderRadius.circular(10),
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        padding: const EdgeInsets.all(2.5),
+                                        margin: const EdgeInsets.only(right: 5),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFF16A34A).withValues(alpha: 0.12),
-                                          borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.3)),
+                                          color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.25 : 0.12),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.4), width: 0.8),
                                         ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(Icons.headset_mic_rounded, size: 12, color: Color(0xFF16A34A)),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              lead.telecallerName!,
-                                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
-                                            ),
-                                            if (isAdmin || (canTransfer && userEmployeeId != null && userEmployeeId == lead.telecallerId)) ...[
-                                              const SizedBox(width: 6),
-                                              Tooltip(
-                                                message: 'Transfer this lead to another telecaller',
-                                                child: Container(
-                                                  padding: const EdgeInsets.all(2),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFF16A34A).withValues(alpha: 0.2),
-                                                    borderRadius: BorderRadius.circular(4),
-                                                  ),
-                                                  child: const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFF16A34A)),
-                                                ),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                    )
-                                  : InkWell(
-                                      borderRadius: BorderRadius.circular(6),
-                                      onTap: isAdmin ? () => _showTransferLeadModal(context, lead, salesUsers) : null,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFD97706).withValues(alpha: 0.12),
-                                          borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.3)),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(Icons.hourglass_top_rounded, size: 12, color: Color(0xFFD97706)),
-                                            const SizedBox(width: 4),
-                                            const Text(
-                                              'Waiting List (WL)',
-                                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
-                                            ),
-                                            if (isAdmin) ...[
-                                              const SizedBox(width: 4),
-                                              const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFFD97706)),
-                                            ],
-                                          ],
-                                        ),
+                                        child: const Icon(Icons.info_outline_rounded, size: 12.5, color: Color(0xFF6366F1)),
                                       ),
                                     ),
+                                  ),
+                                  (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
+                                      ? InkWell(
+                                          borderRadius: BorderRadius.circular(6),
+                                          onTap: (isAdmin || (canAlterLead && canTransfer && userEmployeeId != null && userEmployeeId == lead.telecallerId))
+                                              ? () => _showTransferLeadModal(context, lead, salesUsers)
+                                              : null,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.3)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.headset_mic_rounded, size: 12, color: Color(0xFF16A34A)),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  lead.telecallerName!,
+                                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                                                ),
+                                                if (isAdmin || (canTransfer && userEmployeeId != null && userEmployeeId == lead.telecallerId)) ...[
+                                                  const SizedBox(width: 6),
+                                                  Tooltip(
+                                                    message: 'Transfer this lead to another telecaller',
+                                                    child: Container(
+                                                      padding: const EdgeInsets.all(2),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFF16A34A).withValues(alpha: 0.2),
+                                                        borderRadius: BorderRadius.circular(4),
+                                                      ),
+                                                      child: const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFF16A34A)),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
+                                        )
+                                      : InkWell(
+                                          borderRadius: BorderRadius.circular(6),
+                                          onTap: isAdmin ? () => _showTransferLeadModal(context, lead, salesUsers) : null,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.3)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.hourglass_top_rounded, size: 12, color: Color(0xFFD97706)),
+                                                const SizedBox(width: 4),
+                                                const Text(
+                                                  'Waiting List (WL)',
+                                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
+                                                ),
+                                                if (isAdmin) ...[
+                                                  const SizedBox(width: 4),
+                                                  const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFFD97706)),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                ],
+                              ),
                             ),
 
                             // Assigned To Column (Sales Representative / Finserve Manager)
@@ -2430,14 +2452,42 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                     '-';
                               }
 
+                              final isNameCol = keyLower == 'client_name' || keyLower == 'name' || keyLower == 'customer_name';
                               return DataCell(
-                                Text(
-                                  cellValue.isEmpty ? '-' : cellValue,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: (keyLower == 'client_name' || keyLower == 'name') ? FontWeight.w600 : FontWeight.normal,
-                                  ),
-                                ),
+                                isNameCol
+                                    ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Tooltip(
+                                            message: 'View Complete Lead History & Previous Assignees',
+                                            child: InkWell(
+                                              onTap: () => _showDuplicateLeadHistoryModal(context, lead, isDark: isDark),
+                                              borderRadius: BorderRadius.circular(10),
+                                              child: Container(
+                                                padding: const EdgeInsets.all(2.5),
+                                                margin: const EdgeInsets.only(right: 6),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.25 : 0.12),
+                                                  shape: BoxShape.circle,
+                                                  border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.4), width: 0.8),
+                                                ),
+                                                child: const Icon(Icons.info_outline_rounded, size: 12.5, color: Color(0xFF6366F1)),
+                                              ),
+                                            ),
+                                          ),
+                                          Text(
+                                            cellValue.isEmpty ? '-' : cellValue,
+                                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                          ),
+                                        ],
+                                      )
+                                    : Text(
+                                        cellValue.isEmpty ? '-' : cellValue,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.normal,
+                                        ),
+                                      ),
                               );
                             }),
 
@@ -2807,6 +2857,23 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                             ),
                           ),
                           const SizedBox(width: 8),
+                          Tooltip(
+                            message: 'View Lead History & Previous Assignees',
+                            child: InkWell(
+                              onTap: () => _showDuplicateLeadHistoryModal(context, lead, isDark: isDark),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.all(2.5),
+                                margin: const EdgeInsets.only(right: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.25 : 0.12),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.4), width: 0.8),
+                                ),
+                                child: const Icon(Icons.info_outline_rounded, size: 13, color: Color(0xFF6366F1)),
+                              ),
+                            ),
+                          ),
                           Expanded(
                             child: Text(
                               lead.name.trim().isNotEmpty ? lead.name : 'Unknown Client',
@@ -2943,6 +3010,23 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    Tooltip(
+                                      message: 'View Lead History & Previous Assignees',
+                                      child: InkWell(
+                                        onTap: () => _showDuplicateLeadHistoryModal(context, lead, isDark: isDark),
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(2),
+                                          margin: const EdgeInsets.only(right: 4),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.25 : 0.12),
+                                            shape: BoxShape.circle,
+                                            border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.4), width: 0.8),
+                                          ),
+                                          child: const Icon(Icons.info_outline_rounded, size: 11, color: Color(0xFF6366F1)),
+                                        ),
+                                      ),
+                                    ),
                                     Icon(
                                       (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
                                           ? Icons.headset_mic_rounded
@@ -7995,7 +8079,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           ),
           const SizedBox(height: 10),
 
-          // Lead Name Row with History Icon right in front
+          // Lead Name Row with (i) Icon right in front
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
             child: Row(
@@ -8003,48 +8087,39 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               children: [
                 SizedBox(
                   width: 145,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      InkWell(
-                        onTap: () => _showDuplicateLeadHistoryModal(context, lead, isDark: isDark),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Tooltip(
-                          message: 'View Complete Lead History (from inception)',
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.25 : 0.12),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.4)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Icon(Icons.history_rounded, size: 12, color: Color(0xFF6366F1)),
-                                SizedBox(width: 3),
-                                Text(
-                                  'History',
-                                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFF6366F1)),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Lead Name',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textMuted),
-                      ),
-                    ],
+                  child: Text(
+                    'Lead Name',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textMuted),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    lead['name']?.toString() ?? 'Unnamed',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                  child: Row(
+                    children: [
+                      Tooltip(
+                        message: 'View Complete Lead History & Previous Assignees',
+                        child: InkWell(
+                          onTap: () => _showDuplicateLeadHistoryModal(context, lead, isDark: isDark),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.all(2.5),
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.3 : 0.15),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.5), width: 1),
+                            ),
+                            child: const Icon(Icons.info_outline_rounded, size: 13, color: Color(0xFF6366F1)),
+                          ),
+                        ),
+                      ),
+                      Flexible(
+                        child: Text(
+                          lead['name']?.toString() ?? 'Unnamed',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -8061,6 +8136,23 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             textMuted,
             isHighlighted: lead['telecallerName'] != null,
             highlightColor: const Color(0xFF16A34A),
+            leadingWidget: Tooltip(
+              message: 'View Complete Lead History & Previous Assignees',
+              child: InkWell(
+                onTap: () => _showDuplicateLeadHistoryModal(context, lead, isDark: isDark),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.all(2.5),
+                  margin: const EdgeInsets.only(right: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.3 : 0.15),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.5), width: 1),
+                  ),
+                  child: const Icon(Icons.info_outline_rounded, size: 12.5, color: Color(0xFF6366F1)),
+                ),
+              ),
+            ),
           ),
           if (lead['assignedToName'] != null && lead['assignedToName'].toString().trim().isNotEmpty)
             _buildLeadDataRow('Sales Agent', lead['assignedToName'].toString().trim(), textMuted),
@@ -8245,9 +8337,30 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
   void _showDuplicateLeadHistoryModal(
     BuildContext context,
-    Map<String, dynamic> lead, {
+    dynamic leadInput, {
     required bool isDark,
   }) {
+    final Map<String, dynamic> lead = leadInput is CrmLead
+        ? {
+            'id': leadInput.id,
+            'name': leadInput.name,
+            'phone': leadInput.phone,
+            'email': leadInput.customFields['email']?.toString() ?? leadInput.customFields['Email']?.toString() ?? '',
+            'status': leadInput.status.name,
+            'campaignName': leadInput.campaignName ?? 'Campaign',
+            'projectName': leadInput.customFields['project']?.toString() ?? leadInput.customFields['projectName']?.toString(),
+            'telecallerName': leadInput.telecallerName,
+            'assignedToName': leadInput.assignedToName,
+            'leadSource': leadInput.leadSource,
+            'createdAt': leadInput.createdAt.toIso8601String(),
+            'customFields': leadInput.customFields,
+            'leadEventHistory': leadInput.customFields['leadEventHistory'],
+            'transferHistory': leadInput.customFields['transferHistory'],
+            'followUps': leadInput.customFields['followUps'],
+            'callLogs': leadInput.customFields['callLogs'],
+          }
+        : (leadInput is Map ? Map<String, dynamic>.from(leadInput) : <String, dynamic>{});
+
     final leadName = lead['name']?.toString() ?? 'Unnamed Lead';
     final phone = lead['phone']?.toString() ?? '';
     final email = lead['email']?.toString() ?? '';
@@ -8296,24 +8409,76 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       }
     }
 
-    // 3. Transfers from transferHistory
+    // 3. Transfers and Previous Assignees from transferHistory & customFields
+    final previousAssignees = <Map<String, dynamic>>[];
+    final seenAssigneeNames = <String>{};
+
     final transfersRaw = lead['transferHistory'] ?? customFields['transferHistory'];
     if (transfersRaw is List) {
       for (final t in transfersRaw) {
         if (t is Map) {
           final dt = DateTime.tryParse(t['transferredAt']?.toString() ?? '');
-          final fromName = t['fromName']?.toString() ?? 'Unassigned';
-          final toName = t['toName']?.toString() ?? 'Unassigned';
+          final fromName = t['fromName']?.toString()?.trim() ?? 'Unassigned';
+          final toName = t['toName']?.toString()?.trim() ?? 'Unassigned';
           final remarks = t['remarks']?.toString();
+          final by = t['transferredByName']?.toString() ?? t['transferredBy']?.toString();
+
+          if (fromName.isNotEmpty &&
+              fromName.toLowerCase() != 'unassigned' &&
+              !fromName.toLowerCase().contains('waiting list')) {
+            if (!seenAssigneeNames.contains(fromName.toLowerCase())) {
+              seenAssigneeNames.add(fromName.toLowerCase());
+              previousAssignees.add({
+                'name': fromName,
+                'role': 'Telecaller',
+                'transferredTo': toName,
+                'at': t['transferredAt']?.toString(),
+                'by': by,
+                'remarks': remarks,
+              });
+            }
+          }
+
           timeline.add({
             'time': dt ?? DateTime.fromMillisecondsSinceEpoch(0),
-            'title': 'Transferred: $fromName → $toName',
-            'subtitle': remarks != null && remarks.isNotEmpty ? 'Remarks: "$remarks"' : null,
+            'title': 'Reassigned: $fromName → $toName',
+            'subtitle': 'Previously handled by: $fromName${by != null && by.isNotEmpty ? ' • By: $by' : ''}${remarks != null && remarks.isNotEmpty ? ' • Note: "$remarks"' : ''}',
             'type': 'TRANSFER',
             'icon': Icons.swap_horiz_rounded,
             'color': const Color(0xFF8B5CF6),
           });
         }
+      }
+    }
+
+    if (customFields['lastTransferredFrom'] != null) {
+      final from = customFields['lastTransferredFrom'].toString().trim();
+      if (from.isNotEmpty &&
+          from.toLowerCase() != 'unassigned' &&
+          !from.toLowerCase().contains('waiting list') &&
+          !seenAssigneeNames.contains(from.toLowerCase())) {
+        seenAssigneeNames.add(from.toLowerCase());
+        previousAssignees.add({
+          'name': from,
+          'role': 'Telecaller',
+          'transferredTo': telecaller,
+          'at': customFields['lastTransferredAt']?.toString(),
+        });
+      }
+    }
+
+    if (customFields['previousTelecallerName'] != null) {
+      final from = customFields['previousTelecallerName'].toString().trim();
+      if (from.isNotEmpty &&
+          from.toLowerCase() != 'unassigned' &&
+          !from.toLowerCase().contains('waiting list') &&
+          !seenAssigneeNames.contains(from.toLowerCase())) {
+        seenAssigneeNames.add(from.toLowerCase());
+        previousAssignees.add({
+          'name': from,
+          'role': 'Telecaller',
+          'transferredTo': telecaller,
+        });
       }
     }
 
@@ -8462,11 +8627,124 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     runSpacing: 6,
                     children: [
                       _buildModalStatItem(Icons.campaign_rounded, 'Campaign', campaign, isDark),
-                      if (telecaller != null && telecaller.isNotEmpty)
-                        _buildModalStatItem(Icons.headset_mic_rounded, 'Telecaller', telecaller, isDark),
+                      _buildModalStatItem(
+                        Icons.headset_mic_rounded,
+                        'Allocated To',
+                        (telecaller != null && telecaller.isNotEmpty) ? telecaller : 'Unassigned',
+                        isDark,
+                        accentColor: const Color(0xFF16A34A),
+                      ),
+                      if (previousAssignees.isNotEmpty)
+                        _buildModalStatItem(
+                          Icons.history_edu_rounded,
+                          'Previously Assigned To',
+                          previousAssignees.map((p) => p['name']).join(', '),
+                          isDark,
+                          accentColor: const Color(0xFF8B5CF6),
+                        ),
                       if (sales != null && sales.isNotEmpty)
                         _buildModalStatItem(Icons.person_rounded, 'Sales Agent', sales, isDark),
                       _buildModalStatItem(Icons.history_rounded, 'Total Events', '${timeline.length}', isDark),
+                    ],
+                  ),
+                ),
+
+                // Telecaller Allocation & Assignment Journey Card
+                Container(
+                  margin: const EdgeInsets.fromLTRB(18, 10, 18, 4),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: isDark ? 0.14 : 0.07),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: isDark ? 0.35 : 0.22),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.manage_accounts_rounded, size: 16, color: Color(0xFF8B5CF6)),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Telecaller Allocation & Assignment Journey',
+                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6)),
+                          ),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF16A34A).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.check_circle_rounded, size: 11, color: Color(0xFF16A34A)),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'Current: ${telecaller ?? "Unassigned"}',
+                                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (previousAssignees.isNotEmpty) ...[
+                        ...previousAssignees.map((pa) {
+                          final atStr = pa['at'] != null ? DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.tryParse(pa['at'])?.toLocal() ?? DateTime.now()) : null;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.history_rounded, size: 14, color: Color(0xFF8B5CF6)),
+                                const SizedBox(width: 5),
+                                Expanded(
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: TextStyle(fontSize: 11.5, color: isDark ? Colors.white70 : const Color(0xFF334155)),
+                                      children: [
+                                        const TextSpan(text: 'Previously assigned to: ', style: TextStyle(fontWeight: FontWeight.w500)),
+                                        TextSpan(text: '${pa['name']} ', style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF8B5CF6))),
+                                        if (pa['transferredTo'] != null && pa['transferredTo'].toString().isNotEmpty) ...[
+                                          const TextSpan(text: '→ reallocated to '),
+                                          TextSpan(text: '${pa['transferredTo']} ', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                        ],
+                                        if (atStr != null)
+                                          TextSpan(text: 'on $atStr ', style: TextStyle(fontSize: 10.5, color: textMuted)),
+                                        if (pa['by'] != null && pa['by'].toString().isNotEmpty)
+                                          TextSpan(text: '(by ${pa['by']}) ', style: TextStyle(fontSize: 10.5, color: textMuted)),
+                                        if (pa['remarks'] != null && pa['remarks'].toString().isNotEmpty)
+                                          TextSpan(text: '• "${pa['remarks']}"', style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 11)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ] else ...[
+                        Row(
+                          children: [
+                            const Icon(Icons.info_outline_rounded, size: 13, color: Colors.grey),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                telecaller != null && telecaller.isNotEmpty
+                                    ? '$telecaller is the first and sole telecaller assigned to this lead (No prior reassignments).'
+                                    : 'This lead has not yet been allocated to any telecaller.',
+                                style: TextStyle(fontSize: 11.5, color: textMuted, fontStyle: FontStyle.italic),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -8607,14 +8885,15 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     );
   }
 
-  Widget _buildModalStatItem(IconData icon, String label, String value, bool isDark) {
+  Widget _buildModalStatItem(IconData icon, String label, String value, bool isDark, {Color? accentColor}) {
+    final effectiveColor = accentColor ?? const Color(0xFF6366F1);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 13, color: const Color(0xFF6366F1)),
+        Icon(icon, size: 13, color: effectiveColor),
         const SizedBox(width: 4),
         Text('$label: ', style: TextStyle(fontSize: 11, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))),
-        Text(value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+        Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: accentColor)),
       ],
     );
   }
@@ -8645,6 +8924,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     bool isHighlighted = false,
     Color? highlightColor,
     String? suffixBadge,
+    Widget? leadingWidget,
   }) {
     if (value.trim().isEmpty) return const SizedBox.shrink();
     return Padding(
@@ -8669,6 +8949,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 6,
               children: [
+                if (leadingWidget != null) leadingWidget,
                 Text(
                   value,
                   style: TextStyle(

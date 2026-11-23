@@ -28,11 +28,23 @@ import '../widgets/crm_send_whatsapp_dialog.dart';
 
 
 class CrmPreSalesScreen extends StatelessWidget {
-  const CrmPreSalesScreen({super.key, this.focusLeadId, this.initialScope});
+  const CrmPreSalesScreen({
+    super.key,
+    this.focusLeadId,
+    this.initialScope,
+    this.initialTabIndex,
+    this.initialStatusFilter,
+    this.initialFlowFilter,
+    this.initialCallStatus,
+  });
 
   /// From notification deep-link: `/crm/pre-sales?leadId=...&scope=...`
   final String? focusLeadId;
   final String? initialScope;
+  final int? initialTabIndex;
+  final String? initialStatusFilter;
+  final String? initialFlowFilter;
+  final String? initialCallStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -45,15 +57,31 @@ class CrmPreSalesScreen extends StatelessWidget {
       create: (ctx) => CrmLeadsBloc(
         crmRepository: ctx.read<CrmRepository>(),
       )..add(const CrmLeadsLoadRequested()),
-      child: _CrmPreSalesView(focusLeadId: focusLeadId),
+      child: _CrmPreSalesView(
+        focusLeadId: focusLeadId,
+        initialTabIndex: initialTabIndex,
+        initialStatusFilter: initialStatusFilter,
+        initialFlowFilter: initialFlowFilter,
+        initialCallStatus: initialCallStatus,
+      ),
     );
   }
 }
 
 class _CrmPreSalesView extends StatefulWidget {
-  const _CrmPreSalesView({this.focusLeadId});
+  const _CrmPreSalesView({
+    this.focusLeadId,
+    this.initialTabIndex,
+    this.initialStatusFilter,
+    this.initialFlowFilter,
+    this.initialCallStatus,
+  });
 
   final String? focusLeadId;
+  final int? initialTabIndex;
+  final String? initialStatusFilter;
+  final String? initialFlowFilter;
+  final String? initialCallStatus;
 
   @override
   State<_CrmPreSalesView> createState() => _CrmPreSalesViewState();
@@ -88,22 +116,35 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     super.initState();
     _focusLeadId = widget.focusLeadId?.trim();
     if (_focusLeadId != null && _focusLeadId!.isEmpty) _focusLeadId = null;
-    _tabController = TabController(length: 4, vsync: this);
+    final initialTab = (widget.initialTabIndex != null && widget.initialTabIndex! >= 0 && widget.initialTabIndex! < 4)
+        ? widget.initialTabIndex!
+        : 0;
+    _tabController = TabController(length: 4, vsync: this, initialIndex: initialTab);
     _tabController.addListener(_onTabChanged);
     CrmRepository.crmScopeNotifier.addListener(_onScopeChanged);
     _setupInactivityTracker();
     _loadNumberMaskingSetting();
-    // Notification deep-link: clear restrictive chips so the lead can appear.
-    if (_focusLeadId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final bloc = context.read<CrmLeadsBloc>();
+    // Notification or route filter deep-linking
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final bloc = context.read<CrmLeadsBloc>();
+      if (_focusLeadId != null) {
         bloc.add(const CrmLeadsLeadFlowFilterChanged('ALL', clearCampaign: true));
         bloc.add(const CrmLeadsStatusFilterChanged('ALL'));
         bloc.add(const CrmLeadsDateFilterChanged(datePreset: 'all'));
         bloc.add(const CrmLeadsFlowCampaignPicked(null));
-      });
-    }
+      } else {
+        if (widget.initialFlowFilter != null && widget.initialFlowFilter!.isNotEmpty) {
+          bloc.add(CrmLeadsLeadFlowFilterChanged(widget.initialFlowFilter!));
+        }
+        if (widget.initialStatusFilter != null && widget.initialStatusFilter!.isNotEmpty) {
+          bloc.add(CrmLeadsStatusFilterChanged(widget.initialStatusFilter!));
+        }
+        if (widget.initialCallStatus != null && widget.initialCallStatus!.isNotEmpty) {
+          bloc.add(CrmLeadsCallLogsFilterChanged(callStatus: widget.initialCallStatus));
+        }
+      }
+    });
   }
 
   Future<void> _loadNumberMaskingSetting() async {
@@ -344,7 +385,13 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
                     },
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    tooltip: 'Focus Mode (Full Screen)',
+                    icon: const Icon(Icons.fullscreen_rounded),
+                    onPressed: _openFullScreenFocusMode,
+                  ),
+                  const SizedBox(width: 4),
                   IconButton(
                     tooltip: 'Refresh',
                     icon: const Icon(Icons.refresh_rounded),
@@ -425,6 +472,37 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           ),
         );
       },
+    );
+  }
+
+  void _openFullScreenFocusMode() {
+    final bloc = context.read<CrmLeadsBloc>();
+    final auth = context.read<AuthBloc>();
+    final repo = context.read<CrmRepository>();
+
+    Navigator.of(context, rootNavigator: true).push(
+      PageRouteBuilder(
+        pageBuilder: (fullscreenContext, animation, secondaryAnimation) {
+          return MultiBlocProvider(
+            providers: [
+              BlocProvider.value(value: bloc),
+              BlocProvider.value(value: auth),
+            ],
+            child: RepositoryProvider.value(
+              value: repo,
+              child: _CrmPreSalesFullScreenStation(
+                parentState: this,
+              ),
+            ),
+          );
+        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: CurvedAnimation(parent: animation, curve: Curves.easeInOut),
+            child: child,
+          );
+        },
+      ),
     );
   }
 
@@ -550,657 +628,31 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Toolbar: Filters → Actions → Datewise
-          Container(
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: borderColor),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isNarrow = constraints.maxWidth < 900;
-                final waitingCount = leads.where((l) => l.isWaitingList).length;
-                final fieldFill = isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC);
-                final fieldRadius = BorderRadius.circular(10);
-
-                InputDecoration filterDecoration({required Widget prefixIcon, String? hint}) {
-                  return InputDecoration(
-                    prefixIcon: prefixIcon,
-                    hintText: hint,
-                    isDense: true,
-                    filled: true,
-                    fillColor: fieldFill,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: fieldRadius, borderSide: BorderSide(color: borderColor)),
-                    enabledBorder: OutlineInputBorder(borderRadius: fieldRadius, borderSide: BorderSide(color: borderColor)),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: fieldRadius,
-                      borderSide: BorderSide(color: primaryColor, width: 1.4),
-                    ),
-                  );
-                }
-
-                ButtonStyle secondaryOutlineStyle() {
-                  return OutlinedButton.styleFrom(
-                    foregroundColor: isDark ? Colors.white70 : const Color(0xFF334155),
-                    side: BorderSide(color: borderColor),
-                    backgroundColor: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                    visualDensity: VisualDensity.compact,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  );
-                }
-
-                Widget buildProjectSelector() {
-                  final effectiveSelectedId = (selectedProjectId != null && projects.any((p) => p.id == selectedProjectId))
-                      ? selectedProjectId
-                      : 'ALL';
-
-                  return DropdownButtonFormField<String>(
-                    key: ValueKey('project-$effectiveSelectedId-${projects.length}'),
-                    isExpanded: true,
-                    initialValue: effectiveSelectedId,
-                    decoration: filterDecoration(
-                      prefixIcon: Icon(Icons.apartment_rounded, size: 18, color: primaryColor),
-                      hint: 'Project',
-                    ),
-                    items: [
-                      const DropdownMenuItem(
-                        value: 'ALL',
-                        child: Text('All Projects', overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                      ),
-                      ...projects.map((p) => DropdownMenuItem(
-                            value: p.id,
-                            child: Text(
-                              p.name,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                            ),
-                          )),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        final newProjId = val == 'ALL' ? null : val;
-                        context.read<CrmLeadsBloc>().add(CrmLeadsProjectSelected(newProjId));
-                      }
-                    },
-                  );
-                }
-
-                Widget buildCampaignSelector() {
-                  const allValue = 'ALL';
-                  final hasValidSelection = selectedCampaignId != null &&
-                      campaigns.any((c) => c.id == selectedCampaignId);
-                  final effectiveSelectedId =
-                      hasValidSelection ? selectedCampaignId : allValue;
-
-                  return DropdownButtonFormField<String>(
-                    key: ValueKey('campaign-$effectiveSelectedId-${campaigns.length}'),
-                    isExpanded: true,
-                    initialValue: effectiveSelectedId,
-                    decoration: filterDecoration(
-                      prefixIcon: Icon(Icons.campaign_rounded, size: 18, color: primaryColor),
-                      hint: 'Campaign',
-                    ),
-                    items: [
-                      DropdownMenuItem(
-                        value: allValue,
-                        child: Text(
-                          campaigns.isEmpty ? '0 Campaigns — create in Headers' : 'All Campaigns (${campaigns.length})',
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                        ),
-                      ),
-                      ...campaigns.map((c) => DropdownMenuItem(
-                            value: c.id,
-                            child: Text(
-                              c.binLeadsCount > 0
-                                  ? '${c.name} (${c.activeLeadsCount} active · ${c.totalLeadsCount} tot)'
-                                  : '${c.name} (${c.leadsCount})',
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                            ),
-                          )),
-                    ],
-                    onChanged: (val) {
-                      if (val == null) return;
-                      final newCampId = val == allValue ? null : val;
-                      context.read<CrmLeadsBloc>().add(CrmLeadsCampaignSelected(newCampId));
-                    },
-                  );
-                }
-
-                Widget buildSearchField() {
-                  return TextField(
-                    controller: _searchController,
-                    decoration: filterDecoration(
-                      prefixIcon: Icon(Icons.search_rounded, size: 18, color: textMuted),
-                      hint: 'Search name or phone...',
-                    ),
-                    onChanged: (val) {
-                      context.read<CrmLeadsBloc>().add(CrmLeadsSearchChanged(val.trim()));
-                    },
-                  );
-                }
-
-                Widget buildStatusFilter() {
-                  final statusValue =
-                      (!isAdmin && state.statusFilter == 'WL') ? 'ALL' : state.statusFilter;
-                  return DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: statusValue,
-                    dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-                    decoration: filterDecoration(
-                      prefixIcon: Icon(Icons.filter_list_rounded, size: 18, color: primaryColor),
-                    ),
-                    items: [
-                      DropdownMenuItem(
-                        value: 'ALL',
-                        child: Text('All Statuses', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                      ),
-                      if (isAdmin)
-                        DropdownMenuItem(
-                          value: 'WL',
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFD97706), shape: BoxShape.circle)),
-                              const SizedBox(width: 8),
-                              Text('Waiting List (WL)', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309))),
-                            ],
-                          ),
-                        ),
-                      DropdownMenuItem(
-                        value: 'NOT_STARTED',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text('Not started', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                          ],
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: 'CNR',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFF59E0B), shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text('CNR', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                          ],
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: 'ASSIGNED',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF6366F1), shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text('Assigned', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                          ],
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: 'SCHEDULED_VISIT',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF2563EB), shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text('Scheduled Visit', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                          ],
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: 'SITE_VISIT_DONE',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text('Site Done', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                          ],
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: 'NOT_INTERESTED',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFEF4444), shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text('Not interested', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                          ],
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: 'FOLLOW_UP',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C), shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text('Follow up', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                          ],
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: 'INTERESTED',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A), shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text('Interested', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                          ],
-                        ),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val));
-                      }
-                    },
-                  );
-                }
-
-                Widget buildDateFilterBar() {
-                  final hasDateFilter = state.fromDate != null || state.toDate != null;
-                  final dateFormat = DateFormat('dd MMM yyyy');
-
-                  String dateRangeLabel;
-                  if (state.fromDate != null && state.toDate != null) {
-                    if (DateUtils.isSameDay(state.fromDate!, state.toDate!)) {
-                      dateRangeLabel = dateFormat.format(state.fromDate!);
-                    } else {
-                      dateRangeLabel = '${dateFormat.format(state.fromDate!)} - ${dateFormat.format(state.toDate!)}';
-                    }
-                  } else if (state.fromDate != null) {
-                    dateRangeLabel = 'From ${dateFormat.format(state.fromDate!)}';
-                  } else if (state.toDate != null) {
-                    dateRangeLabel = 'Until ${dateFormat.format(state.toDate!)}';
-                  } else {
-                    dateRangeLabel = 'Custom Dates';
-                  }
-
-                  void setPreset(String preset) {
-                    final now = DateTime.now();
-                    DateTime? from;
-                    DateTime? to;
-                    if (preset == 'today') {
-                      from = DateTime(now.year, now.month, now.day);
-                      to = DateTime(now.year, now.month, now.day);
-                    } else if (preset == 'yesterday') {
-                      final y = now.subtract(const Duration(days: 1));
-                      from = DateTime(y.year, y.month, y.day);
-                      to = DateTime(y.year, y.month, y.day);
-                    } else if (preset == 'this_week') {
-                      final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-                      from = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
-                      to = DateTime(now.year, now.month, now.day);
-                    } else if (preset == 'this_month') {
-                      from = DateTime(now.year, now.month, 1);
-                      to = DateTime(now.year, now.month, now.day);
-                    } else if (preset == 'all') {
-                      from = null;
-                      to = null;
-                    }
-                    context.read<CrmLeadsBloc>().add(CrmLeadsDateFilterChanged(
-                      fromDate: from,
-                      toDate: to,
-                      datePreset: preset,
-                    ));
-                  }
-
-                  Future<void> pickCustomRange() async {
-                    final bloc = context.read<CrmLeadsBloc>();
-                    final initialRange = (state.fromDate != null && state.toDate != null)
-                        ? DateTimeRange(start: state.fromDate!, end: state.toDate!)
-                        : DateTimeRange(
-                            start: DateTime.now().subtract(const Duration(days: 7)),
-                            end: DateTime.now(),
-                          );
-                    final picked = await showDateRangePicker(
-                      context: context,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                      initialDateRange: initialRange,
-                      builder: (ctx, child) {
-                        return Theme(
-                          data: Theme.of(ctx).copyWith(
-                            colorScheme: Theme.of(ctx).colorScheme.copyWith(
-                              primary: primaryColor,
-                              onPrimary: Colors.white,
-                            ),
-                          ),
-                          child: child!,
-                        );
-                      },
-                    );
-                    if (picked != null) {
-                      bloc.add(CrmLeadsDateFilterChanged(
-                        fromDate: picked.start,
-                        toDate: picked.end,
-                        datePreset: 'custom',
-                      ));
-                    }
-                  }
-
-                  Widget presetChip(String label, bool isSelected, VoidCallback onTap) {
-                    return InkWell(
-                      onTap: onTap,
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? primaryColor
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isSelected
-                                ? primaryColor
-                                : (isDark ? Colors.white24 : const Color(0xFFCBD5E1)),
-                          ),
-                        ),
-                        child: Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                            color: isSelected
-                                ? Colors.white
-                                : (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
-                          ),
-                        ),
-                      ),
-                    );
-                  }
-
-                  return Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.calendar_month_rounded, size: 15, color: hasDateFilter ? primaryColor : textMuted),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Date',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: hasDateFilter ? primaryColor : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                              ),
-                            ),
-                          ],
-                        ),
-                        presetChip('All', state.datePreset == 'all' && !hasDateFilter, () => setPreset('all')),
-                        presetChip('Today', state.datePreset == 'today', () => setPreset('today')),
-                        presetChip('Yesterday', state.datePreset == 'yesterday', () => setPreset('yesterday')),
-                        presetChip('This Week', state.datePreset == 'this_week', () => setPreset('this_week')),
-                        presetChip('This Month', state.datePreset == 'this_month', () => setPreset('this_month')),
-                        InkWell(
-                          onTap: pickCustomRange,
-                          borderRadius: BorderRadius.circular(20),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: state.datePreset == 'custom' || hasDateFilter
-                                  ? primaryColor.withValues(alpha: 0.12)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: state.datePreset == 'custom' || hasDateFilter
-                                    ? primaryColor
-                                    : (isDark ? Colors.white24 : const Color(0xFFCBD5E1)),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.date_range_rounded, size: 13, color: hasDateFilter ? primaryColor : textMuted),
-                                const SizedBox(width: 5),
-                                Text(
-                                  dateRangeLabel,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: hasDateFilter ? FontWeight.w700 : FontWeight.w500,
-                                    color: hasDateFilter ? primaryColor : (isDark ? Colors.white : const Color(0xFF1E293B)),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        if (hasDateFilter)
-                          IconButton(
-                            tooltip: 'Clear date filter',
-                            icon: const Icon(Icons.close_rounded, size: 16),
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-                            onPressed: () => setPreset('all'),
-                          ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: (hasDateFilter ? primaryColor : const Color(0xFF64748B)).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${filteredLeads.length} leads',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: hasDateFilter ? primaryColor : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                Widget buildFiltersRow() {
-                  if (isNarrow) {
-                    final half = constraints.maxWidth < 500
-                        ? constraints.maxWidth
-                        : (constraints.maxWidth - 24 - 10) / 2;
-                    return Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-                      child: Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          SizedBox(width: half, child: buildProjectSelector()),
-                          SizedBox(width: half, child: buildCampaignSelector()),
-                          SizedBox(width: half, child: buildSearchField()),
-                          SizedBox(width: half, child: buildStatusFilter()),
-                        ],
-                      ),
-                    );
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-                    child: Row(
-                      children: [
-                        Expanded(flex: 3, child: buildProjectSelector()),
-                        const SizedBox(width: 10),
-                        Expanded(flex: 3, child: buildCampaignSelector()),
-                        const SizedBox(width: 10),
-                        Expanded(flex: 4, child: buildSearchField()),
-                        const SizedBox(width: 10),
-                        Expanded(flex: 3, child: buildStatusFilter()),
-                      ],
-                    ),
-                  );
-                }
-
-                Widget buildActionsRow() {
-                  if (!canWrite) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      alignment: isNarrow ? WrapAlignment.start : WrapAlignment.end,
-                      children: [
-                        if (isAdmin && !isOnlyWebhook)
-                          OutlinedButton.icon(
-                            onPressed: () => _handleExcelImport(context),
-                            icon: const Icon(Icons.upload_file_rounded, size: 16),
-                            label: const Text('Import'),
-                            style: secondaryOutlineStyle(),
-                          ),
-                        if (isAdmin)
-                          OutlinedButton.icon(
-                            onPressed: () => _handleExportExcel(context, filteredLeads, state),
-                            icon: const Icon(Icons.file_download_outlined, size: 16),
-                            label: const Text('Export'),
-                            style: secondaryOutlineStyle(),
-                          ),
-                        if (isAdmin)
-                          OutlinedButton.icon(
-                            onPressed: () => _handleDistributeLeads(context),
-                            icon: const Icon(Icons.bolt_rounded, size: 16),
-                            label: Text('Distribute ($waitingCount)'),
-                            style: secondaryOutlineStyle(),
-                          ),
-                        if (isAdmin && _bulkTransferSelectedIds.isNotEmpty)
-                          FilledButton.icon(
-                            onPressed: () => _showBulkTransferLeadsModal(
-                              context,
-                              filteredLeads
-                                  .where((l) => _bulkTransferSelectedIds.contains(l.id))
-                                  .toList(),
-                              salesUsers,
-                            ),
-                            icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-                            label: Text('Transfer ${_bulkTransferSelectedIds.length}'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF6366F1),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                              visualDensity: VisualDensity.compact,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                          ),
-                        if (isAdmin && _bulkTransferSelectedIds.isNotEmpty)
-                          FilledButton.icon(
-                            onPressed: () => _bulkDeleteSelectedLeads(context),
-                            icon: const Icon(Icons.delete_outline_rounded, size: 16),
-                            label: Text('Delete ${_bulkTransferSelectedIds.length}'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFFDC2626),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                              visualDensity: VisualDensity.compact,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                          ),
-                        PopupMenuButton<String>(
-                          tooltip: 'More actions',
-                          offset: const Offset(0, 40),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          onSelected: (value) {
-                            if (value == 'merge') {
-                              _showMergeColumnsDialog(context, primaryColor);
-                            } else if (value == 'clean') {
-                              _handleCleanCrmData(context);
-                            } else if (value == 'revert_excel') {
-                              _showRevertExcelImportDialog(context);
-                            }
-                          },
-                          itemBuilder: (ctx) => [
-                            const PopupMenuItem(
-                              value: 'merge',
-                              child: ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                leading: Icon(Icons.call_merge_rounded, size: 20),
-                                title: Text('Merge Columns'),
-                              ),
-                            ),
-                            if (isAdmin)
-                              const PopupMenuItem(
-                                value: 'revert_excel',
-                                child: ListTile(
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: Icon(Icons.undo_rounded, size: 20, color: Color(0xFFEA580C)),
-                                  title: Text('Revert Excel Upload'),
-                                ),
-                              ),
-                            if (isItAdminEmp1)
-                              const PopupMenuItem(
-                                value: 'clean',
-                                child: ListTile(
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: Icon(Icons.delete_sweep_rounded, size: 20, color: Color(0xFFDC2626)),
-                                  title: Text('Clean CRM Data', style: TextStyle(color: Color(0xFFDC2626))),
-                                ),
-                              ),
-                          ],
-                          child: Container(
-                            height: 40,
-                            width: 40,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: borderColor),
-                              color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
-                            ),
-                            child: Icon(Icons.more_horiz_rounded, size: 20, color: isDark ? Colors.white70 : const Color(0xFF475569)),
-                          ),
-                        ),
-                        FilledButton.icon(
-                          onPressed: () => _showAddLeadDialog(context, state.columns),
-                          icon: const Icon(Icons.person_add_rounded, size: 16),
-                          label: const Text('Add Lead'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: primaryColor,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-                            visualDensity: VisualDensity.compact,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    buildFiltersRow(),
-                    if (canWrite) buildActionsRow(),
-                    const SizedBox(height: 12),
-                    Divider(height: 1, thickness: 1, color: borderColor.withValues(alpha: 0.7)),
-                    buildDateFilterBar(),
-                  ],
-                );
-              },
-            ),
+          _buildPreSalesToolbarCard(
+            context: context,
+            state: state,
+            isAdmin: isAdmin,
+            canWrite: canWrite,
+            userEmployeeId: userEmployeeId,
+            isExcelAssigned: isExcelAssigned,
+            isMetaAssigned: isMetaAssigned,
+            isGoogleAssigned: isGoogleAssigned,
+            isOnlyExcel: isOnlyExcel,
+            isOnlyWebhook: isOnlyWebhook,
+            effectiveFlow: effectiveFlow,
+            leads: leads,
+            filteredLeads: filteredLeads,
+            salesUsers: salesUsers,
+            isDark: isDark,
+            cardBg: cardBg,
+            borderColor: borderColor,
+            textMuted: textMuted,
+            primaryColor: primaryGold,
           ),
           const SizedBox(height: 12),
-
-          if (isAdmin && _bulkTransferSelectedIds.isNotEmpty)
+          if (isAdmin && _bulkTransferSelectedIds.isNotEmpty) ...[
             Container(
               width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: const Color(0xFF6366F1).withValues(alpha: 0.1),
@@ -1241,15 +693,24 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       foregroundColor: Colors.white,
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () => _bulkDeleteSelectedLeads(context),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                    label: Text('Delete ${_bulkTransferSelectedIds.length}'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
                 ],
               ),
             ),
-
-          // Desk banners
-          if (isOnlyExcel)
+            const SizedBox(height: 12),
+          ],
+          if (isOnlyExcel) ...[
             Container(
               width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: const Color(0xFF16A34A).withValues(alpha: 0.1),
@@ -1268,8 +729,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ),
                 ],
               ),
-            )
-          else if (isOnlyWebhook)
+            ),
+            const SizedBox(height: 10),
+          ] else if (isOnlyWebhook) ...[
             Builder(
               builder: (_) {
                 final googleOnly = isGoogleAssigned && !isMetaAssigned;
@@ -1282,7 +744,6 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         : 'Ads Desk — You handle Meta and Google campaign leads.';
                 return Container(
                   width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: 0.1),
@@ -1308,287 +769,982 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 );
               },
             ),
+            const SizedBox(height: 10),
+          ],
+          _buildLeadsTableAndPagination(
+            context: context,
+            filteredLeads: filteredLeads,
+            columns: columns,
+            salesUsers: salesUsers,
+            isAdmin: isAdmin,
+            canWrite: canWrite,
+            canTransfer: canTransfer,
+            isFinserve: isFinserve,
+            userEmployeeId: userEmployeeId,
+            isDark: isDark,
+            cardBg: cardBg,
+            borderColor: borderColor,
+            textMuted: textMuted,
+            primaryColor: primaryGold,
+          ),
+        ],
+      ),
+    );
+  }
 
-          // Lead flow chips (totals from full lead list) → campaign picker → headers
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: borderColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Row(
+
+  Widget _buildPreSalesToolbarCard({
+    required BuildContext context,
+    required CrmLeadsState state,
+    required bool isAdmin,
+    required bool canWrite,
+    required int? userEmployeeId,
+    required bool isExcelAssigned,
+    required bool isMetaAssigned,
+    required bool isGoogleAssigned,
+    required bool isOnlyExcel,
+    required bool isOnlyWebhook,
+    required String effectiveFlow,
+    required List<CrmLead> leads,
+    required List<CrmLead> filteredLeads,
+    required List<CrmSalesUser> salesUsers,
+    required bool isDark,
+    required Color cardBg,
+    required Color borderColor,
+    required Color textMuted,
+    required Color primaryColor,
+  }) {
+    final projects = state.projects;
+    final selectedProjectId = state.selectedProjectId;
+    final campaigns = state.campaigns;
+    final selectedCampaignId = state.selectedCampaignId;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 980;
+          final waitingCount = leads.where((l) => l.isWaitingList).length;
+          final fieldFill = isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC);
+          final fieldRadius = BorderRadius.circular(10);
+
+          InputDecoration filterDecoration({required Widget prefixIcon, String? hint}) {
+            return InputDecoration(
+              prefixIcon: prefixIcon,
+              hintText: hint,
+              isDense: true,
+              filled: true,
+              fillColor: fieldFill,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              border: OutlineInputBorder(borderRadius: fieldRadius, borderSide: BorderSide(color: borderColor)),
+              enabledBorder: OutlineInputBorder(borderRadius: fieldRadius, borderSide: BorderSide(color: borderColor)),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: fieldRadius,
+                borderSide: BorderSide(color: primaryColor, width: 1.4),
+              ),
+            );
+          }
+
+          ButtonStyle secondaryOutlineStyle() {
+            return OutlinedButton.styleFrom(
+              foregroundColor: isDark ? Colors.white70 : const Color(0xFF334155),
+              side: BorderSide(color: borderColor),
+              backgroundColor: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              visualDensity: VisualDensity.compact,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            );
+          }
+
+          Widget buildProjectSelector() {
+            final effectiveSelectedId = (selectedProjectId != null && projects.any((p) => p.id == selectedProjectId))
+                ? selectedProjectId
+                : 'ALL';
+
+            return DropdownButtonFormField<String>(
+              key: ValueKey('project-$effectiveSelectedId-${projects.length}'),
+              isExpanded: true,
+              initialValue: effectiveSelectedId,
+              decoration: filterDecoration(
+                prefixIcon: Icon(Icons.apartment_rounded, size: 18, color: primaryColor),
+                hint: 'Project',
+              ),
+              items: [
+                const DropdownMenuItem(
+                  value: 'ALL',
+                  child: Text('All Projects', overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                ),
+                ...projects.map((p) => DropdownMenuItem(
+                      value: p.id,
+                      child: Text(
+                        p.name,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    )),
+              ],
+              onChanged: (val) {
+                if (val != null) {
+                  final newProjId = val == 'ALL' ? null : val;
+                  context.read<CrmLeadsBloc>().add(CrmLeadsProjectSelected(newProjId));
+                }
+              },
+            );
+          }
+
+          Widget buildCampaignSelector() {
+            const allValue = 'ALL';
+            final hasValidSelection = selectedCampaignId != null &&
+                campaigns.any((c) => c.id == selectedCampaignId);
+            final effectiveSelectedId =
+                hasValidSelection ? selectedCampaignId : allValue;
+
+            return DropdownButtonFormField<String>(
+              key: ValueKey('campaign-$effectiveSelectedId-${campaigns.length}'),
+              isExpanded: true,
+              initialValue: effectiveSelectedId,
+              decoration: filterDecoration(
+                prefixIcon: Icon(Icons.campaign_rounded, size: 18, color: primaryColor),
+                hint: 'Campaign',
+              ),
+              items: [
+                DropdownMenuItem(
+                  value: allValue,
+                  child: Text(
+                    campaigns.isEmpty ? '0 Campaigns' : 'All Campaigns (${campaigns.length})',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+                ...campaigns.map((c) => DropdownMenuItem(
+                      value: c.id,
+                      child: Text(
+                        c.binLeadsCount > 0
+                            ? '${c.name} (${c.activeLeadsCount} active · ${c.totalLeadsCount} tot)'
+                            : '${c.name} (${c.leadsCount})',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    )),
+              ],
+              onChanged: (val) {
+                if (val == null) return;
+                final newCampId = val == allValue ? null : val;
+                context.read<CrmLeadsBloc>().add(CrmLeadsCampaignSelected(newCampId));
+              },
+            );
+          }
+
+          Widget buildSearchField() {
+            return TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                prefixIcon: Icon(Icons.search_rounded, size: 18, color: textMuted),
+                hintText: 'Search name or phone...',
+                hintStyle: TextStyle(fontSize: 13, color: textMuted),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded, size: 16),
+                        onPressed: () {
+                          _searchController.clear();
+                          context.read<CrmLeadsBloc>().add(const CrmLeadsSearchChanged(''));
+                          setState(() {});
+                        },
+                      )
+                    : null,
+                isDense: true,
+                filled: true,
+                fillColor: fieldFill,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                border: OutlineInputBorder(borderRadius: fieldRadius, borderSide: BorderSide(color: borderColor)),
+                enabledBorder: OutlineInputBorder(borderRadius: fieldRadius, borderSide: BorderSide(color: borderColor)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: fieldRadius,
+                  borderSide: BorderSide(color: primaryColor, width: 1.4),
+                ),
+              ),
+              onChanged: (val) {
+                context.read<CrmLeadsBloc>().add(CrmLeadsSearchChanged(val.trim()));
+                setState(() {});
+              },
+            );
+          }
+
+          Widget buildStatusFilter() {
+            final statusValue =
+                (!isAdmin && state.statusFilter == 'WL') ? 'ALL' : state.statusFilter;
+            return DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: statusValue,
+              dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+              decoration: filterDecoration(
+                prefixIcon: Icon(Icons.filter_list_rounded, size: 18, color: primaryColor),
+                hint: 'Status',
+              ),
+              items: [
+                DropdownMenuItem(
+                  value: 'ALL',
+                  child: Text('All Statuses', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                ),
+                if (isAdmin)
+                  DropdownMenuItem(
+                    value: 'WL',
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.alt_route_rounded, size: 16, color: primaryColor),
+                        Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFD97706), shape: BoxShape.circle)),
                         const SizedBox(width: 6),
+                        Text('Waiting List (WL)', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309))),
+                      ],
+                    ),
+                  ),
+                DropdownMenuItem(
+                  value: 'NOT_STARTED',
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      Text('Not started', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                    ],
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'CNR',
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFF59E0B), shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      Text('CNR', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                    ],
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'ASSIGNED',
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF6366F1), shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      Text('Assigned', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                    ],
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'SCHEDULED_VISIT',
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF2563EB), shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      Text('Scheduled Visit', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                    ],
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'SITE_VISIT_DONE',
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      Text('Site Done', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                    ],
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'NOT_INTERESTED',
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFEF4444), shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      Text('Not interested', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                    ],
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'FOLLOW_UP',
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C), shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      Text('Follow up', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                    ],
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'INTERESTED',
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A), shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      Text('Interested', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                    ],
+                  ),
+                ),
+              ],
+              onChanged: (val) {
+                if (val != null) {
+                  context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val));
+                }
+              },
+            );
+          }
+
+          Widget buildDateFilterBar() {
+            final hasDateFilter = state.fromDate != null || state.toDate != null;
+            final dateFormat = DateFormat('dd MMM yyyy');
+
+            String dateRangeLabel;
+            if (state.fromDate != null && state.toDate != null) {
+              if (DateUtils.isSameDay(state.fromDate!, state.toDate!)) {
+                dateRangeLabel = dateFormat.format(state.fromDate!);
+              } else {
+                dateRangeLabel = '${dateFormat.format(state.fromDate!)} - ${dateFormat.format(state.toDate!)}';
+              }
+            } else if (state.fromDate != null) {
+              dateRangeLabel = 'From ${dateFormat.format(state.fromDate!)}';
+            } else if (state.toDate != null) {
+              dateRangeLabel = 'Until ${dateFormat.format(state.toDate!)}';
+            } else {
+              dateRangeLabel = 'Custom Dates';
+            }
+
+            void setPreset(String preset) {
+              final now = DateTime.now();
+              DateTime? from;
+              DateTime? to;
+              if (preset == 'today') {
+                from = DateTime(now.year, now.month, now.day);
+                to = DateTime(now.year, now.month, now.day);
+              } else if (preset == 'yesterday') {
+                final y = now.subtract(const Duration(days: 1));
+                from = DateTime(y.year, y.month, y.day);
+                to = DateTime(y.year, y.month, y.day);
+              } else if (preset == 'this_week') {
+                final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+                from = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+                to = DateTime(now.year, now.month, now.day);
+              } else if (preset == 'this_month') {
+                from = DateTime(now.year, now.month, 1);
+                to = DateTime(now.year, now.month, now.day);
+              } else if (preset == 'all') {
+                from = null;
+                to = null;
+              }
+              context.read<CrmLeadsBloc>().add(CrmLeadsDateFilterChanged(
+                fromDate: from,
+                toDate: to,
+                datePreset: preset,
+              ));
+            }
+
+            Future<void> pickCustomRange() async {
+              final bloc = context.read<CrmLeadsBloc>();
+              final initialRange = (state.fromDate != null && state.toDate != null)
+                  ? DateTimeRange(start: state.fromDate!, end: state.toDate!)
+                  : DateTimeRange(
+                      start: DateTime.now().subtract(const Duration(days: 7)),
+                      end: DateTime.now(),
+                    );
+              final picked = await showDateRangePicker(
+                context: context,
+                firstDate: DateTime(2020),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+                initialDateRange: initialRange,
+                builder: (ctx, child) {
+                  return Theme(
+                    data: Theme.of(ctx).copyWith(
+                      colorScheme: Theme.of(ctx).colorScheme.copyWith(
+                        primary: primaryColor,
+                        onPrimary: Colors.white,
+                      ),
+                    ),
+                    child: child!,
+                  );
+                },
+              );
+              if (picked != null) {
+                bloc.add(CrmLeadsDateFilterChanged(
+                  fromDate: picked.start,
+                  toDate: picked.end,
+                  datePreset: 'custom',
+                ));
+              }
+            }
+
+            Widget presetChip(String label, bool isSelected, VoidCallback onTap) {
+              return InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? primaryColor
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isSelected
+                          ? primaryColor
+                          : (isDark ? Colors.white24 : const Color(0xFFCBD5E1)),
+                    ),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected
+                          ? Colors.white
+                          : (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            return Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.calendar_month_rounded, size: 14, color: hasDateFilter ? primaryColor : textMuted),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Date',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: hasDateFilter ? primaryColor : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                      ),
+                    ),
+                  ],
+                ),
+                presetChip('All', state.datePreset == 'all' && !hasDateFilter, () => setPreset('all')),
+                presetChip('Today', state.datePreset == 'today', () => setPreset('today')),
+                presetChip('Yesterday', state.datePreset == 'yesterday', () => setPreset('yesterday')),
+                presetChip('This Week', state.datePreset == 'this_week', () => setPreset('this_week')),
+                presetChip('This Month', state.datePreset == 'this_month', () => setPreset('this_month')),
+                InkWell(
+                  onTap: pickCustomRange,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: state.datePreset == 'custom' || hasDateFilter
+                          ? primaryColor.withValues(alpha: 0.12)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: state.datePreset == 'custom' || hasDateFilter
+                            ? primaryColor
+                            : (isDark ? Colors.white24 : const Color(0xFFCBD5E1)),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.date_range_rounded, size: 12, color: hasDateFilter ? primaryColor : textMuted),
+                        const SizedBox(width: 4),
                         Text(
-                          'Lead flow',
+                          dateRangeLabel,
                           style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white70 : const Color(0xFF475569),
+                            fontSize: 11,
+                            fontWeight: hasDateFilter ? FontWeight.w700 : FontWeight.w500,
+                            color: hasDateFilter ? primaryColor : (isDark ? Colors.white : const Color(0xFF1E293B)),
                           ),
                         ),
                       ],
                     ),
-                    if (!isOnlyExcel && !isOnlyWebhook)
-                      ChoiceChip(
-                        label: Text('All (${leads.length})'),
-                        selected: effectiveFlow == 'ALL',
-                        selectedColor: primaryColor.withValues(alpha: 0.18),
-                        side: BorderSide(
-                          color: effectiveFlow == 'ALL' ? primaryColor : borderColor,
-                        ),
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: effectiveFlow == 'ALL' ? FontWeight.w700 : FontWeight.w500,
-                          color: effectiveFlow == 'ALL'
-                              ? primaryColor
-                              : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                        ),
-                        onSelected: (val) {
-                          if (val) {
-                            _selectLeadFlow(
-                              context,
-                              state,
-                              'ALL',
-                              isAdmin: isAdmin,
-                              userEmployeeId: userEmployeeId,
-                              isExcelAssigned: isExcelAssigned,
-                              isMetaAssigned: isMetaAssigned,
-                              isGoogleAssigned: isGoogleAssigned,
-                            );
-                          }
-                        },
+                  ),
+                ),
+                if (hasDateFilter)
+                  IconButton(
+                    tooltip: 'Clear date filter',
+                    icon: const Icon(Icons.close_rounded, size: 15),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                    onPressed: () => setPreset('all'),
+                  ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: (hasDateFilter ? primaryColor : const Color(0xFF64748B)).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${filteredLeads.length} leads',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: hasDateFilter ? primaryColor : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          Widget buildActionsRow() {
+            if (!canWrite) return const SizedBox.shrink();
+            return Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (isAdmin && !isOnlyWebhook)
+                  OutlinedButton.icon(
+                    onPressed: () => _handleExcelImport(context),
+                    icon: const Icon(Icons.upload_file_rounded, size: 15),
+                    label: const Text('Import', style: TextStyle(fontSize: 12)),
+                    style: secondaryOutlineStyle(),
+                  ),
+                if (isAdmin)
+                  OutlinedButton.icon(
+                    onPressed: () => _handleExportExcel(context, filteredLeads, state),
+                    icon: const Icon(Icons.file_download_outlined, size: 15),
+                    label: const Text('Export', style: TextStyle(fontSize: 12)),
+                    style: secondaryOutlineStyle(),
+                  ),
+                if (isAdmin)
+                  OutlinedButton.icon(
+                    onPressed: () => _handleDistributeLeads(context),
+                    icon: const Icon(Icons.bolt_rounded, size: 15),
+                    label: Text('Distribute ($waitingCount)', style: const TextStyle(fontSize: 12)),
+                    style: secondaryOutlineStyle(),
+                  ),
+                PopupMenuButton<String>(
+                  tooltip: 'More actions',
+                  offset: const Offset(0, 38),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onSelected: (value) {
+                    if (value == 'merge') {
+                      _showMergeColumnsDialog(context, primaryColor);
+                    } else if (value == 'clean') {
+                      _handleCleanCrmData(context);
+                    } else if (value == 'revert_excel') {
+                      _showRevertExcelImportDialog(context);
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem(
+                      value: 'merge',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.call_merge_rounded, size: 20),
+                        title: Text('Merge Columns'),
                       ),
-                    if (!isOnlyWebhook)
-                      ChoiceChip(
-                        avatar: Icon(
-                          Icons.table_chart_rounded,
-                          size: 14,
-                          color: effectiveFlow == 'EXCEL' ? primaryColor : const Color(0xFF16A34A),
-                        ),
-                        label: Text('Excel (${leads.where(isExcelLead).length})'),
-                        selected: effectiveFlow == 'EXCEL',
-                        selectedColor: primaryColor.withValues(alpha: 0.18),
-                        side: BorderSide(
-                          color: effectiveFlow == 'EXCEL' ? primaryColor : borderColor,
-                        ),
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: effectiveFlow == 'EXCEL' ? FontWeight.w700 : FontWeight.w500,
-                          color: effectiveFlow == 'EXCEL'
-                              ? primaryColor
-                              : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                        ),
-                        onSelected: (val) {
-                          if (val) {
-                            _selectLeadFlow(
-                              context,
-                              state,
-                              'EXCEL',
-                              isAdmin: isAdmin,
-                              userEmployeeId: userEmployeeId,
-                              isExcelAssigned: isExcelAssigned,
-                              isMetaAssigned: isMetaAssigned,
-                              isGoogleAssigned: isGoogleAssigned,
-                            );
-                          }
-                        },
-                      ),
-                    if (!isOnlyWebhook)
-                      ChoiceChip(
-                        avatar: Icon(
-                          Icons.edit_note_rounded,
-                          size: 14,
-                          color: effectiveFlow == 'MANUAL' ? primaryColor : const Color(0xFF8B5CF6),
-                        ),
-                        label: Text('Manual (${leads.where((l) => l.isManual).length})'),
-                        selected: effectiveFlow == 'MANUAL',
-                        selectedColor: primaryColor.withValues(alpha: 0.18),
-                        side: BorderSide(
-                          color: effectiveFlow == 'MANUAL' ? primaryColor : borderColor,
-                        ),
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: effectiveFlow == 'MANUAL' ? FontWeight.w700 : FontWeight.w500,
-                          color: effectiveFlow == 'MANUAL'
-                              ? primaryColor
-                              : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                        ),
-                        onSelected: (val) {
-                          if (val) {
-                            _selectLeadFlow(
-                              context,
-                              state,
-                              'MANUAL',
-                              isAdmin: isAdmin,
-                              userEmployeeId: userEmployeeId,
-                              isExcelAssigned: isExcelAssigned,
-                              isMetaAssigned: isMetaAssigned,
-                              isGoogleAssigned: isGoogleAssigned,
-                            );
-                          }
-                        },
-                      ),
-                    if (!isOnlyExcel)
-                      ChoiceChip(
-                        avatar: Icon(
-                          Icons.campaign_rounded,
-                          size: 14,
-                          color: effectiveFlow == 'WEBHOOK' ? primaryColor : const Color(0xFF0891B2),
-                        ),
-                        label: Text('Ads / Webhook (${leads.where(isAdsLead).length})'),
-                        selected: effectiveFlow == 'WEBHOOK',
-                        selectedColor: primaryColor.withValues(alpha: 0.18),
-                        side: BorderSide(
-                          color: effectiveFlow == 'WEBHOOK' ? primaryColor : borderColor,
-                        ),
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: effectiveFlow == 'WEBHOOK' ? FontWeight.w700 : FontWeight.w500,
-                          color: effectiveFlow == 'WEBHOOK'
-                              ? primaryColor
-                              : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                        ),
-                        onSelected: (val) {
-                          if (val) {
-                            _selectLeadFlow(
-                              context,
-                              state,
-                              'WEBHOOK',
-                              isAdmin: isAdmin,
-                              userEmployeeId: userEmployeeId,
-                              isExcelAssigned: isExcelAssigned,
-                              isMetaAssigned: isMetaAssigned,
-                              isGoogleAssigned: isGoogleAssigned,
-                            );
-                          }
-                        },
-                      ),
+                    ),
                     if (isAdmin)
-                      ChoiceChip(
-                        avatar: Icon(
-                          Icons.hourglass_top_rounded,
-                          size: 14,
-                          color: state.statusFilter == 'WL' ? primaryColor : const Color(0xFFD97706),
+                      const PopupMenuItem(
+                        value: 'revert_excel',
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.undo_rounded, size: 20, color: Color(0xFFEA580C)),
+                          title: Text('Revert Excel Upload'),
                         ),
-                        label: Text('Waiting (${leads.where((l) => l.isWaitingList).length})'),
-                        selected: state.statusFilter == 'WL',
-                        selectedColor: primaryColor.withValues(alpha: 0.18),
-                        side: BorderSide(
-                          color: state.statusFilter == 'WL' ? primaryColor : borderColor,
+                      ),
+                    if (isItAdminEmp1)
+                      const PopupMenuItem(
+                        value: 'clean',
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.delete_sweep_rounded, size: 20, color: Color(0xFFDC2626)),
+                          title: Text('Clean CRM Data', style: TextStyle(color: Color(0xFFDC2626))),
                         ),
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: state.statusFilter == 'WL' ? FontWeight.w700 : FontWeight.w500,
-                          color: state.statusFilter == 'WL'
-                              ? primaryColor
-                              : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                        ),
-                        onSelected: (val) {
-                          context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val ? 'WL' : 'ALL'));
-                        },
                       ),
                   ],
+                  child: Container(
+                    height: 36,
+                    width: 36,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: borderColor),
+                      color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
+                    ),
+                    child: Icon(Icons.more_horiz_rounded, size: 18, color: isDark ? Colors.white70 : const Color(0xFF475569)),
+                  ),
                 ),
-                if (effectiveFlow != 'ALL') ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Icon(Icons.visibility_outlined, size: 15, color: textMuted),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Viewing: ${selectedCampaignId == null ? 'All campaigns in this flow' : (campaigns.where((c) => c.id == selectedCampaignId).isEmpty ? 'Campaign' : campaigns.firstWhere((c) => c.id == selectedCampaignId).name)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white70 : const Color(0xFF334155),
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                FilledButton.icon(
+                  onPressed: () => _showAddLeadDialog(context, state.columns),
+                  icon: const Icon(Icons.person_add_rounded, size: 15),
+                  label: const Text('Add Lead', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    visualDensity: VisualDensity.compact,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          Widget buildLeadFlowChips() {
+            return Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.alt_route_rounded, size: 15, color: primaryColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Flow',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? Colors.white70 : const Color(0xFF475569),
                       ),
-                      TextButton(
-                        onPressed: () => _selectLeadFlow(
+                    ),
+                  ],
+                ),
+                if (!isOnlyExcel && !isOnlyWebhook)
+                  ChoiceChip(
+                    label: Text('All (${leads.length})'),
+                    selected: effectiveFlow == 'ALL',
+                    selectedColor: primaryColor.withValues(alpha: 0.18),
+                    side: BorderSide(
+                      color: effectiveFlow == 'ALL' ? primaryColor : borderColor,
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 11,
+                      fontWeight: effectiveFlow == 'ALL' ? FontWeight.w700 : FontWeight.w500,
+                      color: effectiveFlow == 'ALL'
+                          ? primaryColor
+                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                    ),
+                    onSelected: (val) {
+                      if (val) {
+                        _selectLeadFlow(
                           context,
                           state,
-                          effectiveFlow,
+                          'ALL',
                           isAdmin: isAdmin,
                           userEmployeeId: userEmployeeId,
                           isExcelAssigned: isExcelAssigned,
                           isMetaAssigned: isMetaAssigned,
                           isGoogleAssigned: isGoogleAssigned,
-                          forcePicker: true,
-                        ),
-                        child: const Text('Change'),
-                      ),
-                    ],
+                        );
+                      }
+                    },
                   ),
-                ],
+                if (!isOnlyWebhook)
+                  ChoiceChip(
+                    avatar: Icon(
+                      Icons.table_chart_rounded,
+                      size: 13,
+                      color: effectiveFlow == 'EXCEL' ? primaryColor : const Color(0xFF16A34A),
+                    ),
+                    label: Text('Excel (${leads.where(isExcelLead).length})'),
+                    selected: effectiveFlow == 'EXCEL',
+                    selectedColor: primaryColor.withValues(alpha: 0.18),
+                    side: BorderSide(
+                      color: effectiveFlow == 'EXCEL' ? primaryColor : borderColor,
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 11,
+                      fontWeight: effectiveFlow == 'EXCEL' ? FontWeight.w700 : FontWeight.w500,
+                      color: effectiveFlow == 'EXCEL'
+                          ? primaryColor
+                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                    ),
+                    onSelected: (val) {
+                      if (val) {
+                        _selectLeadFlow(
+                          context,
+                          state,
+                          'EXCEL',
+                          isAdmin: isAdmin,
+                          userEmployeeId: userEmployeeId,
+                          isExcelAssigned: isExcelAssigned,
+                          isMetaAssigned: isMetaAssigned,
+                          isGoogleAssigned: isGoogleAssigned,
+                        );
+                      }
+                    },
+                  ),
+                if (!isOnlyWebhook)
+                  ChoiceChip(
+                    avatar: Icon(
+                      Icons.edit_note_rounded,
+                      size: 13,
+                      color: effectiveFlow == 'MANUAL' ? primaryColor : const Color(0xFF8B5CF6),
+                    ),
+                    label: Text('Manual (${leads.where((l) => l.isManual).length})'),
+                    selected: effectiveFlow == 'MANUAL',
+                    selectedColor: primaryColor.withValues(alpha: 0.18),
+                    side: BorderSide(
+                      color: effectiveFlow == 'MANUAL' ? primaryColor : borderColor,
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 11,
+                      fontWeight: effectiveFlow == 'MANUAL' ? FontWeight.w700 : FontWeight.w500,
+                      color: effectiveFlow == 'MANUAL'
+                          ? primaryColor
+                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                    ),
+                    onSelected: (val) {
+                      if (val) {
+                        _selectLeadFlow(
+                          context,
+                          state,
+                          'MANUAL',
+                          isAdmin: isAdmin,
+                          userEmployeeId: userEmployeeId,
+                          isExcelAssigned: isExcelAssigned,
+                          isMetaAssigned: isMetaAssigned,
+                          isGoogleAssigned: isGoogleAssigned,
+                        );
+                      }
+                    },
+                  ),
+                if (!isOnlyExcel)
+                  ChoiceChip(
+                    avatar: Icon(
+                      Icons.campaign_rounded,
+                      size: 13,
+                      color: effectiveFlow == 'WEBHOOK' ? primaryColor : const Color(0xFF0891B2),
+                    ),
+                    label: Text('Ads (${leads.where(isAdsLead).length})'),
+                    selected: effectiveFlow == 'WEBHOOK',
+                    selectedColor: primaryColor.withValues(alpha: 0.18),
+                    side: BorderSide(
+                      color: effectiveFlow == 'WEBHOOK' ? primaryColor : borderColor,
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 11,
+                      fontWeight: effectiveFlow == 'WEBHOOK' ? FontWeight.w700 : FontWeight.w500,
+                      color: effectiveFlow == 'WEBHOOK'
+                          ? primaryColor
+                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                    ),
+                    onSelected: (val) {
+                      if (val) {
+                        _selectLeadFlow(
+                          context,
+                          state,
+                          'WEBHOOK',
+                          isAdmin: isAdmin,
+                          userEmployeeId: userEmployeeId,
+                          isExcelAssigned: isExcelAssigned,
+                          isMetaAssigned: isMetaAssigned,
+                          isGoogleAssigned: isGoogleAssigned,
+                        );
+                      }
+                    },
+                  ),
+                if (isAdmin)
+                  ChoiceChip(
+                    avatar: Icon(
+                      Icons.hourglass_top_rounded,
+                      size: 13,
+                      color: state.statusFilter == 'WL' ? primaryColor : const Color(0xFFD97706),
+                    ),
+                    label: Text('Waiting (${leads.where((l) => l.isWaitingList).length})'),
+                    selected: state.statusFilter == 'WL',
+                    selectedColor: primaryColor.withValues(alpha: 0.18),
+                    side: BorderSide(
+                      color: state.statusFilter == 'WL' ? primaryColor : borderColor,
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 11,
+                      fontWeight: state.statusFilter == 'WL' ? FontWeight.w700 : FontWeight.w500,
+                      color: state.statusFilter == 'WL'
+                          ? primaryColor
+                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                    ),
+                    onSelected: (val) {
+                      context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val ? 'WL' : 'ALL'));
+                    },
+                  ),
               ],
-            ),
-          ),
-          const SizedBox(height: 14),
+            );
+          }
 
-          // Dynamic Data Table with Custom Scrollbar
-          if (state.status.isLoading && filteredLeads.isEmpty)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(40),
-                child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
+          Widget buildFullScreenButton() {
+            return OutlinedButton.icon(
+              onPressed: _openFullScreenFocusMode,
+              icon: const Icon(Icons.fullscreen_rounded, size: 16),
+              label: const Text('Full Screen', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+              tooltip: 'Enter Full Screen Focus Mode (Dialer & Leads Table only)',
+              style: OutlinedButton.styleFrom(
+                foregroundColor: primaryColor,
+                side: BorderSide(color: primaryColor.withValues(alpha: 0.5)),
+                backgroundColor: primaryColor.withValues(alpha: 0.06),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                visualDensity: VisualDensity.compact,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
-            )
-          else if (state.status.isFailure && filteredLeads.isEmpty)
-            Center(child: Text('Error loading leads: ${state.errorMessage}', style: const TextStyle(color: Colors.red)))
-          else if (filteredLeads.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(40),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: borderColor),
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                child: isNarrow
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(child: buildSearchField()),
+                              const SizedBox(width: 8),
+                              buildFullScreenButton(),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(child: buildProjectSelector()),
+                              const SizedBox(width: 8),
+                              Expanded(child: buildCampaignSelector()),
+                            ],
+                          ),
+                          if (canWrite) ...[
+                            const SizedBox(height: 8),
+                            buildActionsRow(),
+                          ],
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(flex: 3, child: buildSearchField()),
+                          const SizedBox(width: 8),
+                          Expanded(flex: 2, child: buildProjectSelector()),
+                          const SizedBox(width: 8),
+                          Expanded(flex: 2, child: buildCampaignSelector()),
+                          const SizedBox(width: 10),
+                          if (canWrite) buildActionsRow(),
+                          const SizedBox(width: 8),
+                          buildFullScreenButton(),
+                        ],
+                      ),
               ),
-              child: Center(
-                child: Column(
+              Divider(height: 1, thickness: 1, color: borderColor.withValues(alpha: 0.6)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  alignment: WrapAlignment.spaceBetween,
                   children: [
-                    Icon(Icons.assignment_late_outlined, size: 48, color: textMuted),
-                    const SizedBox(height: 12),
-                    Text('No Pre-Sales Leads Found in this Flow', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                    const SizedBox(height: 6),
-                    Text(isOnlyWebhook
-                        ? 'New leads from Meta / Google Ads / Webhooks will appear here automatically.'
-                        : 'Click "Import Excel" to upload leads or "Add Lead" to enter manually.',
-                        style: TextStyle(fontSize: 13, color: textMuted)),
+                    buildLeadFlowChips(),
+                    SizedBox(
+                      width: 155,
+                      child: buildStatusFilter(),
+                    ),
+                    buildDateFilterBar(),
                   ],
                 ),
               ),
-            )
-          else ...[
-            () {
-              final filterKey =
-                  '${effectiveFlow}|${selectedCampaignId ?? ''}|${state.statusFilter}|${state.search}|${state.fromDate}|${state.toDate}|${filteredLeads.length}';
-              if (filterKey != _leadsPageFilterKey) {
-                _leadsPageFilterKey = filterKey;
-                _leadsPage = 0;
-              }
-              final totalPages =
-                  (filteredLeads.length / _leadsPageSize).ceil().clamp(1, 999999);
-              if (_leadsPage >= totalPages) _leadsPage = totalPages - 1;
-              return const SizedBox.shrink();
-            }(),
-            RepaintBoundary(
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+
+  Widget _buildLeadsTableAndPagination({
+    required BuildContext context,
+    required List<CrmLead> filteredLeads,
+    required List<CrmDynamicColumn> columns,
+    required List<CrmSalesUser> salesUsers,
+    required bool isAdmin,
+    required bool canWrite,
+    required bool canTransfer,
+    required bool isFinserve,
+    required int? userEmployeeId,
+    required bool isDark,
+    required Color cardBg,
+    required Color borderColor,
+    required Color textMuted,
+    required Color primaryColor,
+    ScrollController? horizontalController,
+    VoidCallback? onStateUpdated,
+  }) {
+    final state = context.read<CrmLeadsBloc>().state;
+    if (state.status.isLoading && filteredLeads.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40),
+          child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
+        ),
+      );
+    }
+    if (state.status.isFailure && filteredLeads.isEmpty) {
+      return Center(
+        child: Text('Error loading leads: ${state.errorMessage}', style: const TextStyle(color: Colors.red)),
+      );
+    }
+    if (filteredLeads.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(40),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: borderColor),
+        ),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.assignment_late_outlined, size: 48, color: textMuted),
+              const SizedBox(height: 12),
+              Text(
+                'No Pre-Sales Leads Found in this Flow',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Try clearing filters or adding new leads.',
+                style: TextStyle(fontSize: 13, color: textMuted),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final totalPages = (filteredLeads.length / _leadsPageSize).ceil().clamp(1, 999999);
+    if (_leadsPage >= totalPages) _leadsPage = totalPages - 1;
+
+    final scrollCtrl = horizontalController ?? _horizontalScrollController;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        RepaintBoundary(
               child: Container(
                 decoration: BoxDecoration(
                   color: cardBg,
@@ -1596,11 +1752,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   border: Border.all(color: borderColor),
                 ),
                 child: Scrollbar(
-                  controller: _horizontalScrollController,
+                  controller: scrollCtrl,
                   thumbVisibility: true,
                   trackVisibility: true,
                   child: SingleChildScrollView(
-                    controller: _horizontalScrollController,
+                    controller: scrollCtrl,
                     scrollDirection: Axis.horizontal,
                     child: DataTable(
                       headingRowColor: WidgetStateProperty.all(
@@ -2290,21 +2446,21 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
-            _buildLeadsPaginationBar(
-              total: filteredLeads.length,
-              isDark: isDark,
-              borderColor: borderColor,
-              cardBg: cardBg,
-              textMuted: textMuted,
-              primaryColor: primaryColor,
-            ),
-          ],
-        ],
-      ),
+            ),,
+        const SizedBox(height: 10),
+        _buildLeadsPaginationBar(
+          total: filteredLeads.length,
+          isDark: isDark,
+          borderColor: borderColor,
+          cardBg: cardBg,
+          textMuted: textMuted,
+          primaryColor: primaryColor,
+          onPageChanged: onStateUpdated,
+        ),
+      ],
     );
   }
+
 
   Widget _buildLeadsPaginationBar({
     required int total,
@@ -10241,3 +10397,830 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     );
   }
 }
+
+// =============================================================================
+// PRE-SALES FULL SCREEN FOCUS STATION & SLIDE-OUT FILTER SIDEBAR
+// =============================================================================
+
+class _CrmPreSalesFullScreenStation extends StatefulWidget {
+  const _CrmPreSalesFullScreenStation({
+    required this.parentState,
+  });
+
+  final _CrmPreSalesViewState parentState;
+
+  @override
+  State<_CrmPreSalesFullScreenStation> createState() => _CrmPreSalesFullScreenStationState();
+}
+
+class _CrmPreSalesFullScreenStationState extends State<_CrmPreSalesFullScreenStation> {
+  bool _isFilterSidebarOpen = false;
+  final ScrollController _hScrollController = ScrollController();
+  final TextEditingController _focusSearchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _focusSearchController.text = widget.parentState._searchController.text;
+  }
+
+  @override
+  void dispose() {
+    _hScrollController.dispose();
+    _focusSearchController.dispose();
+    super.dispose();
+  }
+
+  int _getActiveFilterCount(CrmLeadsState state) {
+    int count = 0;
+    if (state.leadFlowFilter != 'ALL') count++;
+    if (state.selectedProjectId != null && state.selectedProjectId != 'ALL') count++;
+    if (state.selectedCampaignId != null && state.selectedCampaignId != 'ALL') count++;
+    if (state.statusFilter != 'ALL') count++;
+    if (state.datePreset != 'all' || state.fromDate != null || state.toDate != null) count++;
+    if (state.search.isNotEmpty) count++;
+    return count;
+  }
+
+  void _resetAllFilters(BuildContext context) {
+    final bloc = context.read<CrmLeadsBloc>();
+    _focusSearchController.clear();
+    widget.parentState._searchController.clear();
+    bloc.add(const CrmLeadsSearchChanged(''));
+    bloc.add(const CrmLeadsLeadFlowFilterChanged('ALL', clearCampaign: true));
+    bloc.add(const CrmLeadsProjectSelected(null));
+    bloc.add(const CrmLeadsCampaignSelected(null));
+    bloc.add(const CrmLeadsStatusFilterChanged('ALL'));
+    bloc.add(const CrmLeadsDateFilterChanged(datePreset: 'all'));
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E1B18) : Colors.white;
+    final borderColor = isDark
+        ? const Color(0xFFC5A059).withValues(alpha: 0.18)
+        : const Color(0xFFE2E8F0);
+    final textMuted = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF64748B);
+    final primaryGold = isDark ? const Color(0xFFC5A059) : const Color(0xFF2563EB);
+
+    final authState = context.watch<AuthBloc>().state;
+
+    return BlocConsumer<CrmLeadsBloc, CrmLeadsState>(
+      listener: (context, state) {
+        if (state.errorMessage != null && state.errorMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.errorMessage!), backgroundColor: Colors.red),
+          );
+        } else if (state.actionSuccessMessage != null && state.actionSuccessMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.actionSuccessMessage!),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      },
+      builder: (context, state) {
+        final leads = state.leads;
+        final projects = state.projects;
+        final selectedProjectId = state.selectedProjectId;
+        final campaigns = state.campaigns;
+        final selectedCampaignId = state.selectedCampaignId;
+        final columns = state.columns.where((c) {
+          if (!c.isVisibleInTable || !c.isActive) return false;
+          final k = c.columnKey.toLowerCase().replaceAll(' ', '_');
+          return !['flow', 'lead_flow', 'source', 'lead_source', 'leadsource'].contains(k);
+        }).toList();
+        final salesUsers = state.salesUsers;
+
+        final currentUser = authState.user;
+        final userRole = currentUser?.role.toUpperCase() ?? '';
+        final userEmployeeId = currentUser?.employeeId;
+        final userName = (currentUser?.name ?? '').toUpperCase();
+        final userUsername = (currentUser?.username ?? '').toUpperCase();
+        final isItAdminEmp1 = userEmployeeId == 1 &&
+            (userRole.contains('ITADMIN') ||
+             userRole.contains('ADMIN') ||
+             userName.contains('ITADMIN') ||
+             userUsername.contains('ITADMIN') ||
+             userUsername == '1');
+        final canTransfer = Permissions.canTransferLeads(authState.permissions, authState.user?.role);
+        final roleCompact = userRole.replaceAll(RegExp(r'[\s_-]+'), '');
+        final isAdmin = Permissions.isAdmin(authState.user?.role) ||
+            isItAdminEmp1 ||
+            const ['ADMIN', 'SUPERADMIN', 'SUPER_ADMIN', 'SYSTEMADMIN', 'SYSTEM_ADMIN', 'ITADMIN']
+                .any((r) => userRole == r || roleCompact == r.replaceAll('_', ''));
+        final canWrite = Permissions.canWriteCrmPreSales(authState.permissions, authState.user?.role);
+        final repo = context.read<CrmRepository>();
+        final isFinserve = repo.scope == 'NB_FINSERVE';
+
+        final excelAssignedIds = state.settings?.excelAssignedTelecallerIds ?? [];
+        final metaAssignedIds = state.settings?.webhookAssignedTelecallerIds ?? [];
+        final googleAssignedIds = state.settings?.googleAssignedTelecallerIds ?? [];
+
+        final isExcelAssigned = userEmployeeId != null && excelAssignedIds.contains(userEmployeeId);
+        final isMetaAssigned = userEmployeeId != null && metaAssignedIds.contains(userEmployeeId);
+        final isGoogleAssigned = userEmployeeId != null && googleAssignedIds.contains(userEmployeeId);
+        final isAdsDesk = isMetaAssigned || isGoogleAssigned;
+
+        final isOnlyExcel = !isAdmin && isExcelAssigned && !isAdsDesk;
+        final isOnlyWebhook = !isAdmin && isAdsDesk && !isExcelAssigned;
+        final effectiveFlow = isOnlyExcel ? 'EXCEL' : (isOnlyWebhook ? 'WEBHOOK' : state.leadFlowFilter);
+
+        final filteredLeads = leads.where((l) {
+          if (widget.parentState._focusLeadId != null && l.id == widget.parentState._focusLeadId) return true;
+          if (l.scope != repo.scope) return false;
+          if (selectedCampaignId != null && l.campaignId != selectedCampaignId) {
+            return false;
+          }
+          if (!isAdmin && l.isWaitingList) return false;
+          if (state.statusFilter == 'WL') {
+            if (!isAdmin) return false;
+            return l.isWaitingList;
+          }
+          if (state.fromDate != null) {
+            final start = DateTime(state.fromDate!.year, state.fromDate!.month, state.fromDate!.day);
+            if (l.createdAt.isBefore(start)) return false;
+          }
+          if (state.toDate != null) {
+            final end = DateTime(state.toDate!.year, state.toDate!.month, state.toDate!.day, 23, 59, 59, 999);
+            if (l.createdAt.isAfter(end)) return false;
+          }
+          if (!isAdmin && userEmployeeId != null) {
+            final personallyMine = l.assignedToId == userEmployeeId || l.telecallerId == userEmployeeId;
+            if (personallyMine) return true;
+            final campaignMine = l.campaignId != null &&
+                state.campaigns.any(
+                  (c) => c.id == l.campaignId && c.assignedTelecallerIds.contains(userEmployeeId),
+                );
+            if (campaignMine) {
+              if (effectiveFlow == 'ALL') return true;
+              if (effectiveFlow == 'EXCEL') {
+                return !l.isManual && (l.leadSource == 'EXCEL' || l.customFields['isExcelImport'] == true);
+              }
+              if (effectiveFlow == 'MANUAL') return l.isManual;
+              if (effectiveFlow == 'WEBHOOK') {
+                return !l.isManual &&
+                    (l.leadSource == 'WEBHOOK' || l.leadSource == 'META' || l.leadSource == 'GOOGLE');
+              }
+              return true;
+            }
+          }
+          if (effectiveFlow == 'EXCEL') {
+            return !l.isManual && (l.leadSource == 'EXCEL' || l.customFields['isExcelImport'] == true);
+          } else if (effectiveFlow == 'MANUAL') {
+            return l.isManual;
+          } else if (effectiveFlow == 'WEBHOOK') {
+            if (!isAdmin && isAdsDesk) {
+              final allowMeta = isMetaAssigned && (l.leadSource == 'META' || l.leadSource == 'WEBHOOK');
+              final allowGoogle = isGoogleAssigned && l.leadSource == 'GOOGLE';
+              return !l.isManual && (allowMeta || allowGoogle);
+            }
+            return (l.leadSource == 'WEBHOOK' || l.leadSource == 'META' || l.leadSource == 'GOOGLE') && !l.isManual;
+          }
+          return true;
+        }).toList();
+
+        final activeFilterCount = _getActiveFilterCount(state);
+        final hasActiveFilters = activeFilterCount > 0;
+
+        return Focus(
+          autofocus: true,
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
+              if (_isFilterSidebarOpen) {
+                setState(() => _isFilterSidebarOpen = false);
+                return KeyEventResult.handled;
+              } else {
+                Navigator.of(context).pop();
+                return KeyEventResult.handled;
+              }
+            }
+            return KeyEventResult.ignored;
+          },
+          child: Scaffold(
+            backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
+            body: SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 1. Focus Station Header Bar
+                  Container(
+                    height: 52,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                      border: Border(bottom: BorderSide(color: borderColor)),
+                    ),
+                    child: Row(
+                      children: [
+                        // Focus Mode Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFC5A059).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFC5A059).withValues(alpha: 0.4)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.fullscreen_rounded, size: 16, color: Color(0xFFC5A059)),
+                              SizedBox(width: 6),
+                              Text(
+                                'FOCUS MODE',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFFC5A059),
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${filteredLeads.length} leads',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white70 : const Color(0xFF334155),
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        // Fast search input
+                        SizedBox(
+                          width: 300,
+                          height: 38,
+                          child: TextField(
+                            controller: _focusSearchController,
+                            decoration: InputDecoration(
+                              hintText: 'Quick search name or phone...',
+                              hintStyle: TextStyle(fontSize: 12, color: textMuted),
+                              prefixIcon: Icon(Icons.search_rounded, size: 16, color: textMuted),
+                              suffixIcon: _focusSearchController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear_rounded, size: 14),
+                                      onPressed: () {
+                                        _focusSearchController.clear();
+                                        widget.parentState._searchController.clear();
+                                        context.read<CrmLeadsBloc>().add(const CrmLeadsSearchChanged(''));
+                                        setState(() {});
+                                      },
+                                    )
+                                  : null,
+                              isDense: true,
+                              filled: true,
+                              fillColor: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
+                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: primaryGold, width: 1.4),
+                              ),
+                            ),
+                            onChanged: (val) {
+                              widget.parentState._searchController.text = val;
+                              context.read<CrmLeadsBloc>().add(CrmLeadsSearchChanged(val.trim()));
+                              setState(() {});
+                            },
+                          ),
+                        ),
+                        const Spacer(),
+                        // Filter sidebar toggle button
+                        OutlinedButton.icon(
+                          onPressed: () => setState(() => _isFilterSidebarOpen = !_isFilterSidebarOpen),
+                          icon: Icon(
+                            _isFilterSidebarOpen ? Icons.close_rounded : Icons.tune_rounded,
+                            size: 15,
+                          ),
+                          label: Text(
+                            hasActiveFilters ? 'Filters ($activeFilterCount)' : 'Filters',
+                            style: TextStyle(
+                              fontWeight: hasActiveFilters ? FontWeight.w700 : FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: hasActiveFilters ? primaryGold : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                            side: BorderSide(
+                              color: hasActiveFilters ? primaryGold : borderColor,
+                              width: hasActiveFilters ? 1.5 : 1,
+                            ),
+                            backgroundColor: hasActiveFilters
+                                ? primaryGold.withValues(alpha: 0.1)
+                                : (isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (canWrite) ...[
+                          FilledButton.icon(
+                            onPressed: () => widget.parentState._showAddLeadDialog(context, state.columns),
+                            icon: const Icon(Icons.person_add_rounded, size: 14),
+                            label: const Text('Add Lead', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: primaryGold,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        // Exit Full Screen Button
+                        IconButton(
+                          tooltip: 'Exit Focus Mode (Esc)',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.fullscreen_exit_rounded, size: 20),
+                          style: IconButton.styleFrom(
+                            backgroundColor: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // 2. 9ance Dialer Dock
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+                    child: CrmNineanceDialerPanel(
+                      onIncomingLead: (leadId) {
+                        context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // 3. Body: Leads Table (Full Width) + Slide-Out Filter Sidebar
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Leads Table area
+                        Expanded(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                            child: widget.parentState._buildLeadsTableAndPagination(
+                              context: context,
+                              filteredLeads: filteredLeads,
+                              columns: columns,
+                              salesUsers: salesUsers,
+                              isAdmin: isAdmin,
+                              canWrite: canWrite,
+                              canTransfer: canTransfer,
+                              isFinserve: isFinserve,
+                              userEmployeeId: userEmployeeId,
+                              isDark: isDark,
+                              cardBg: cardBg,
+                              borderColor: borderColor,
+                              textMuted: textMuted,
+                              primaryColor: primaryGold,
+                              horizontalController: _hScrollController,
+                              onStateUpdated: () => setState(() {}),
+                            ),
+                          ),
+                        ),
+
+                        // Slide-out Filter Sidebar
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 240),
+                          curve: Curves.easeInOutCubic,
+                          width: _isFilterSidebarOpen ? 340 : 0,
+                          decoration: BoxDecoration(
+                            color: cardBg,
+                            border: Border(
+                              left: BorderSide(
+                                color: _isFilterSidebarOpen ? borderColor : Colors.transparent,
+                              ),
+                            ),
+                          ),
+                          clipBehavior: Clip.hardEdge,
+                          child: _isFilterSidebarOpen
+                              ? _buildFilterSidebarContent(
+                                  context: context,
+                                  state: state,
+                                  leads: leads,
+                                  filteredLeads: filteredLeads,
+                                  projects: projects,
+                                  selectedProjectId: selectedProjectId,
+                                  campaigns: campaigns,
+                                  selectedCampaignId: selectedCampaignId,
+                                  isAdmin: isAdmin,
+                                  canWrite: canWrite,
+                                  userEmployeeId: userEmployeeId,
+                                  isExcelAssigned: isExcelAssigned,
+                                  isMetaAssigned: isMetaAssigned,
+                                  isGoogleAssigned: isGoogleAssigned,
+                                  isOnlyExcel: isOnlyExcel,
+                                  isOnlyWebhook: isOnlyWebhook,
+                                  effectiveFlow: effectiveFlow,
+                                  isDark: isDark,
+                                  cardBg: cardBg,
+                                  borderColor: borderColor,
+                                  textMuted: textMuted,
+                                  primaryColor: primaryGold,
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterSidebarContent({
+    required BuildContext context,
+    required CrmLeadsState state,
+    required List<CrmLead> leads,
+    required List<CrmLead> filteredLeads,
+    required List<CrmProject> projects,
+    required String? selectedProjectId,
+    required List<CrmCampaign> campaigns,
+    required String? selectedCampaignId,
+    required bool isAdmin,
+    required bool canWrite,
+    required int? userEmployeeId,
+    required bool isExcelAssigned,
+    required bool isMetaAssigned,
+    required bool isGoogleAssigned,
+    required bool isOnlyExcel,
+    required bool isOnlyWebhook,
+    required String effectiveFlow,
+    required bool isDark,
+    required Color cardBg,
+    required Color borderColor,
+    required Color textMuted,
+    required Color primaryColor,
+  }) {
+    final waitingCount = leads.where((l) => l.isWaitingList).length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Sidebar Header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: borderColor)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.tune_rounded, size: 18, color: primaryColor),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Filters & Controls',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+              ),
+              TextButton(
+                onPressed: () => _resetAllFilters(context),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                child: const Text('Reset', style: TextStyle(fontSize: 12)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, size: 18),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                onPressed: () => setState(() => _isFilterSidebarOpen = false),
+              ),
+            ],
+          ),
+        ),
+
+        // Scrollable filters
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Lead Flow Section
+              const Text('Lead Flow', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  ChoiceChip(
+                    label: Text('All (${leads.length})'),
+                    selected: effectiveFlow == 'ALL',
+                    onSelected: (val) {
+                      if (val) {
+                        widget.parentState._selectLeadFlow(
+                          context,
+                          state,
+                          'ALL',
+                          isAdmin: isAdmin,
+                          userEmployeeId: userEmployeeId,
+                          isExcelAssigned: isExcelAssigned,
+                          isMetaAssigned: isMetaAssigned,
+                          isGoogleAssigned: isGoogleAssigned,
+                        );
+                      }
+                    },
+                  ),
+                  ChoiceChip(
+                    label: Text('Excel (${leads.where(isExcelLead).length})'),
+                    selected: effectiveFlow == 'EXCEL',
+                    onSelected: (val) {
+                      if (val) {
+                        widget.parentState._selectLeadFlow(
+                          context,
+                          state,
+                          'EXCEL',
+                          isAdmin: isAdmin,
+                          userEmployeeId: userEmployeeId,
+                          isExcelAssigned: isExcelAssigned,
+                          isMetaAssigned: isMetaAssigned,
+                          isGoogleAssigned: isGoogleAssigned,
+                        );
+                      }
+                    },
+                  ),
+                  ChoiceChip(
+                    label: Text('Manual (${leads.where((l) => l.isManual).length})'),
+                    selected: effectiveFlow == 'MANUAL',
+                    onSelected: (val) {
+                      if (val) {
+                        widget.parentState._selectLeadFlow(
+                          context,
+                          state,
+                          'MANUAL',
+                          isAdmin: isAdmin,
+                          userEmployeeId: userEmployeeId,
+                          isExcelAssigned: isExcelAssigned,
+                          isMetaAssigned: isMetaAssigned,
+                          isGoogleAssigned: isGoogleAssigned,
+                        );
+                      }
+                    },
+                  ),
+                  ChoiceChip(
+                    label: Text('Ads (${leads.where(isAdsLead).length})'),
+                    selected: effectiveFlow == 'WEBHOOK',
+                    onSelected: (val) {
+                      if (val) {
+                        widget.parentState._selectLeadFlow(
+                          context,
+                          state,
+                          'WEBHOOK',
+                          isAdmin: isAdmin,
+                          userEmployeeId: userEmployeeId,
+                          isExcelAssigned: isExcelAssigned,
+                          isMetaAssigned: isMetaAssigned,
+                          isGoogleAssigned: isGoogleAssigned,
+                        );
+                      }
+                    },
+                  ),
+                  if (isAdmin)
+                    ChoiceChip(
+                      label: Text('Waiting (${leads.where((l) => l.isWaitingList).length})'),
+                      selected: state.statusFilter == 'WL',
+                      onSelected: (val) {
+                        context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val ? 'WL' : 'ALL'));
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Divider(height: 1, color: borderColor),
+              const SizedBox(height: 16),
+
+              // Project
+              const Text('Project', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                key: ValueKey('sidebar-project-${selectedProjectId ?? 'ALL'}-${projects.length}'),
+                isExpanded: true,
+                initialValue: (selectedProjectId != null && projects.any((p) => p.id == selectedProjectId))
+                    ? selectedProjectId
+                    : 'ALL',
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
+                ),
+                items: [
+                  const DropdownMenuItem(value: 'ALL', child: Text('All Projects', style: TextStyle(fontSize: 13))),
+                  ...projects.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name, style: const TextStyle(fontSize: 13)))),
+                ],
+                onChanged: (val) {
+                  context.read<CrmLeadsBloc>().add(CrmLeadsProjectSelected(val == 'ALL' ? null : val));
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Campaign
+              const Text('Campaign', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                key: ValueKey('sidebar-campaign-${selectedCampaignId ?? 'ALL'}-${campaigns.length}'),
+                isExpanded: true,
+                initialValue: (selectedCampaignId != null && campaigns.any((c) => c.id == selectedCampaignId))
+                    ? selectedCampaignId
+                    : 'ALL',
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
+                ),
+                items: [
+                  DropdownMenuItem(value: 'ALL', child: Text(campaigns.isEmpty ? '0 Campaigns' : 'All Campaigns (${campaigns.length})', style: const TextStyle(fontSize: 13))),
+                  ...campaigns.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, style: const TextStyle(fontSize: 13)))),
+                ],
+                onChanged: (val) {
+                  context.read<CrmLeadsBloc>().add(CrmLeadsCampaignSelected(val == 'ALL' ? null : val));
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Status
+              const Text('Lead Status', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                initialValue: state.statusFilter,
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'ALL', child: Text('All Statuses', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(value: 'NOT_STARTED', child: Text('Not started', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(value: 'CNR', child: Text('CNR', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(value: 'ASSIGNED', child: Text('Assigned', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(value: 'SCHEDULED_VISIT', child: Text('Scheduled Visit', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(value: 'SITE_VISIT_DONE', child: Text('Site Done', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(value: 'NOT_INTERESTED', child: Text('Not interested', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(value: 'FOLLOW_UP', child: Text('Follow up', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(value: 'INTERESTED', child: Text('Interested', style: TextStyle(fontSize: 13))),
+                ],
+                onChanged: (val) {
+                  if (val != null) context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val));
+                },
+              ),
+              const SizedBox(height: 16),
+              Divider(height: 1, color: borderColor),
+              const SizedBox(height: 16),
+
+              // Date Presets
+              const Text('Date Filter', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  ChoiceChip(
+                    label: const Text('All'),
+                    selected: state.datePreset == 'all' && state.fromDate == null && state.toDate == null,
+                    onSelected: (_) {
+                      context.read<CrmLeadsBloc>().add(const CrmLeadsDateFilterChanged(datePreset: 'all'));
+                    },
+                  ),
+                  ChoiceChip(
+                    label: const Text('Today'),
+                    selected: state.datePreset == 'today',
+                    onSelected: (_) {
+                      final now = DateTime.now();
+                      context.read<CrmLeadsBloc>().add(CrmLeadsDateFilterChanged(
+                        fromDate: DateTime(now.year, now.month, now.day),
+                        toDate: DateTime(now.year, now.month, now.day),
+                        datePreset: 'today',
+                      ));
+                    },
+                  ),
+                  ChoiceChip(
+                    label: const Text('Yesterday'),
+                    selected: state.datePreset == 'yesterday',
+                    onSelected: (_) {
+                      final y = DateTime.now().subtract(const Duration(days: 1));
+                      context.read<CrmLeadsBloc>().add(CrmLeadsDateFilterChanged(
+                        fromDate: DateTime(y.year, y.month, y.day),
+                        toDate: DateTime(y.year, y.month, y.day),
+                        datePreset: 'yesterday',
+                      ));
+                    },
+                  ),
+                  ChoiceChip(
+                    label: const Text('This Week'),
+                    selected: state.datePreset == 'this_week',
+                    onSelected: (_) {
+                      final now = DateTime.now();
+                      final start = now.subtract(Duration(days: now.weekday - 1));
+                      context.read<CrmLeadsBloc>().add(CrmLeadsDateFilterChanged(
+                        fromDate: DateTime(start.year, start.month, start.day),
+                        toDate: DateTime(now.year, now.month, now.day),
+                        datePreset: 'this_week',
+                      ));
+                    },
+                  ),
+                  ChoiceChip(
+                    label: const Text('This Month'),
+                    selected: state.datePreset == 'this_month',
+                    onSelected: (_) {
+                      final now = DateTime.now();
+                      context.read<CrmLeadsBloc>().add(CrmLeadsDateFilterChanged(
+                        fromDate: DateTime(now.year, now.month, 1),
+                        toDate: DateTime(now.year, now.month, now.day),
+                        datePreset: 'this_month',
+                      ));
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Actions Section
+              if (canWrite) ...[
+                Divider(height: 1, color: borderColor),
+                const SizedBox(height: 16),
+                const Text('Actions & Tools', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                if (isAdmin && !isOnlyWebhook) ...[
+                  OutlinedButton.icon(
+                    onPressed: () => widget.parentState._handleExcelImport(context),
+                    icon: const Icon(Icons.upload_file_rounded, size: 16),
+                    label: const Text('Import Excel'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                if (isAdmin) ...[
+                  OutlinedButton.icon(
+                    onPressed: () => widget.parentState._handleExportExcel(context, filteredLeads, state),
+                    icon: const Icon(Icons.file_download_outlined, size: 16),
+                    label: const Text('Export Excel'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => widget.parentState._handleDistributeLeads(context),
+                    icon: const Icon(Icons.bolt_rounded, size: 16),
+                    label: Text('Distribute Leads ($waitingCount)'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => widget.parentState._showMergeColumnsDialog(context, primaryColor),
+                    icon: const Icon(Icons.call_merge_rounded, size: 16),
+                    label: const Text('Merge Columns'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => widget.parentState._showRevertExcelImportDialog(context),
+                    icon: const Icon(Icons.undo_rounded, size: 16, color: Color(0xFFEA580C)),
+                    label: const Text('Revert Excel Upload', style: TextStyle(color: Color(0xFFEA580C))),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+

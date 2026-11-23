@@ -529,6 +529,10 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             builder: (context, state) => CrmPreSalesScreen(
               focusLeadId: state.uri.queryParameters['leadId'],
               initialScope: state.uri.queryParameters['scope'],
+              initialTabIndex: int.tryParse(state.uri.queryParameters['tab'] ?? ''),
+              initialStatusFilter: state.uri.queryParameters['status'],
+              initialFlowFilter: state.uri.queryParameters['flow'],
+              initialCallStatus: state.uri.queryParameters['callStatus'],
             ),
           ),
           GoRoute(

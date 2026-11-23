@@ -2525,6 +2525,233 @@ export const crmService = {
     return String(val).trim();
   },
 
+  async previewExcelLeads(
+    fileBuffer: Buffer,
+    campaignId?: string,
+    scope: string = 'NB_DEVELOPER',
+    options?: {
+      sheetName?: string;
+    },
+  ) {
+    const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
+    const sheetNames = workbook.SheetNames || [];
+    if (sheetNames.length === 0) {
+      return {
+        sheetNames: [],
+        activeSheet: '',
+        totalRows: 0,
+        headers: [],
+        duplicates: { duplicateCount: 0, duplicateList: [] },
+        previewRows: [],
+        validRowsCount: 0,
+        message: 'No sheets found in workbook',
+      };
+    }
+
+    const activeSheetName = options?.sheetName && sheetNames.includes(options.sheetName)
+      ? options.sheetName
+      : sheetNames[0];
+
+    const worksheet = workbook.Sheets[activeSheetName];
+    const rows: Array<Record<string, any>> = xlsx.utils.sheet_to_json(worksheet, { defval: '' });
+
+    const defaultCamp = await this.ensureDefaultCampaign('PRE_SALES', scope);
+    const targetCampaignId = campaignId || defaultCamp.id;
+    const targetCampaign = await prisma.crmCampaign.findUnique({
+      where: { id: targetCampaignId },
+      include: { project: true },
+    });
+    const campaignScope = targetCampaign?.scope || scope;
+
+    // Get current campaign columns
+    const cols = await this.getColumns('PRE_SALES', targetCampaignId, campaignScope);
+    const colMap: Record<string, string> = {};
+    const existingKeys = new Set(cols.map((c) => c.columnKey));
+
+    for (const c of cols) {
+      colMap[c.label.toLowerCase().trim()] = c.columnKey;
+      colMap[c.columnKey.toLowerCase().trim()] = c.columnKey;
+      colMap[c.columnKey.replace(/_/g, ' ').toLowerCase().trim()] = c.columnKey;
+    }
+
+    // Standard remarks/notes aliases
+    colMap['notes'] = 'Notes';
+    colMap['remarks'] = 'Notes';
+    colMap['remark'] = 'Notes';
+    colMap['comments'] = 'Notes';
+    colMap['comment'] = 'Notes';
+    colMap['remarks / notes'] = 'Notes';
+
+    // Scan headers in order from sheet
+    const orderedHeaders: string[] = [];
+    const seenHeaders = new Set<string>();
+    for (const row of rows) {
+      for (const h of Object.keys(row)) {
+        const clean = String(h || '').trim();
+        if (clean && !seenHeaders.has(clean)) {
+          seenHeaders.add(clean);
+          orderedHeaders.push(clean);
+        }
+      }
+    }
+
+    // Build header metadata with existing vs new detection
+    const headers = orderedHeaders.map((header) => {
+      const lower = header.toLowerCase().trim();
+      const isRemarks = this._excelIsRemarksHeader(lower);
+      const isPhone = this._excelIsPhoneHeader(lower);
+      const isName = this._excelIsNameHeader(lower);
+      const normalizedKey = this.normalizeHeaderKey(header);
+
+      let matchedColKey: string | null = null;
+      let isExisting = false;
+
+      if (isRemarks) {
+        matchedColKey = 'Notes';
+        isExisting = existingKeys.has('Notes');
+      } else if (colMap[lower]) {
+        matchedColKey = colMap[lower];
+        isExisting = true;
+      } else if (normalizedKey && existingKeys.has(normalizedKey)) {
+        matchedColKey = normalizedKey;
+        isExisting = true;
+      }
+
+      // Collect sample values (up to 3 unique non-empty)
+      const samples: string[] = [];
+      for (const r of rows) {
+        const v = r[header];
+        const str = this._excelCellToString(v);
+        if (str && !samples.includes(str)) {
+          samples.push(str);
+          if (samples.length >= 3) break;
+        }
+      }
+
+      return {
+        header,
+        normalizedKey: matchedColKey || normalizedKey || lower.replace(/[^a-z0-9_]/g, '_'),
+        isExisting,
+        matchedColumn: matchedColKey,
+        isPhone,
+        isName,
+        sampleValues: samples,
+      };
+    });
+
+    // Check duplicate phone numbers against DB and within sheet
+    const existingLeads = await prisma.crmLead.findMany({
+      where: {
+        scope: campaignScope,
+        isDeleted: false,
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        telecaller: { select: { generalInfo: { select: { fullName: true } } } },
+      },
+    });
+
+    const dbPhoneMap = new Map<string, { id: string; name: string; phone: string; telecallerName?: string }>();
+    for (const el of existingLeads) {
+      const d = String(el.phone || '').replace(/\D/g, '');
+      const key = d.length >= 10 ? d.slice(-10) : (d.length >= 7 ? d : '');
+      if (key && !dbPhoneMap.has(key)) {
+        dbPhoneMap.set(key, {
+          id: el.id,
+          name: el.name || 'Unnamed',
+          phone: el.phone || '',
+          telecallerName: el.telecaller?.generalInfo?.fullName,
+        });
+      }
+    }
+
+    const seenInSheetPhones = new Map<string, number>();
+    const duplicateList: Array<{
+      rowNumber: number;
+      name: string;
+      phone: string;
+      duplicateType: 'EXISTING_IN_CRM' | 'DUPLICATE_IN_SHEET';
+      details: string;
+    }> = [];
+
+    rows.forEach((row, idx) => {
+      let phone = '';
+      let name = '';
+      for (const [h, v] of Object.entries(row)) {
+        const lower = h.toLowerCase().trim();
+        const strVal = this._excelCellToString(v);
+        if (!strVal) continue;
+        if (this._excelIsPhoneHeader(lower) && !phone) {
+          phone = strVal;
+        }
+        if (this._excelIsNameHeader(lower) && !name) {
+          name = strVal;
+        }
+      }
+
+      if (phone) {
+        const cleanDigits = String(phone).replace(/\D/g, '');
+        const phone10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+
+        if (phone10.length >= 7) {
+          if (seenInSheetPhones.has(phone10)) {
+            duplicateList.push({
+              rowNumber: idx + 1,
+              name: name || 'Unnamed Lead',
+              phone,
+              duplicateType: 'DUPLICATE_IN_SHEET',
+              details: `Duplicate of Row #${seenInSheetPhones.get(phone10)! + 1} in this sheet`,
+            });
+          } else if (dbPhoneMap.has(phone10)) {
+            const match = dbPhoneMap.get(phone10)!;
+            const callerInfo = match.telecallerName ? ` (${match.telecallerName})` : '';
+            duplicateList.push({
+              rowNumber: idx + 1,
+              name: name || 'Unnamed Lead',
+              phone,
+              duplicateType: 'EXISTING_IN_CRM',
+              details: `Already in CRM: "${match.name}"${callerInfo}`,
+            });
+            seenInSheetPhones.set(phone10, idx);
+          } else {
+            seenInSheetPhones.set(phone10, idx);
+          }
+        }
+      }
+    });
+
+    // Preview first 10 rows
+    const previewRows = rows.slice(0, 10).map((r, i) => {
+      const sanitized: Record<string, string> = { _rowNumber: String(i + 1) };
+      for (const h of orderedHeaders) {
+        sanitized[h] = this._excelCellToString(r[h]);
+      }
+      return sanitized;
+    });
+
+    return {
+      sheetNames,
+      activeSheet: activeSheetName,
+      totalRows: rows.length,
+      destination: {
+        campaignId: targetCampaignId,
+        campaignName: targetCampaign?.name || 'Default Pre-Sales Campaign',
+        campaignCode: targetCampaign?.code || 'DEFAULT',
+        projectName: targetCampaign?.project?.name || 'NB Infra Projects',
+        scope: campaignScope,
+      },
+      headers,
+      duplicates: {
+        duplicateCount: duplicateList.length,
+        duplicateList: duplicateList.slice(0, 100),
+      },
+      previewRows,
+      validRowsCount: Math.max(0, rows.length - duplicateList.length),
+    };
+  },
+
   async importExcelLeads(
     fileBuffer: Buffer,
     createdById?: string,
@@ -2537,11 +2764,15 @@ export const crmService = {
       assignedTelecallerIds?: number[];
       skipDuplicates?: boolean;
       fileName?: string;
+      sheetName?: string;
+      selectedHeaders?: string[];
     },
   ) {
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
-    const firstSheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[firstSheetName];
+    const targetSheetName = options?.sheetName && workbook.SheetNames.includes(options.sheetName)
+      ? options.sheetName
+      : workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[targetSheetName];
     const rows: Array<Record<string, any>> = xlsx.utils.sheet_to_json(worksheet, { defval: '' });
 
     if (!rows || rows.length === 0) {
@@ -2559,6 +2790,11 @@ export const crmService = {
 
     // Campaign columns — Excel stays bifurcated for most headers.
     // Remarks/Notes/Comments synonyms always collapse into canonical `Notes`.
+    const allowedHeadersSet =
+      options?.selectedHeaders && options.selectedHeaders.length > 0
+        ? new Set(options.selectedHeaders.map((h) => h.trim().toLowerCase()))
+        : null;
+
     const cols = await this.getColumns('PRE_SALES', targetCampaignId, campaignScope);
     const colMap: Record<string, string> = {};
     const existingKeys = new Set(cols.map((c) => c.columnKey));
@@ -2627,6 +2863,9 @@ export const crmService = {
     let displayOrder = Math.max(cols.length, existingKeys.size);
     for (const header of sheetHeaders) {
       const lower = header.toLowerCase().trim();
+      if (allowedHeadersSet && !allowedHeadersSet.has(lower)) {
+        continue;
+      }
       if (colMap[lower]) continue;
 
       // Remarks synonyms → Notes (never create a separate Remarks column)
@@ -2704,7 +2943,7 @@ export const crmService = {
 
     const importBatchId = crypto.randomUUID();
     const importedAt = new Date().toISOString();
-    const importFileName = options?.fileName || firstSheetName || 'excel-import.xlsx';
+    const importFileName = options?.fileName || targetSheetName || 'excel-import.xlsx';
 
     let insertedCount = 0;
     const leadsToInsert: any[] = [];
@@ -2737,10 +2976,6 @@ export const crmService = {
           mappedKey = 'Notes';
         }
         const strVal = this._excelCellToString(val);
-        if (!strVal) {
-          customFields[mappedKey] = strVal;
-          continue;
-        }
 
         if (this._excelIsPhoneHeader(lowerHeader)) {
           const score =
@@ -2774,11 +3009,18 @@ export const crmService = {
           assignedHeaderValue = strVal;
         }
 
-        customFields[mappedKey] = strVal;
-        // Mirror onto Notes so UI/export always find remarks
-        if (mappedKey === 'Notes') {
-          customFields.Notes = strVal;
-          customFields.Remarks = strVal;
+        // Only store in customFields if header is allowed/selected
+        if (!allowedHeadersSet || allowedHeadersSet.has(lowerHeader)) {
+          if (!strVal) {
+            customFields[mappedKey] = strVal;
+            continue;
+          }
+          customFields[mappedKey] = strVal;
+          // Mirror onto Notes so UI/export always find remarks
+          if (mappedKey === 'Notes') {
+            customFields.Notes = strVal;
+            customFields.Remarks = strVal;
+          }
         }
       }
 
@@ -2926,6 +3168,8 @@ export const crmService = {
       totalRows: rows.length,
       importBatchId: insertedCount > 0 ? importBatchId : null,
       importFileName,
+      sheetName: targetSheetName,
+      campaignId: targetCampaignId,
       dispatchedCount: dispatchResult.dispatchedCount,
       queuedCount: dispatchResult.remainingQueuedCount,
       message: skippedDuplicatesCount > 0

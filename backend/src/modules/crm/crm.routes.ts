@@ -283,6 +283,7 @@ crmRouter.get('/leads', generalCrmGuard, crmController.getLeads);
 crmRouter.get('/leads/check-phone', generalCrmGuard, crmController.checkPhone);
 crmRouter.post('/leads', generalCrmGuard, crmController.createLead);
 crmRouter.post('/leads/merge', generalCrmGuard, crmController.mergeLeads);
+crmRouter.post('/leads/import-excel/preview', generalCrmGuard, crmAdminGuard, upload.single('file'), crmController.previewExcelImport);
 crmRouter.post('/leads/import-excel', generalCrmGuard, crmAdminGuard, upload.single('file'), crmController.importExcel);
 crmRouter.post('/leads/bulk-bin', generalCrmGuard, crmAdminGuard, crmController.bulkMoveLeadsToBin);
 crmRouter.get('/leads/excel-import-batches', generalCrmGuard, crmAdminGuard, crmController.listExcelImportBatches);

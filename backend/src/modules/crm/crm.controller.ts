@@ -287,6 +287,26 @@ export const crmController = {
     }
   },
 
+  async previewExcelImport(req: Request, res: Response) {
+    try {
+      if (!req.file || !req.file.buffer) {
+        return res.status(400).json(fail('No Excel file uploaded'));
+      }
+      const campaignId = (req.body.campaignId || req.query.campaignId) as string | undefined;
+      const sheetName = (req.body.sheetName || req.query.sheetName) as string | undefined;
+
+      const preview = await crmService.previewExcelLeads(
+        req.file.buffer,
+        campaignId,
+        getScope(req),
+        { sheetName },
+      );
+      res.json(ok(preview));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to preview Excel file'));
+    }
+  },
+
   async importExcel(req: Request, res: Response) {
     try {
       if (!req.file || !req.file.buffer) {
@@ -295,6 +315,7 @@ export const crmController = {
       const authUser = (req as any).user;
       const isAdmin = isAdminRole(authUser?.roleName || authUser?.role);
       const campaignId = (req.body.campaignId || req.query.campaignId) as string | undefined;
+      const sheetName = (req.body.sheetName || req.query.sheetName) as string | undefined;
       const assignmentMode = (req.body.assignmentMode || 'ROUND_ROBIN') as 'SPECIFIC' | 'ROUND_ROBIN' | 'UNASSIGNED';
 
       let assignedTelecallerIds: number[] | undefined = undefined;
@@ -305,6 +326,18 @@ export const crmController = {
             : req.body.assignedTelecallerIds;
           if (Array.isArray(parsed)) {
             assignedTelecallerIds = parsed.map(Number).filter((n) => !isNaN(n) && n > 0);
+          }
+        } catch (_) {}
+      }
+
+      let selectedHeaders: string[] | undefined = undefined;
+      if (req.body.selectedHeaders) {
+        try {
+          const parsed = typeof req.body.selectedHeaders === 'string'
+            ? JSON.parse(req.body.selectedHeaders)
+            : req.body.selectedHeaders;
+          if (Array.isArray(parsed)) {
+            selectedHeaders = parsed.map(String).map((s) => s.trim()).filter(Boolean);
           }
         } catch (_) {}
       }
@@ -329,6 +362,8 @@ export const crmController = {
           assignedTelecallerIds,
           skipDuplicates,
           fileName: req.file.originalname || req.file.filename,
+          sheetName,
+          selectedHeaders,
         },
       );
       res.json(ok(result));

@@ -169,6 +169,8 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
     this.telecallerId,
     this.assignedTelecallerIds,
     this.skipDuplicates = true,
+    this.sheetName,
+    this.selectedHeaders,
   });
   final Uint8List fileBytes;
   final String fileName;
@@ -177,6 +179,8 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
   final int? telecallerId;
   final List<int>? assignedTelecallerIds;
   final bool skipDuplicates;
+  final String? sheetName;
+  final List<String>? selectedHeaders;
 
   @override
   List<Object?> get props => [
@@ -187,6 +191,8 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
         telecallerId,
         assignedTelecallerIds,
         skipDuplicates,
+        sheetName,
+        selectedHeaders,
       ];
 }
 
@@ -982,17 +988,24 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         telecallerId: event.telecallerId,
         assignedTelecallerIds: event.assignedTelecallerIds,
         skipDuplicates: event.skipDuplicates,
+        sheetName: event.sheetName,
+        selectedHeaders: event.selectedHeaders,
       );
       final count = res['count'] ?? 0;
       final msg = res['message'] ?? 'Imported $count leads';
+      final targetCampaignId = event.campaignId ?? state.selectedCampaignId;
       emit(state.copyWith(
         isActing: false,
         actionSuccessMessage: msg,
+        selectedCampaignId: targetCampaignId,
+        leadFlowFilter: state.leadFlowFilter == 'MANUAL' || state.leadFlowFilter == 'WEBHOOK'
+            ? 'ALL'
+            : state.leadFlowFilter,
       ));
       await _fetchData(
         emit,
         projectId: state.selectedProjectId,
-        campaignId: event.campaignId ?? state.selectedCampaignId,
+        campaignId: targetCampaignId,
       );
     } catch (e) {
       emit(state.copyWith(isActing: false, errorMessage: e.toString()));

@@ -361,6 +361,32 @@ class CrmRepository {
     );
   }
 
+  Future<Map<String, dynamic>> previewExcelImport(
+    Uint8List fileBytes,
+    String fileName, {
+    String? campaignId,
+    String? sheetName,
+  }) async {
+    final map = <String, dynamic>{
+      'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
+    };
+    if (campaignId != null && campaignId.isNotEmpty) {
+      map['campaignId'] = campaignId;
+    }
+    if (sheetName != null && sheetName.isNotEmpty) {
+      map['sheetName'] = sheetName;
+    }
+    final formData = FormData.fromMap(map);
+    final res = await _dio.dio.post<Map<String, dynamic>>(
+      'crm/leads/import-excel/preview',
+      data: formData,
+    );
+    if (res.data != null && res.data!['data'] is Map) {
+      return Map<String, dynamic>.from(res.data!['data'] as Map);
+    }
+    return {};
+  }
+
   Future<Map<String, dynamic>> importExcel(
     Uint8List fileBytes,
     String fileName, {
@@ -369,6 +395,8 @@ class CrmRepository {
     int? telecallerId,
     List<int>? assignedTelecallerIds,
     bool skipDuplicates = true,
+    String? sheetName,
+    List<String>? selectedHeaders,
   }) async {
     final map = <String, dynamic>{
       'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
@@ -376,6 +404,12 @@ class CrmRepository {
     };
     if (campaignId != null && campaignId.isNotEmpty) {
       map['campaignId'] = campaignId;
+    }
+    if (sheetName != null && sheetName.isNotEmpty) {
+      map['sheetName'] = sheetName;
+    }
+    if (selectedHeaders != null && selectedHeaders.isNotEmpty) {
+      map['selectedHeaders'] = jsonEncode(selectedHeaders);
     }
     if (assignmentMode != null && assignmentMode.isNotEmpty) {
       map['assignmentMode'] = assignmentMode;
@@ -393,6 +427,8 @@ class CrmRepository {
       'crm/leads/import-excel',
       data: formData,
     );
+
+    notifyLeadMutated();
 
     if (res.data != null && res.data!['data'] is Map) {
       return Map<String, dynamic>.from(res.data!['data'] as Map);

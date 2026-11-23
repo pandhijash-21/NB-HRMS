@@ -4470,7 +4470,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   }
 
   // ---------------------------------------------------------------------------
-  // Dialog: Interactive Excel Lead Import & Assignment Configuration
+  // Dialog: Interactive Lead Import Studio (Preview, Header Mapping & Allocation)
   // ---------------------------------------------------------------------------
   void _showExcelImportDialog({
     required BuildContext context,
@@ -4480,298 +4480,1336 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     required String? defaultCampaignId,
   }) {
     String? selectedCampaignId = defaultCampaignId ?? (campaigns.isNotEmpty ? campaigns.first.id : null);
+    String? selectedSheet;
+    List<String> sheetNames = [];
+    bool isLoadingPreview = true;
+    String? previewError;
+    Map<String, dynamic>? destinationInfo;
+    List<Map<String, dynamic>> detectedHeaders = [];
+    Set<String> selectedHeaders = {};
+    List<Map<String, dynamic>> duplicatesList = [];
+    int duplicateCount = 0;
+    List<Map<String, dynamic>> previewRows = [];
+    int totalRows = 0;
+    int validRowsCount = 0;
+
+    int currentStep = 1; // 1: Destination, 2: Preview & Headers, 3: Allocation
+    int previewSubTab = 0; // 0: Headers, 1: Duplicates, 2: Sample Rows
+
     String assignmentMode = 'ROUND_ROBIN';
     int? specificTelecallerId;
     List<int> multiSelectedTelecallerIds = [];
     bool skipDuplicates = true;
+    bool hasInitiated = false;
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (ctx, setModalState) {
-          final selectedEmployees = salesUsers.where((u) => multiSelectedTelecallerIds.contains(u.employeeId)).toList();
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+          final cardBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
+          final textMuted = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+          final primaryGreen = const Color(0xFF16A34A);
 
-          return AlertDialog(
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF16A34A).withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.table_chart_rounded, color: Color(0xFF16A34A), size: 22),
-                ),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Import Excel Leads',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Choose campaign and assignment rules',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+          Future<void> runPreview(String? campId, String? sheet) async {
+            setModalState(() {
+              isLoadingPreview = true;
+              previewError = null;
+            });
+            try {
+              final repo = context.read<CrmRepository>();
+              final res = await repo.previewExcelImport(
+                file.bytes!,
+                file.name,
+                campaignId: campId,
+                sheetName: sheet,
+              );
+              if (!ctx.mounted) return;
+              setModalState(() {
+                isLoadingPreview = false;
+                sheetNames = List<String>.from(res['sheetNames'] ?? []);
+                selectedSheet = res['activeSheet']?.toString() ??
+                    (sheetNames.isNotEmpty ? sheetNames.first : null);
+                totalRows = (res['totalRows'] as num?)?.toInt() ?? 0;
+                validRowsCount = (res['validRowsCount'] as num?)?.toInt() ?? 0;
+                destinationInfo = res['destination'] is Map ? Map<String, dynamic>.from(res['destination']) : null;
+                if (res['headers'] is List) {
+                  detectedHeaders = (res['headers'] as List)
+                      .map((h) => Map<String, dynamic>.from(h as Map))
+                      .toList();
+                  if (selectedHeaders.isEmpty) {
+                    selectedHeaders = detectedHeaders
+                        .map((h) => h['header']?.toString() ?? '')
+                        .where((h) => h.isNotEmpty)
+                        .toSet();
+                  }
+                }
+                final dups = res['duplicates'] is Map ? Map<String, dynamic>.from(res['duplicates']) : {};
+                duplicateCount = (dups['duplicateCount'] as num?)?.toInt() ?? 0;
+                if (dups['duplicateList'] is List) {
+                  duplicatesList = (dups['duplicateList'] as List)
+                      .map((d) => Map<String, dynamic>.from(d as Map))
+                      .toList();
+                }
+                if (res['previewRows'] is List) {
+                  previewRows = (res['previewRows'] as List)
+                      .map((r) => Map<String, dynamic>.from(r as Map))
+                      .toList();
+                }
+              });
+            } catch (e) {
+              if (!ctx.mounted) return;
+              setModalState(() {
+                isLoadingPreview = false;
+                previewError = e.toString();
+              });
+            }
+          }
+
+          if (!hasInitiated) {
+            hasInitiated = true;
+            Future.microtask(() => runPreview(selectedCampaignId, selectedSheet));
+          }
+
+          final selectedEmployees =
+              salesUsers.where((u) => multiSelectedTelecallerIds.contains(u.employeeId)).toList();
+
+          final screenWidth = MediaQuery.of(context).size.width;
+          final screenHeight = MediaQuery.of(context).size.height;
+          final dialogWidth = screenWidth > 900 ? 860.0 : (screenWidth * 0.95);
+          final dialogHeight = (screenHeight * 0.88).clamp(520.0, 760.0);
+
+          return Dialog(
+            backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: borderColor),
             ),
-            content: Container(
-              constraints: const BoxConstraints(maxWidth: 500),
-              width: double.maxFinite,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // File tag
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF16A34A).withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.2)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.insert_drive_file_rounded, size: 20, color: Color(0xFF16A34A)),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              file.name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Text(
-                            '${(file.size / 1024).toStringAsFixed(1)} KB',
-                            style: const TextStyle(fontSize: 11, color: Colors.grey),
-                          ),
-                        ],
-                      ),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            child: SizedBox(
+              width: dialogWidth,
+              height: dialogHeight,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: borderColor)),
+                      color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.5) : const Color(0xFFF8FAFC),
                     ),
-                    const SizedBox(height: 16),
-
-                    // Target Campaign
-                    const Text('Assign to Campaign *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 6),
-                    DropdownButtonFormField<String?>(
-                      isExpanded: true,
-                      initialValue: selectedCampaignId,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                        prefixIcon: Icon(Icons.campaign_rounded, size: 20),
-                      ),
-                      items: campaigns.map((c) {
-                        return DropdownMenuItem<String?>(
-                          value: c.id,
-                          child: Text('${c.name} (${c.code})', overflow: TextOverflow.ellipsis),
-                        );
-                      }).toList(),
-                      onChanged: (val) => setModalState(() => selectedCampaignId = val),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Lead Allocation Mode
-                    const Text(
-                      'Who should these leads be allocated to? (Telecaller) *',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'Initial status is set to "Not Started". Status becomes "Assigned" once Visitor Desk assigns a sales representative.',
-                      style: TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 8),
-
-                    // Mode 1: Round-Robin
-                    RadioListTile<String>(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      value: 'ROUND_ROBIN',
-                      groupValue: assignmentMode,
-                      title: const Text('Round-Robin across selected telecallers', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                      subtitle: const Text('Distribute incoming rows evenly among chosen telecallers', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                      onChanged: (val) => setModalState(() => assignmentMode = val ?? 'ROUND_ROBIN'),
-                    ),
-
-                    if (assignmentMode == 'ROUND_ROBIN') ...[
-                      Padding(
-                        padding: const EdgeInsets.only(left: 32, bottom: 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            InkWell(
-                              onTap: () => _showTelecallerMultiSelectDialog(
-                                context: context,
-                                salesUsers: salesUsers,
-                                initialSelected: multiSelectedTelecallerIds,
-                                onConfirm: (updated) => setModalState(() => multiSelectedTelecallerIds = updated),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Lead Import Studio',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                               ),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey.shade400),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.checklist_rounded, size: 18, color: Color(0xFF16A34A)),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        multiSelectedTelecallerIds.isEmpty
-                                            ? 'Click to select telecaller(s) with checkboxes...'
-                                            : '${multiSelectedTelecallerIds.length} telecaller(s) selected (Click to modify)',
-                                        style: TextStyle(
-                                          fontSize: 12.5,
-                                          fontWeight: multiSelectedTelecallerIds.isEmpty ? FontWeight.normal : FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                    const Icon(Icons.arrow_drop_down_rounded),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            if (selectedEmployees.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: selectedEmployees.map((emp) {
-                                  return Chip(
-                                    labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                                    avatar: CircleAvatar(
-                                      radius: 10,
-                                      child: Text(emp.fullName.isNotEmpty ? emp.fullName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 10)),
-                                    ),
-                                    label: Text(emp.fullName, style: const TextStyle(fontSize: 11)),
-                                    deleteIcon: const Icon(Icons.close, size: 14),
-                                    onDeleted: () => setModalState(() => multiSelectedTelecallerIds.remove(emp.employeeId)),
-                                  );
-                                }).toList(),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${file.name} • ${(file.size / 1024).toStringAsFixed(1)} KB',
+                                style: TextStyle(fontSize: 12, color: textMuted),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
-                          ],
-                        ),
-                      ),
-                    ],
-
-                    // Mode 2: Specific Telecaller
-                    RadioListTile<String>(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      value: 'SPECIFIC',
-                      groupValue: assignmentMode,
-                      title: const Text('Allocate all leads to a specific telecaller', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                      subtitle: const Text('Every lead in this file is allocated to one telecaller', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                      onChanged: (val) => setModalState(() => assignmentMode = val ?? 'SPECIFIC'),
-                    ),
-
-                    if (assignmentMode == 'SPECIFIC') ...[
-                      Padding(
-                        padding: const EdgeInsets.only(left: 32, bottom: 8),
-                        child: DropdownButtonFormField<int?>(
-                          isExpanded: true,
-                          initialValue: specificTelecallerId,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                            hintText: 'Choose specific telecaller...',
                           ),
-                          items: salesUsers.map((u) {
-                            return DropdownMenuItem<int?>(
-                              value: u.employeeId,
-                              child: Text('${u.fullName} (#${u.employeeId})', overflow: TextOverflow.ellipsis),
-                            );
-                          }).toList(),
-                          onChanged: (val) => setModalState(() => specificTelecallerId = val),
                         ),
-                      ),
-                    ],
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          splashRadius: 18,
+                          onPressed: () => Navigator.pop(dialogCtx),
+                          tooltip: 'Close',
+                        ),
+                      ],
+                    ),
+                  ),
 
-                    // Mode 3: Unassigned / Waiting list
-                    RadioListTile<String>(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      value: 'UNASSIGNED',
-                      groupValue: assignmentMode,
-                      title: const Text('Leave unallocated / Waiting list (WL)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                      subtitle: const Text('Leads will enter the waiting list or auto-dispatch queue', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                      onChanged: (val) => setModalState(() => assignmentMode = val ?? 'UNASSIGNED'),
+                  // Stepper Navigation Bar
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: borderColor)),
                     ),
-                    const SizedBox(height: 12),
-                    const Divider(),
-                    CheckboxListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      value: skipDuplicates,
-                      activeColor: const Color(0xFF16A34A),
-                      title: const Text('Skip duplicate numbers (Recommended)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                      subtitle: const Text('Automatically ignore rows whose phone numbers already exist in CRM', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                      onChanged: (val) => setModalState(() => skipDuplicates = val ?? true),
+                    child: Row(
+                      children: [
+                        _buildStepIndicator(
+                          stepNumber: 1,
+                          title: 'Destination & Sheet',
+                          isActive: currentStep == 1,
+                          isPassed: currentStep > 1,
+                          onTap: () {
+                            if (!isLoadingPreview) setModalState(() => currentStep = 1);
+                          },
+                          isDark: isDark,
+                          primaryColor: primaryGreen,
+                        ),
+                        Container(
+                          width: 24,
+                          height: 1,
+                          color: borderColor,
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        _buildStepIndicator(
+                          stepNumber: 2,
+                          title: 'Preview & Headers',
+                          isActive: currentStep == 2,
+                          isPassed: currentStep > 2,
+                          onTap: () {
+                            if (!isLoadingPreview && previewError == null) setModalState(() => currentStep = 2);
+                          },
+                          isDark: isDark,
+                          primaryColor: primaryGreen,
+                        ),
+                        Container(
+                          width: 24,
+                          height: 1,
+                          color: borderColor,
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        _buildStepIndicator(
+                          stepNumber: 3,
+                          title: 'Allocation & Finalize',
+                          isActive: currentStep == 3,
+                          isPassed: false,
+                          onTap: () {
+                            if (!isLoadingPreview && previewError == null) setModalState(() => currentStep = 3);
+                          },
+                          isDark: isDark,
+                          primaryColor: primaryGreen,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  // Body Content
+                  Expanded(
+                    child: isLoadingPreview
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 28,
+                                  height: 28,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: primaryGreen,
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                const Text(
+                                  'Analyzing workbook structure & checking duplicates...',
+                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Reading sheets, extracting headers, and verifying phone uniqueness',
+                                  style: TextStyle(fontSize: 12, color: textMuted),
+                                ),
+                              ],
+                            ),
+                          )
+                        : (previewError != null
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Inspection Error: $previewError',
+                                        style: const TextStyle(color: Colors.red, fontSize: 13),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      OutlinedButton(
+                                        onPressed: () => runPreview(selectedCampaignId, selectedSheet),
+                                        child: const Text('Retry Analysis'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : _buildImportStudioStepContent(
+                                currentStep: currentStep,
+                                previewSubTab: previewSubTab,
+                                setModalState: setModalState,
+                                isDark: isDark,
+                                cardBg: cardBg,
+                                borderColor: borderColor,
+                                textMuted: textMuted,
+                                primaryGreen: primaryGreen,
+                                campaigns: campaigns,
+                                selectedCampaignId: selectedCampaignId,
+                                sheetNames: sheetNames,
+                                selectedSheet: selectedSheet,
+                                destinationInfo: destinationInfo,
+                                totalRows: totalRows,
+                                validRowsCount: validRowsCount,
+                                duplicateCount: duplicateCount,
+                                detectedHeaders: detectedHeaders,
+                                selectedHeaders: selectedHeaders,
+                                duplicatesList: duplicatesList,
+                                previewRows: previewRows,
+                                skipDuplicates: skipDuplicates,
+                                assignmentMode: assignmentMode,
+                                salesUsers: salesUsers,
+                                multiSelectedTelecallerIds: multiSelectedTelecallerIds,
+                                selectedEmployees: selectedEmployees,
+                                specificTelecallerId: specificTelecallerId,
+                                onCampaignChanged: (newCamp) {
+                                  setModalState(() => selectedCampaignId = newCamp);
+                                  runPreview(newCamp, selectedSheet);
+                                },
+                                onSheetChanged: (newSheet) {
+                                  setModalState(() => selectedSheet = newSheet);
+                                  runPreview(selectedCampaignId, newSheet);
+                                },
+                              )),
+                  ),
+
+                  // Bottom Action Footer
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: borderColor)),
+                      color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.3) : const Color(0xFFF8FAFC),
+                    ),
+                    child: Row(
+                      children: [
+                        if (currentStep > 1)
+                          OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              side: BorderSide(color: borderColor),
+                            ),
+                            onPressed: () => setModalState(() => currentStep--),
+                            child: const Text('Back'),
+                          )
+                        else
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialogCtx),
+                            child: const Text('Cancel'),
+                          ),
+                        const Spacer(),
+                        if (currentStep < 3)
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryGreen,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                            ),
+                            onPressed: isLoadingPreview || previewError != null
+                                ? null
+                                : () => setModalState(() => currentStep++),
+                            child: Text(
+                              currentStep == 1 ? 'Preview Headers & Duplicates' : 'Proceed to Allocation',
+                            ),
+                          )
+                        else
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryGreen,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
+                            ),
+                            onPressed: () {
+                              if (assignmentMode == 'ROUND_ROBIN' && multiSelectedTelecallerIds.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Please select at least one telecaller for round-robin assignment'),
+                                  ),
+                                );
+                                return;
+                              }
+                              final targetSpecificId = specificTelecallerId;
+                              if (assignmentMode == 'SPECIFIC' && targetSpecificId == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Please select a specific telecaller'),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              Navigator.pop(dialogCtx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Importing ${selectedHeaders.length} columns from "${selectedSheet ?? file.name}"...',
+                                  ),
+                                ),
+                              );
+
+                              context.read<CrmLeadsBloc>().add(
+                                    CrmLeadsExcelImported(
+                                      file.bytes!,
+                                      file.name,
+                                      campaignId: selectedCampaignId,
+                                      sheetName: selectedSheet,
+                                      selectedHeaders: selectedHeaders.toList(),
+                                      assignmentMode: assignmentMode,
+                                      telecallerId: assignmentMode == 'SPECIFIC' ? specificTelecallerId : null,
+                                      assignedTelecallerIds:
+                                          assignmentMode == 'ROUND_ROBIN' ? multiSelectedTelecallerIds : null,
+                                      skipDuplicates: skipDuplicates,
+                                    ),
+                                  );
+                            },
+                            child: const Text(
+                              'Confirm & Import Leads',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogCtx),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF16A34A),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                ),
-                icon: const Icon(Icons.upload_file_rounded, size: 18),
-                label: const Text('Import Leads'),
-                onPressed: () {
-                  if (assignmentMode == 'ROUND_ROBIN' && multiSelectedTelecallerIds.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please select at least one telecaller for round-robin assignment or choose another mode')),
-                    );
-                    return;
-                  }
-                  if (assignmentMode == 'SPECIFIC' && specificTelecallerId == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please select the specific telecaller to assign these leads to')),
-                    );
-                    return;
-                  }
-
-                  Navigator.pop(dialogCtx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Importing "${file.name}"...')),
-                  );
-
-                  context.read<CrmLeadsBloc>().add(
-                    CrmLeadsExcelImported(
-                      file.bytes!,
-                      file.name,
-                      campaignId: selectedCampaignId,
-                      assignmentMode: assignmentMode,
-                      telecallerId: assignmentMode == 'SPECIFIC' ? specificTelecallerId : null,
-                      assignedTelecallerIds: assignmentMode == 'ROUND_ROBIN' ? multiSelectedTelecallerIds : null,
-                      skipDuplicates: skipDuplicates,
-                    ),
-                  );
-                },
-              ),
-            ],
           );
         },
       ),
+    );
+  }
+
+  Widget _buildStepIndicator({
+    required int stepNumber,
+    required String title,
+    required bool isActive,
+    required bool isPassed,
+    required VoidCallback onTap,
+    required bool isDark,
+    required Color primaryColor,
+  }) {
+    final textColor = isActive
+        ? (isDark ? Colors.white : Colors.black87)
+        : (isPassed ? primaryColor : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)));
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isActive
+                    ? primaryColor
+                    : (isPassed ? primaryColor.withValues(alpha: 0.15) : Colors.transparent),
+                border: Border.all(
+                  color: isActive || isPassed ? primaryColor : (isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1)),
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '$stepNumber',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: isActive ? Colors.white : (isPassed ? primaryColor : (isDark ? Colors.white70 : Colors.black54)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                color: textColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImportStudioStepContent({
+    required int currentStep,
+    required int previewSubTab,
+    required void Function(void Function()) setModalState,
+    required bool isDark,
+    required Color cardBg,
+    required Color borderColor,
+    required Color textMuted,
+    required Color primaryGreen,
+    required List<CrmCampaign> campaigns,
+    required String? selectedCampaignId,
+    required List<String> sheetNames,
+    required String? selectedSheet,
+    required Map<String, dynamic>? destinationInfo,
+    required int totalRows,
+    required int validRowsCount,
+    required int duplicateCount,
+    required List<Map<String, dynamic>> detectedHeaders,
+    required Set<String> selectedHeaders,
+    required List<Map<String, dynamic>> duplicatesList,
+    required List<Map<String, dynamic>> previewRows,
+    required bool skipDuplicates,
+    required String assignmentMode,
+    required List<CrmSalesUser> salesUsers,
+    required List<int> multiSelectedTelecallerIds,
+    required List<CrmSalesUser> selectedEmployees,
+    required int? specificTelecallerId,
+    required void Function(String?) onCampaignChanged,
+    required void Function(String?) onSheetChanged,
+  }) {
+    if (currentStep == 1) {
+      // Step 1: Destination & Sheet Selection
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Import Destination Details',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Verify which campaign and worksheet these leads will be placed into.',
+              style: TextStyle(fontSize: 12, color: textMuted),
+            ),
+            const SizedBox(height: 16),
+
+            // Sheet selector
+            if (sheetNames.length > 1) ...[
+              const Text('Excel Sheet / Tab *', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: selectedSheet,
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  isDense: true,
+                ),
+                items: sheetNames.map((s) {
+                  return DropdownMenuItem<String>(
+                    value: s,
+                    child: Text(s, overflow: TextOverflow.ellipsis),
+                  );
+                }).toList(),
+                onChanged: onSheetChanged,
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Campaign selector
+            const Text('Target Campaign *', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            DropdownButtonFormField<String?>(
+              isExpanded: true,
+              value: selectedCampaignId,
+              decoration: InputDecoration(
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                isDense: true,
+              ),
+              items: campaigns.map((c) {
+                return DropdownMenuItem<String?>(
+                  value: c.id,
+                  child: Text('${c.name} (${c.code})', overflow: TextOverflow.ellipsis),
+                );
+              }).toList(),
+              onChanged: onCampaignChanged,
+            ),
+            const SizedBox(height: 20),
+
+            // Destination Summary Box
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: borderColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Target Scope Summary',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildDetailField(
+                          'Target Campaign',
+                          destinationInfo?['campaignName']?.toString() ?? 'Pre-Sales',
+                          textMuted,
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildDetailField(
+                          'Project',
+                          destinationInfo?['projectName']?.toString() ?? 'NB Infra Projects',
+                          textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildDetailField(
+                          'Active Sheet',
+                          selectedSheet ?? 'Default Sheet',
+                          textMuted,
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildDetailField(
+                          'Detected Records',
+                          '$totalRows rows in sheet',
+                          textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Click "Preview Headers & Duplicates" below to inspect duplicate records, select/unselect columns, and preview sample rows before final import.',
+              style: TextStyle(fontSize: 12, color: textMuted),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (currentStep == 2) {
+      // Step 2: Preview & Headers Configuration
+      return Column(
+        children: [
+          // Stat chips row
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: cardBg,
+              border: Border(bottom: BorderSide(color: borderColor)),
+            ),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 6,
+              children: [
+                _buildMetricChip('Total Rows', '$totalRows', isDark),
+                _buildMetricChip('Valid Leads', '$validRowsCount', isDark),
+                _buildMetricChip(
+                  'Duplicates',
+                  '$duplicateCount',
+                  isDark,
+                  highlight: duplicateCount > 0,
+                ),
+                _buildMetricChip(
+                  'Headers Selected',
+                  '${selectedHeaders.length} of ${detectedHeaders.length}',
+                  isDark,
+                ),
+              ],
+            ),
+          ),
+
+          // Sub-tabs bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: borderColor)),
+            ),
+            child: Row(
+              children: [
+                _buildSubTabButton(
+                  title: 'Column Headers (${detectedHeaders.length})',
+                  isSelected: previewSubTab == 0,
+                  onTap: () => setModalState(() => previewSubTab = 0),
+                  primaryColor: primaryGreen,
+                ),
+                const SizedBox(width: 8),
+                _buildSubTabButton(
+                  title: 'Duplicate Leads ($duplicateCount)',
+                  isSelected: previewSubTab == 1,
+                  onTap: () => setModalState(() => previewSubTab = 1),
+                  primaryColor: primaryGreen,
+                ),
+                const SizedBox(width: 8),
+                _buildSubTabButton(
+                  title: 'Data Rows Preview (${previewRows.length})',
+                  isSelected: previewSubTab == 2,
+                  onTap: () => setModalState(() => previewSubTab = 2),
+                  primaryColor: primaryGreen,
+                ),
+              ],
+            ),
+          ),
+
+          // Sub-tab content
+          Expanded(
+            child: previewSubTab == 0
+                ? _buildHeadersTab(
+                    detectedHeaders: detectedHeaders,
+                    selectedHeaders: selectedHeaders,
+                    setModalState: setModalState,
+                    textMuted: textMuted,
+                    borderColor: borderColor,
+                    isDark: isDark,
+                  )
+                : (previewSubTab == 1
+                    ? _buildDuplicatesTab(
+                        duplicatesList: duplicatesList,
+                        skipDuplicates: skipDuplicates,
+                        setModalState: setModalState,
+                        textMuted: textMuted,
+                        borderColor: borderColor,
+                        isDark: isDark,
+                      )
+                    : _buildRowsPreviewTab(
+                        previewRows: previewRows,
+                        detectedHeaders: detectedHeaders,
+                        selectedHeaders: selectedHeaders,
+                        borderColor: borderColor,
+                        textMuted: textMuted,
+                        isDark: isDark,
+                      )),
+          ),
+        ],
+      );
+    }
+
+    // Step 3: Allocation & Finalize
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Telecaller Allocation Rule',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Choose how the incoming valid leads will be distributed among your pre-sales telecallers.',
+            style: TextStyle(fontSize: 12, color: textMuted),
+          ),
+          const SizedBox(height: 12),
+
+          // Allocation Radio 1: Round-Robin
+          RadioListTile<String>(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: 'ROUND_ROBIN',
+            groupValue: assignmentMode,
+            title: const Text('Round-Robin distribution across selected telecallers',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            subtitle: Text('Evenly distribute leads among selected agents',
+                style: TextStyle(fontSize: 11, color: textMuted)),
+            onChanged: (val) => setModalState(() => assignmentMode = val ?? 'ROUND_ROBIN'),
+          ),
+
+          if (assignmentMode == 'ROUND_ROBIN') ...[
+            Padding(
+              padding: const EdgeInsets.only(left: 32, bottom: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  InkWell(
+                    onTap: () => _showTelecallerMultiSelectDialog(
+                      context: context,
+                      salesUsers: salesUsers,
+                      initialSelected: multiSelectedTelecallerIds,
+                      onConfirm: (updated) => setModalState(() => multiSelectedTelecallerIds = updated),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: borderColor),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              multiSelectedTelecallerIds.isEmpty
+                                  ? 'Select telecallers for round-robin...'
+                                  : '${multiSelectedTelecallerIds.length} telecaller(s) selected (Click to modify)',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: multiSelectedTelecallerIds.isEmpty
+                                    ? FontWeight.normal
+                                    : FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const Text('Change', style: TextStyle(fontSize: 12, color: Color(0xFF2563EB))),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (selectedEmployees.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: selectedEmployees.map((emp) {
+                        return Chip(
+                          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                          label: Text(emp.fullName, style: const TextStyle(fontSize: 11)),
+                          deleteIcon: const Icon(Icons.close, size: 14),
+                          onDeleted: () =>
+                              setModalState(() => multiSelectedTelecallerIds.remove(emp.employeeId)),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+
+          // Allocation Radio 2: Specific Telecaller
+          RadioListTile<String>(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: 'SPECIFIC',
+            groupValue: assignmentMode,
+            title: const Text('Allocate all leads to one specific telecaller',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            subtitle: Text('Directly assign every row in this batch to a chosen telecaller',
+                style: TextStyle(fontSize: 11, color: textMuted)),
+            onChanged: (val) => setModalState(() => assignmentMode = val ?? 'SPECIFIC'),
+          ),
+
+          if (assignmentMode == 'SPECIFIC') ...[
+            Padding(
+              padding: const EdgeInsets.only(left: 32, bottom: 8),
+              child: DropdownButtonFormField<int?>(
+                isExpanded: true,
+                value: specificTelecallerId,
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  isDense: true,
+                  hintText: 'Choose specific telecaller...',
+                ),
+                items: salesUsers.map((u) {
+                  return DropdownMenuItem<int?>(
+                    value: u.employeeId,
+                    child: Text('${u.fullName} (#${u.employeeId})', overflow: TextOverflow.ellipsis),
+                  );
+                }).toList(),
+                onChanged: (val) => setModalState(() => specificTelecallerId = val),
+              ),
+            ),
+          ],
+
+          // Allocation Radio 3: Unassigned / Waiting List
+          RadioListTile<String>(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: 'UNASSIGNED',
+            groupValue: assignmentMode,
+            title: const Text('Leave in Waiting List (WL) / Auto-dispatch',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            subtitle: Text('Leads will enter unallocated pool or be dispatched when callers are available',
+                style: TextStyle(fontSize: 11, color: textMuted)),
+            onChanged: (val) => setModalState(() => assignmentMode = val ?? 'UNASSIGNED'),
+          ),
+
+          const SizedBox(height: 12),
+          const Divider(),
+          const SizedBox(height: 12),
+
+          // Final Review Box
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Final Import Summary',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildDetailField(
+                        'Destination Campaign',
+                        destinationInfo?['campaignName']?.toString() ?? 'Default',
+                        textMuted,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildDetailField(
+                        'Sheet Name',
+                        selectedSheet ?? 'Default',
+                        textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildDetailField(
+                        'Headers to Import',
+                        '${selectedHeaders.length} of ${detectedHeaders.length} columns selected',
+                        textMuted,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildDetailField(
+                        'Expected Lead Rows',
+                        skipDuplicates
+                            ? '$validRowsCount valid ($duplicateCount duplicates will be skipped)'
+                            : '$totalRows rows (including duplicates)',
+                        textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeadersTab({
+    required List<Map<String, dynamic>> detectedHeaders,
+    required Set<String> selectedHeaders,
+    required void Function(void Function()) setModalState,
+    required Color textMuted,
+    required Color borderColor,
+    required bool isDark,
+  }) {
+    return Column(
+      children: [
+        // Quick toggle buttons
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Text(
+                'Select columns to import:',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textMuted),
+              ),
+              const Spacer(),
+              TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: () {
+                  setModalState(() {
+                    selectedHeaders.clear();
+                    selectedHeaders.addAll(
+                      detectedHeaders
+                          .map((h) => h['header']?.toString() ?? '')
+                          .where((h) => h.isNotEmpty),
+                    );
+                  });
+                },
+                child: const Text('Select All', style: TextStyle(fontSize: 12)),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: () {
+                  setModalState(() => selectedHeaders.clear());
+                },
+                child: const Text('Deselect All', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+
+        // List of headers
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            itemCount: detectedHeaders.length,
+            separatorBuilder: (_, __) => Divider(height: 1, color: borderColor),
+            itemBuilder: (ctx, idx) {
+              final h = detectedHeaders[idx];
+              final headerName = h['header']?.toString() ?? '';
+              final isExisting = h['isExisting'] == true;
+              final isPhone = h['isPhone'] == true;
+              final isName = h['isName'] == true;
+              final sampleValues = List<dynamic>.from(h['sampleValues'] ?? []);
+              final isSelected = selectedHeaders.contains(headerName);
+
+              return CheckboxListTile(
+                dense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                value: isSelected,
+                activeColor: const Color(0xFF16A34A),
+                onChanged: (val) {
+                  setModalState(() {
+                    if (val == true) {
+                      selectedHeaders.add(headerName);
+                    } else {
+                      selectedHeaders.remove(headerName);
+                    }
+                  });
+                },
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        headerName,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    if (isPhone || isName)
+                      Container(
+                        margin: const EdgeInsets.only(right: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          isPhone ? 'Phone' : 'Lead Name',
+                          style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Color(0xFF2563EB)),
+                        ),
+                      ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isExisting
+                            ? (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))
+                            : const Color(0xFF16A34A).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        isExisting ? 'Existing CRM Field' : 'New Column',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: isExisting
+                              ? (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569))
+                              : const Color(0xFF16A34A),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                subtitle: sampleValues.isNotEmpty
+                    ? Text(
+                        'Sample: ${sampleValues.join(', ')}',
+                        style: TextStyle(fontSize: 11, color: textMuted),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    : null,
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDuplicatesTab({
+    required List<Map<String, dynamic>> duplicatesList,
+    required bool skipDuplicates,
+    required void Function(void Function()) setModalState,
+    required Color textMuted,
+    required Color borderColor,
+    required bool isDark,
+  }) {
+    return Column(
+      children: [
+        // Duplicate handling setting
+        CheckboxListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          value: skipDuplicates,
+          activeColor: const Color(0xFF16A34A),
+          title: const Text(
+            'Skip duplicate numbers during import (Recommended)',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          ),
+          subtitle: const Text(
+            'Prevents re-importing phone numbers that already exist in this campaign or CRM',
+            style: TextStyle(fontSize: 11),
+          ),
+          onChanged: (val) => setModalState(() => skipDuplicates = val ?? true),
+        ),
+        const Divider(height: 1),
+
+        // Duplicate list
+        Expanded(
+          child: duplicatesList.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'No Duplicates Found',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'All phone numbers in this sheet are unique across the CRM.',
+                        style: TextStyle(fontSize: 12, color: textMuted),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: duplicatesList.length,
+                  separatorBuilder: (_, __) => Divider(height: 1, color: borderColor),
+                  itemBuilder: (ctx, idx) {
+                    final d = duplicatesList[idx];
+                    final rowNum = d['rowNumber']?.toString() ?? '${idx + 1}';
+                    final name = d['name']?.toString() ?? 'Unnamed';
+                    final phone = d['phone']?.toString() ?? '';
+                    final isExistingInCrm = d['duplicateType'] == 'EXISTING_IN_CRM';
+                    final details = d['details']?.toString() ?? '';
+
+                    return ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                      title: Row(
+                        children: [
+                          Text(
+                            'Row #$rowNum: ',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textMuted),
+                          ),
+                          Expanded(
+                            child: Text(
+                              '$name • $phone',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isExistingInCrm
+                                  ? const Color(0xFFDC2626).withValues(alpha: 0.12)
+                                  : const Color(0xFFD97706).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              isExistingInCrm ? 'Already in CRM' : 'Duplicate in Sheet',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: isExistingInCrm ? const Color(0xFFDC2626) : const Color(0xFFD97706),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      subtitle: details.isNotEmpty
+                          ? Text(
+                              details,
+                              style: TextStyle(fontSize: 11, color: textMuted),
+                            )
+                          : null,
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRowsPreviewTab({
+    required List<Map<String, dynamic>> previewRows,
+    required List<Map<String, dynamic>> detectedHeaders,
+    required Set<String> selectedHeaders,
+    required Color borderColor,
+    required Color textMuted,
+    required bool isDark,
+  }) {
+    if (previewRows.isEmpty) {
+      return Center(
+        child: Text('No preview rows available', style: TextStyle(color: textMuted)),
+      );
+    }
+
+    final headersToShow = detectedHeaders
+        .map((h) => h['header']?.toString() ?? '')
+        .where((h) => h.isNotEmpty)
+        .toList();
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.vertical,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowHeight: 38,
+          dataRowMinHeight: 36,
+          dataRowMaxHeight: 44,
+          columnSpacing: 18,
+          columns: [
+            const DataColumn(
+              label: Text('#', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            ),
+            ...headersToShow.map((h) {
+              final isSelected = selectedHeaders.contains(h);
+              return DataColumn(
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      h,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: isSelected ? null : textMuted,
+                      ),
+                    ),
+                    if (!isSelected)
+                      Text(
+                        ' (Excluded)',
+                        style: TextStyle(fontSize: 10, color: textMuted),
+                      ),
+                  ],
+                ),
+              );
+            }),
+          ],
+          rows: previewRows.map((r) {
+            final rowNum = r['_rowNumber']?.toString() ?? '';
+            return DataRow(
+              cells: [
+                DataCell(Text(rowNum, style: TextStyle(fontSize: 12, color: textMuted))),
+                ...headersToShow.map((h) {
+                  final val = r[h]?.toString() ?? '';
+                  final isSelected = selectedHeaders.contains(h);
+                  return DataCell(
+                    Text(
+                      val,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isSelected ? null : textMuted.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetricChip(String label, String value, bool isDark, {bool highlight = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: highlight
+            ? const Color(0xFFD97706).withValues(alpha: 0.12)
+            : (isDark ? const Color(0xFF334155).withValues(alpha: 0.6) : const Color(0xFFF1F5F9)),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: highlight ? const Color(0xFFD97706).withValues(alpha: 0.3) : Colors.transparent,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label: ',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
+              color: highlight ? const Color(0xFFD97706) : (isDark ? Colors.white70 : Colors.black54),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: highlight ? const Color(0xFFD97706) : (isDark ? Colors.white : Colors.black87),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubTabButton({
+    required String title,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required Color primaryColor,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? primaryColor.withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSelected ? primaryColor : Colors.transparent,
+          ),
+        ),
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? primaryColor : null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailField(String label, String value, Color textMuted) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: textMuted),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
     );
   }
 

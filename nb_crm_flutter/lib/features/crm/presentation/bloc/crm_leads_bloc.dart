@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../data/crm_repository.dart';
@@ -588,6 +589,16 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     CrmLeadsDateFilterChanged event,
     Emitter<CrmLeadsState> emit,
   ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final scope = _crmRepository.scope;
+      if (event.datePreset != 'all') {
+        await prefs.setString('crm_pref_date_preset_$scope', event.datePreset);
+      } else {
+        await prefs.remove('crm_pref_date_preset_$scope');
+      }
+    } catch (_) {}
+
     emit(state.copyWith(
       fromDate: event.fromDate,
       clearFromDate: event.fromDate == null,
@@ -675,16 +686,32 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
       ]);
 
       final loadedLogs = includeCallLogs ? results[7] as List<CrmCallLog> : null;
+      final loadedProjects = results[0] as List<CrmProject>;
+      final loadedCampaigns = results[1] as List<CrmCampaign>;
+
+      final effectiveProjId = projectId ?? state.selectedProjectId;
+      final effectiveCampId = campaignId ?? state.selectedCampaignId;
+
+      final validProjectId = (effectiveProjId != null && loadedProjects.any((p) => p.id == effectiveProjId))
+          ? effectiveProjId
+          : null;
+      final validCampaignId = (effectiveCampId != null && loadedCampaigns.any((c) => c.id == effectiveCampId))
+          ? effectiveCampId
+          : null;
 
       emit(state.copyWith(
         status: LoadStatus.success,
-        projects: results[0] as List<CrmProject>,
-        campaigns: results[1] as List<CrmCampaign>,
+        projects: loadedProjects,
+        campaigns: loadedCampaigns,
         columns: results[2] as List<CrmColumnConfig>,
         leads: results[3] as List<CrmLead>,
         salesUsers: results[4] as List<CrmSalesUser>,
         followUps: results[5] as List<CrmFollowUp>,
         settings: results[6] as CrmSettings,
+        selectedProjectId: validProjectId,
+        clearSelectedProject: effectiveProjId != null && validProjectId == null,
+        selectedCampaignId: validCampaignId,
+        clearSelectedCampaign: effectiveCampId != null && validCampaignId == null,
         callLogs: loadedLogs ?? state.callLogs,
         callRecordingAgents: loadedLogs != null
             ? (state.callRecordingFilterAgent == 'ALL'
@@ -701,6 +728,16 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     CrmLeadsLeadFlowFilterChanged event,
     Emitter<CrmLeadsState> emit,
   ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final scope = _crmRepository.scope;
+      if (event.leadFlow != 'ALL') {
+        await prefs.setString('crm_pref_flow_$scope', event.leadFlow);
+      } else {
+        await prefs.remove('crm_pref_flow_$scope');
+      }
+    } catch (_) {}
+
     if (event.awaitingPicker) {
       emit(state.copyWith(
         leadFlowFilter: event.leadFlow,
@@ -709,7 +746,13 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
       return;
     }
 
-    if (event.clearCampaign || event.leadFlow == 'ALL') {
+    if (event.clearCampaign) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final scope = _crmRepository.scope;
+        await prefs.remove('crm_pref_campaign_$scope');
+      } catch (_) {}
+
       emit(state.copyWith(
         leadFlowFilter: event.leadFlow,
         clearSelectedCampaign: true,
@@ -726,7 +769,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
       return;
     }
 
-    final campId = event.campaignId;
+    final campId = event.campaignId ?? state.selectedCampaignId;
     emit(state.copyWith(
       leadFlowFilter: event.leadFlow,
       selectedCampaignId: campId,
@@ -748,6 +791,16 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     Emitter<CrmLeadsState> emit,
   ) async {
     final flow = state.leadFlowFilter;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final scope = _crmRepository.scope;
+      if (event.campaignId != null) {
+        await prefs.setString('crm_pref_campaign_$scope', event.campaignId!);
+      } else {
+        await prefs.remove('crm_pref_campaign_$scope');
+      }
+    } catch (_) {}
+
     emit(state.copyWith(
       status: LoadStatus.loading,
       selectedCampaignId: event.campaignId,
@@ -767,10 +820,43 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     Emitter<CrmLeadsState> emit,
   ) async {
     emit(state.copyWith(status: LoadStatus.loading));
+
+    String? effProjectId = state.selectedProjectId;
+    String? effCampaignId = state.selectedCampaignId;
+    String? effFlow = state.leadFlowFilter != 'ALL' ? state.leadFlowFilter : null;
+    String? effStatus = state.statusFilter != 'ALL' ? state.statusFilter : null;
+    String? effDatePreset = state.datePreset != 'all' ? state.datePreset : null;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final scope = _crmRepository.scope;
+      effProjectId ??= prefs.getString('crm_pref_project_$scope');
+      effCampaignId ??= prefs.getString('crm_pref_campaign_$scope');
+      effFlow ??= prefs.getString('crm_pref_flow_$scope');
+      effStatus ??= prefs.getString('crm_pref_status_$scope');
+      effDatePreset ??= prefs.getString('crm_pref_date_preset_$scope');
+    } catch (_) {}
+
+    if (effProjectId != state.selectedProjectId ||
+        effCampaignId != state.selectedCampaignId ||
+        effFlow != null ||
+        effStatus != null ||
+        effDatePreset != null) {
+      emit(state.copyWith(
+        selectedProjectId: effProjectId,
+        selectedCampaignId: effCampaignId,
+        leadFlowFilter: effFlow ?? state.leadFlowFilter,
+        statusFilter: effStatus ?? state.statusFilter,
+        datePreset: effDatePreset ?? state.datePreset,
+      ));
+    }
+
     await _fetchData(
       emit,
-      projectId: state.selectedProjectId,
-      campaignId: state.selectedCampaignId,
+      projectId: effProjectId,
+      campaignId: effCampaignId,
+      statusFilter: effStatus,
+      leadFlowFilter: effFlow,
     );
   }
 
@@ -790,6 +876,17 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     CrmLeadsProjectSelected event,
     Emitter<CrmLeadsState> emit,
   ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final scope = _crmRepository.scope;
+      if (event.projectId != null) {
+        await prefs.setString('crm_pref_project_$scope', event.projectId!);
+      } else {
+        await prefs.remove('crm_pref_project_$scope');
+      }
+      await prefs.remove('crm_pref_campaign_$scope');
+    } catch (_) {}
+
     emit(state.copyWith(
       status: LoadStatus.loading,
       selectedProjectId: event.projectId,
@@ -803,6 +900,16 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     CrmLeadsCampaignSelected event,
     Emitter<CrmLeadsState> emit,
   ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final scope = _crmRepository.scope;
+      if (event.campaignId != null) {
+        await prefs.setString('crm_pref_campaign_$scope', event.campaignId!);
+      } else {
+        await prefs.remove('crm_pref_campaign_$scope');
+      }
+    } catch (_) {}
+
     emit(state.copyWith(
       status: LoadStatus.loading,
       selectedCampaignId: event.campaignId,
@@ -821,6 +928,16 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     CrmLeadsStatusFilterChanged event,
     Emitter<CrmLeadsState> emit,
   ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final scope = _crmRepository.scope;
+      if (event.status != 'ALL') {
+        await prefs.setString('crm_pref_status_$scope', event.status);
+      } else {
+        await prefs.remove('crm_pref_status_$scope');
+      }
+    } catch (_) {}
+
     emit(state.copyWith(statusFilter: event.status));
     await _refreshLeadsOnly(emit);
   }

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/network/api_envelope.dart';
@@ -10716,10 +10717,19 @@ class _CrmPreSalesFullScreenStationState extends State<_CrmPreSalesFullScreenSta
     return count;
   }
 
-  void _resetAllFilters(BuildContext context) {
+  void _resetAllFilters(BuildContext context) async {
     final bloc = context.read<CrmLeadsBloc>();
+    final scope = context.read<CrmRepository>().scope;
     _focusSearchController.clear();
     widget.parentState._searchController.clear();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('crm_pref_project_$scope');
+      await prefs.remove('crm_pref_campaign_$scope');
+      await prefs.remove('crm_pref_flow_$scope');
+      await prefs.remove('crm_pref_status_$scope');
+      await prefs.remove('crm_pref_date_preset_$scope');
+    } catch (_) {}
     bloc.add(const CrmLeadsSearchChanged(''));
     bloc.add(const CrmLeadsLeadFlowFilterChanged('ALL', clearCampaign: true));
     bloc.add(const CrmLeadsProjectSelected(null));

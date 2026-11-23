@@ -7134,23 +7134,42 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
                     final decision = duplicateDecisions[rowNum] ?? 'SKIP';
 
+                    // Color Differentiation by Duplicate Match Type
                     Color cardBorderColor;
-                    if (decision == 'UPDATE') {
-                      cardBorderColor = const Color(0xFF2563EB);
-                    } else if (decision == 'KEEP') {
-                      cardBorderColor = const Color(0xFF16A34A);
+                    Color cardBgColor;
+                    Color cardHeaderBgColor;
+
+                    if (isSameCampaign) {
+                      // 1. Target Campaign Duplicate: Rose / Red Theme
+                      cardBorderColor = decision == 'UPDATE'
+                          ? const Color(0xFF2563EB)
+                          : (decision == 'KEEP' ? const Color(0xFF16A34A) : const Color(0xFFE11D48));
+                      cardBgColor = isDark ? const Color(0xFF1C1315) : const Color(0xFFFFF9F9);
+                      cardHeaderBgColor = isDark ? const Color(0xFF2E1418) : const Color(0xFFFFE4E6);
+                    } else if (isExistingInCrm) {
+                      // 2. Other Campaign Duplicate: Blue / Indigo Theme
+                      cardBorderColor = decision == 'KEEP'
+                          ? const Color(0xFF16A34A)
+                          : (decision == 'UPDATE' ? const Color(0xFF2563EB) : const Color(0xFF3B82F6));
+                      cardBgColor = isDark ? const Color(0xFF10192A) : const Color(0xFFF4F8FF);
+                      cardHeaderBgColor = isDark ? const Color(0xFF172544) : const Color(0xFFDBEAFE);
                     } else {
-                      cardBorderColor = isSameCampaign ? const Color(0xFFDC2626).withValues(alpha: 0.6) : borderColor;
+                      // 3. Sheet Duplicate: Amber / Orange Theme
+                      cardBorderColor = decision == 'KEEP'
+                          ? const Color(0xFF16A34A)
+                          : const Color(0xFFD97706);
+                      cardBgColor = isDark ? const Color(0xFF20190E) : const Color(0xFFFFFDF5);
+                      cardHeaderBgColor = isDark ? const Color(0xFF332512) : const Color(0xFFFEF3C7);
                     }
 
                     return Container(
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        color: cardBgColor,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: cardBorderColor, width: decision != 'SKIP' ? 1.6 : 1.2),
+                        border: Border.all(color: cardBorderColor, width: decision != 'SKIP' ? 1.8 : 1.3),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
                             blurRadius: 4,
                             offset: const Offset(0, 2),
                           ),
@@ -7159,13 +7178,13 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Card Header: Row Number, Scope Badge & Quick Action Pills
+                          // Card Header: Row Number, Scope Badge, History Icon Button & Header Action Pills
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                             decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.4) : const Color(0xFFF8FAFC),
+                              color: cardHeaderBgColor,
                               borderRadius: const BorderRadius.vertical(top: Radius.circular(9)),
-                              border: Border(bottom: BorderSide(color: borderColor)),
+                              border: Border(bottom: BorderSide(color: cardBorderColor.withValues(alpha: 0.3))),
                             ),
                             child: Row(
                               children: [
@@ -7182,7 +7201,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                     children: [
                                       // Scope Tag
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                                         decoration: BoxDecoration(
                                           color: isSameCampaign
                                               ? const Color(0xFFDC2626).withValues(alpha: 0.15)
@@ -7190,12 +7209,20 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                                   ? const Color(0xFF2563EB).withValues(alpha: 0.15)
                                                   : const Color(0xFFD97706).withValues(alpha: 0.15)),
                                           borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(
+                                            color: isSameCampaign
+                                                ? const Color(0xFFDC2626).withValues(alpha: 0.4)
+                                                : (isExistingInCrm
+                                                    ? const Color(0xFF2563EB).withValues(alpha: 0.4)
+                                                    : const Color(0xFFD97706).withValues(alpha: 0.4)),
+                                            width: 0.8,
+                                          ),
                                         ),
                                         child: Text(
                                           isSameCampaign
                                               ? '🚨 Duplicate in Target Campaign'
                                               : (isExistingInCrm
-                                                  ? 'ℹ️ Matches Lead in: ${existingLead?['campaignName'] ?? 'Other Campaign'}'
+                                                  ? '🔄 Matches Lead in: ${existingLead?['campaignName'] ?? 'Other Campaign'}'
                                                   : '📑 Duplicate in Sheet (First at Row #${priorRow?['rowNumber'] ?? '?'})'),
                                           style: TextStyle(
                                             fontSize: 10.5,
@@ -7206,11 +7233,37 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                           ),
                                         ),
                                       ),
+
+                                      // Lead History Button in Header
+                                      if (existingLead != null)
+                                        InkWell(
+                                          onTap: () => _showDuplicateLeadHistoryModal(context, existingLead, isDark: isDark),
+                                          borderRadius: BorderRadius.circular(5),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.3 : 0.15),
+                                              borderRadius: BorderRadius.circular(5),
+                                              border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.5)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: const [
+                                                Icon(Icons.manage_history_rounded, size: 13, color: Color(0xFF6366F1)),
+                                                SizedBox(width: 4),
+                                                Text(
+                                                  'View History',
+                                                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Color(0xFF6366F1)),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                // Header Quick Action Pills (Interactive right in the header!)
+                                // Header Quick Action Pills
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -7223,23 +7276,34 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       isDark: isDark,
                                     ),
                                     const SizedBox(width: 4),
-                                    _buildHeaderActionPill(
-                                      label: 'Update CRM',
-                                      icon: Icons.sync_rounded,
-                                      isSelected: decision == 'UPDATE',
-                                      color: const Color(0xFF2563EB),
-                                      onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'UPDATE'),
-                                      isDark: isDark,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    _buildHeaderActionPill(
-                                      label: 'Import New',
-                                      icon: Icons.add_circle_outline_rounded,
-                                      isSelected: decision == 'KEEP',
-                                      color: const Color(0xFF16A34A),
-                                      onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'KEEP'),
-                                      isDark: isDark,
-                                    ),
+                                    if (isExistingInCrm && !isSameCampaign) ...[
+                                      _buildHeaderActionPill(
+                                        label: 'Move & Import',
+                                        icon: Icons.drive_file_move_rounded,
+                                        isSelected: decision == 'KEEP',
+                                        color: const Color(0xFF16A34A),
+                                        onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'KEEP'),
+                                        isDark: isDark,
+                                      ),
+                                    ] else ...[
+                                      _buildHeaderActionPill(
+                                        label: 'Update CRM',
+                                        icon: Icons.sync_rounded,
+                                        isSelected: decision == 'UPDATE',
+                                        color: const Color(0xFF2563EB),
+                                        onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'UPDATE'),
+                                        isDark: isDark,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      _buildHeaderActionPill(
+                                        label: 'Import New',
+                                        icon: Icons.add_circle_outline_rounded,
+                                        isSelected: decision == 'KEEP',
+                                        color: const Color(0xFF16A34A),
+                                        onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'KEEP'),
+                                        isDark: isDark,
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ],
@@ -7260,6 +7324,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                         borderColor: borderColor,
                                         textMuted: textMuted,
                                         priorRow: priorRow,
+                                        context: context,
                                       ),
                                       const SizedBox(height: 10),
                                       _buildIncomingRowDetailsBox(
@@ -7285,6 +7350,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                           borderColor: borderColor,
                                           textMuted: textMuted,
                                           priorRow: priorRow,
+                                          context: context,
                                         ),
                                       ),
                                       const SizedBox(width: 12),
@@ -7304,7 +7370,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                   ),
                           ),
 
-                          // Card Explanatory Footer & Action Buttons
+                          // Card Explanatory Footer & Action Buttons Inside Card
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
@@ -7321,22 +7387,38 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                   child: Row(
                                     children: [
                                       Icon(
-                                        decision == 'UPDATE'
-                                            ? Icons.sync_rounded
-                                            : (decision == 'KEEP' ? Icons.add_circle_outline_rounded : Icons.info_outline_rounded),
+                                        !isSameCampaign && isExistingInCrm && decision == 'KEEP'
+                                            ? Icons.drive_file_move_rounded
+                                            : (decision == 'UPDATE'
+                                                ? Icons.sync_rounded
+                                                : (decision == 'KEEP'
+                                                    ? Icons.add_circle_outline_rounded
+                                                    : Icons.info_outline_rounded)),
                                         size: 13,
-                                        color: decision == 'UPDATE'
-                                            ? const Color(0xFF2563EB)
-                                            : (decision == 'KEEP' ? const Color(0xFF16A34A) : textMuted),
+                                        color: !isSameCampaign && isExistingInCrm && decision == 'KEEP'
+                                            ? const Color(0xFF16A34A)
+                                            : (decision == 'UPDATE'
+                                                ? const Color(0xFF2563EB)
+                                                : (decision == 'KEEP' ? const Color(0xFF16A34A) : textMuted)),
                                       ),
                                       const SizedBox(width: 5),
                                       Expanded(
                                         child: Text(
-                                          decision == 'UPDATE'
-                                              ? 'Will overwrite and merge incoming Excel row into existing CRM lead (${existingLead?['phone'] ?? phone}).'
-                                              : (decision == 'KEEP'
-                                                  ? 'Will create a separate duplicate lead record in this campaign.'
-                                                  : 'Will skip row #$rowNum. Existing CRM lead (${existingLead?['phone'] ?? phone}) remains untouched.'),
+                                          !isSameCampaign && isExistingInCrm
+                                              ? (decision == 'KEEP'
+                                                  ? 'Will import lead into current campaign and DELETE from "${existingLead?['campaignName'] ?? 'other campaign'}".'
+                                                  : (decision == 'UPDATE'
+                                                      ? 'Will merge incoming Excel columns into existing lead in "${existingLead?['campaignName'] ?? 'CRM'}".'
+                                                      : 'Will skip row #$rowNum. Lead stays in "${existingLead?['campaignName'] ?? 'previous campaign'}" untouched.'))
+                                              : (isSameCampaign
+                                                  ? (decision == 'UPDATE'
+                                                      ? 'Will overwrite and merge incoming Excel row into existing CRM lead (${existingLead?['phone'] ?? phone}).'
+                                                      : (decision == 'KEEP'
+                                                          ? 'Will create a separate duplicate lead record in this campaign.'
+                                                          : 'Will skip row #$rowNum. Existing CRM lead (${existingLead?['phone'] ?? phone}) remains untouched.'))
+                                                  : (decision == 'KEEP'
+                                                      ? 'Will import this row as an additional lead (along with Row #${priorRow?['rowNumber'] ?? '?'}).'
+                                                      : 'Will skip row #$rowNum. Only the first occurrence at Row #${priorRow?['rowNumber'] ?? '?'} will be imported.')),
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: decision != 'SKIP' ? FontWeight.w600 : FontWeight.normal,
@@ -7349,40 +7431,97 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                     ],
                                   ),
                                 ),
+                                // Embedded Choice Buttons inside Card
                                 Row(
                                   children: [
-                                    // Action 1: Skip (Default)
-                                    _buildDecisionChoiceButton(
-                                      label: 'Skip Lead',
-                                      subtitle: 'Leave CRM lead unchanged',
-                                      icon: Icons.block_rounded,
-                                      isSelected: decision == 'SKIP',
-                                      color: const Color(0xFFDC2626),
-                                      onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'SKIP'),
-                                      isDark: isDark,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    // Action 2: Update CRM
-                                    _buildDecisionChoiceButton(
-                                      label: 'Update CRM',
-                                      subtitle: 'Merge Excel fields into lead',
-                                      icon: Icons.sync_rounded,
-                                      isSelected: decision == 'UPDATE',
-                                      color: const Color(0xFF2563EB),
-                                      onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'UPDATE'),
-                                      isDark: isDark,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    // Action 3: Import as New
-                                    _buildDecisionChoiceButton(
-                                      label: 'Import as New',
-                                      subtitle: 'Add duplicate lead anyway',
-                                      icon: Icons.add_circle_outline_rounded,
-                                      isSelected: decision == 'KEEP',
-                                      color: const Color(0xFF16A34A),
-                                      onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'KEEP'),
-                                      isDark: isDark,
-                                    ),
+                                    if (isExistingInCrm && !isSameCampaign) ...[
+                                      // Action 1: Skip Lead (Default)
+                                      _buildDecisionChoiceButton(
+                                        label: 'Skip Lead',
+                                        subtitle: 'Keep in ${existingLead?['campaignName'] ?? 'other campaign'}',
+                                        icon: Icons.block_rounded,
+                                        isSelected: decision == 'SKIP',
+                                        color: const Color(0xFFDC2626),
+                                        onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'SKIP'),
+                                        isDark: isDark,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Action 2: Move & Import (Delete from other campaign, import here)
+                                      _buildDecisionChoiceButton(
+                                        label: 'Move to Current',
+                                        subtitle: 'Delete from old & import here',
+                                        icon: Icons.drive_file_move_rounded,
+                                        isSelected: decision == 'KEEP',
+                                        color: const Color(0xFF16A34A),
+                                        onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'KEEP'),
+                                        isDark: isDark,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Action 3: Update Existing
+                                      _buildDecisionChoiceButton(
+                                        label: 'Update CRM',
+                                        subtitle: 'Merge into existing lead',
+                                        icon: Icons.sync_rounded,
+                                        isSelected: decision == 'UPDATE',
+                                        color: const Color(0xFF2563EB),
+                                        onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'UPDATE'),
+                                        isDark: isDark,
+                                      ),
+                                    ] else if (isSameCampaign) ...[
+                                      // Action 1: Skip Lead (Default)
+                                      _buildDecisionChoiceButton(
+                                        label: 'Skip Lead',
+                                        subtitle: 'Leave CRM lead unchanged',
+                                        icon: Icons.block_rounded,
+                                        isSelected: decision == 'SKIP',
+                                        color: const Color(0xFFDC2626),
+                                        onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'SKIP'),
+                                        isDark: isDark,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Action 2: Update CRM
+                                      _buildDecisionChoiceButton(
+                                        label: 'Update CRM',
+                                        subtitle: 'Merge Excel fields into lead',
+                                        icon: Icons.sync_rounded,
+                                        isSelected: decision == 'UPDATE',
+                                        color: const Color(0xFF2563EB),
+                                        onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'UPDATE'),
+                                        isDark: isDark,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Action 3: Import as New
+                                      _buildDecisionChoiceButton(
+                                        label: 'Import as New',
+                                        subtitle: 'Add duplicate lead anyway',
+                                        icon: Icons.add_circle_outline_rounded,
+                                        isSelected: decision == 'KEEP',
+                                        color: const Color(0xFF16A34A),
+                                        onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'KEEP'),
+                                        isDark: isDark,
+                                      ),
+                                    ] else ...[
+                                      // Sheet Duplicate
+                                      _buildDecisionChoiceButton(
+                                        label: 'Skip Duplicate',
+                                        subtitle: 'Row #${priorRow?['rowNumber']} will be kept',
+                                        icon: Icons.block_rounded,
+                                        isSelected: decision == 'SKIP',
+                                        color: const Color(0xFFDC2626),
+                                        onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'SKIP'),
+                                        isDark: isDark,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      _buildDecisionChoiceButton(
+                                        label: 'Import Both',
+                                        subtitle: 'Import this row as well',
+                                        icon: Icons.add_circle_outline_rounded,
+                                        isSelected: decision == 'KEEP',
+                                        color: const Color(0xFF16A34A),
+                                        onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'KEEP'),
+                                        isDark: isDark,
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ],
@@ -7552,6 +7691,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     required bool isDark,
     required Color borderColor,
     required Color textMuted,
+    required BuildContext context,
     Map<String, dynamic>? priorRow,
   }) {
     final bgColor = isDark ? const Color(0xFF1E1B18).withValues(alpha: 0.5) : const Color(0xFFF8FAFC);
@@ -7582,8 +7722,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               const SizedBox(height: 8),
               _buildLeadDataRow('Lead Name', priorRow['name']?.toString() ?? '', textMuted),
               ...priorRowData.entries
-                  .where((e) => e.value != null && e.value.toString().trim().isNotEmpty)
-                  .take(8)
+                  .where((e) {
+                    final k = e.key.toLowerCase().trim();
+                    return !k.contains('phone') && !k.contains('mobile') && !k.contains('name') && !k.startsWith('empty') && e.value != null && e.value.toString().trim().isNotEmpty;
+                  })
+                  .take(6)
                   .map((e) => _buildLeadDataRow(e.key, _formatExcelCellValue(e.key, e.value), textMuted)),
             ],
           ),
@@ -7652,7 +7795,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with Status Badge
+          // Header with Status Badge & Lead History Action
           Row(
             children: [
               Icon(
@@ -7676,10 +7819,65 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           ),
           const SizedBox(height: 10),
 
-          _buildLeadDataRow('Lead Name', lead['name']?.toString() ?? 'Unnamed', textMuted, isHighlighted: true),
+          // Lead Name Row with History Icon right in front
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 145,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InkWell(
+                        onTap: () => _showDuplicateLeadHistoryModal(context, lead, isDark: isDark),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Tooltip(
+                          message: 'View Complete Lead History (from inception)',
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.25 : 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.4)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.history_rounded, size: 12, color: Color(0xFF6366F1)),
+                                SizedBox(width: 3),
+                                Text(
+                                  'History',
+                                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFF6366F1)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Lead Name',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    lead['name']?.toString() ?? 'Unnamed',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           _buildLeadDataRow('Phone Number', lead['phone']?.toString() ?? '', textMuted, isHighlighted: true),
-          if (lead['email'] != null && lead['email'].toString().isNotEmpty)
-            _buildLeadDataRow('Email Address', lead['email'].toString(), textMuted),
+          if (lead['email'] != null && lead['email'].toString().trim().isNotEmpty)
+            _buildLeadDataRow('Email Address', lead['email'].toString().trim(), textMuted),
 
           _buildLeadDataRow(
             'Allocated To',
@@ -7688,8 +7886,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             isHighlighted: lead['telecallerName'] != null,
             highlightColor: const Color(0xFF16A34A),
           ),
-          if (lead['assignedToName'] != null && lead['assignedToName'].toString().isNotEmpty)
-            _buildLeadDataRow('Sales Agent', lead['assignedToName'].toString(), textMuted),
+          if (lead['assignedToName'] != null && lead['assignedToName'].toString().trim().isNotEmpty)
+            _buildLeadDataRow('Sales Agent', lead['assignedToName'].toString().trim(), textMuted),
 
           if (lead['campaignName'] != null)
             _buildLeadDataRow(
@@ -7707,25 +7905,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               highlightColor: const Color(0xFFEA580C),
             ),
 
-          if (lastCallDisplay != null)
-            _buildLeadDataRow('Last Call', lastCallDisplay, textMuted),
-
           if (createdDisplay != null)
             _buildLeadDataRow('Date Added', createdDisplay, textMuted),
 
-          // Custom Fields from CRM
-          ...customFields.entries.where((e) {
-            final k = e.key.toLowerCase();
-            return k != 'phone' &&
-                k != 'name' &&
-                k != 'email' &&
-                k != 'countrycode' &&
-                k != 'isd' &&
-                e.value != null &&
-                e.value.toString().trim().isNotEmpty;
-          }).map((e) {
-            return _buildLeadDataRow(e.key, e.value.toString(), textMuted);
-          }),
+          if (lastCallDisplay != null)
+            _buildLeadDataRow('Last Call', lastCallDisplay, textMuted),
+
+          // Show only clean, high-value business fields (filtering out internal technical junk)
+          ...['Requirement', 'Project', 'Budget', 'Location', 'City', 'Source', 'Notes', 'Remarks']
+              .where((k) => customFields[k] != null && customFields[k].toString().trim().isNotEmpty)
+              .map((k) => _buildLeadDataRow(k, _formatExcelCellValue(k, customFields[k]), textMuted)),
         ],
       ),
     );
@@ -7784,24 +7973,416 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             _buildLeadDataRow('Phone Number', fallbackPhone, textMuted, isHighlighted: true),
             if (fallbackEmail.isNotEmpty) _buildLeadDataRow('Email Address', fallbackEmail, textMuted),
           ] else ...[
-            ...rowData.entries.where((e) {
-              return e.value != null && e.value.toString().trim().isNotEmpty;
-            }).map((e) {
-              final isKeyContact = e.key.toLowerCase().contains('phone') ||
-                  e.key.toLowerCase().contains('name') ||
-                  e.key.toLowerCase().contains('client');
-              final formattedVal = _formatExcelCellValue(e.key, e.value);
-              return _buildLeadDataRow(
-                e.key,
-                formattedVal,
+            _buildLeadDataRow(
+              'Lead Name',
+              fallbackName.isNotEmpty ? fallbackName : (rowData['Name']?.toString() ?? 'Unnamed'),
+              textMuted,
+              isHighlighted: true,
+            ),
+            _buildLeadDataRow(
+              'Phone Number',
+              fallbackPhone.isNotEmpty ? fallbackPhone : (rowData['Phone']?.toString() ?? ''),
+              textMuted,
+              isHighlighted: true,
+            ),
+            if (fallbackEmail.isNotEmpty || (rowData['Email'] != null && rowData['Email'].toString().isNotEmpty))
+              _buildLeadDataRow(
+                'Email Address',
+                fallbackEmail.isNotEmpty ? fallbackEmail : rowData['Email'].toString(),
                 textMuted,
-                isHighlighted: isKeyContact,
-                highlightColor: isKeyContact ? const Color(0xFF16A34A) : null,
-              );
+              ),
+
+            // Only show essential incoming columns, filtering out blank or raw empty columns
+            ...rowData.entries.where((e) {
+              final k = e.key.toLowerCase().trim();
+              if (k.contains('phone') || k.contains('mobile') || k.contains('name') || k.contains('email') || k.startsWith('empty') || k.startsWith('__empty')) {
+                return false;
+              }
+              final val = e.value?.toString().trim();
+              return val != null && val.isNotEmpty && val != 'null';
+            }).take(6).map((e) {
+              final formattedVal = _formatExcelCellValue(e.key, e.value);
+              return _buildLeadDataRow(e.key, formattedVal, textMuted);
             }),
           ],
         ],
       ),
+    );
+  }
+
+  void _showDuplicateLeadHistoryModal(
+    BuildContext context,
+    Map<String, dynamic> lead, {
+    required bool isDark,
+  }) {
+    final leadName = lead['name']?.toString() ?? 'Unnamed Lead';
+    final phone = lead['phone']?.toString() ?? '';
+    final email = lead['email']?.toString() ?? '';
+    final status = lead['status']?.toString() ?? 'NOT_STARTED';
+    final campaign = lead['campaignName']?.toString() ?? 'Campaign';
+    final project = lead['projectName']?.toString();
+    final telecaller = lead['telecallerName']?.toString();
+    final sales = lead['assignedToName']?.toString();
+    final createdVal = lead['createdAt']?.toString();
+    final customFields = lead['customFields'] is Map ? Map<String, dynamic>.from(lead['customFields'] as Map) : {};
+
+    // Gather all historical timeline events
+    final timeline = <Map<String, dynamic>>[];
+
+    // 1. Initial Creation Event
+    DateTime? createdDt;
+    if (createdVal != null) {
+      createdDt = DateTime.tryParse(createdVal);
+    }
+    timeline.add({
+      'time': createdDt ?? DateTime.fromMillisecondsSinceEpoch(0),
+      'title': 'Lead Created in CRM',
+      'subtitle': 'Campaign: $campaign${project != null ? ' ($project)' : ''}${lead['leadSource'] != null ? ' • Source: ${lead['leadSource']}' : ''}',
+      'type': 'CREATION',
+      'icon': Icons.fiber_new_rounded,
+      'color': const Color(0xFF16A34A),
+    });
+
+    // 2. Lead Events from leadEventHistory
+    final eventsRaw = lead['leadEventHistory'] ?? customFields['leadEventHistory'];
+    if (eventsRaw is List) {
+      for (final e in eventsRaw) {
+        if (e is Map) {
+          final dt = DateTime.tryParse(e['at']?.toString() ?? '');
+          final summary = e['summary']?.toString() ?? e['type']?.toString() ?? 'Event';
+          final by = e['by']?.toString();
+          timeline.add({
+            'time': dt ?? DateTime.fromMillisecondsSinceEpoch(0),
+            'title': summary,
+            'subtitle': by != null && by.isNotEmpty ? 'Logged by: $by' : null,
+            'type': 'EVENT',
+            'icon': Icons.bolt_rounded,
+            'color': const Color(0xFF0EA5E9),
+          });
+        }
+      }
+    }
+
+    // 3. Transfers from transferHistory
+    final transfersRaw = lead['transferHistory'] ?? customFields['transferHistory'];
+    if (transfersRaw is List) {
+      for (final t in transfersRaw) {
+        if (t is Map) {
+          final dt = DateTime.tryParse(t['transferredAt']?.toString() ?? '');
+          final fromName = t['fromName']?.toString() ?? 'Unassigned';
+          final toName = t['toName']?.toString() ?? 'Unassigned';
+          final remarks = t['remarks']?.toString();
+          timeline.add({
+            'time': dt ?? DateTime.fromMillisecondsSinceEpoch(0),
+            'title': 'Transferred: $fromName → $toName',
+            'subtitle': remarks != null && remarks.isNotEmpty ? 'Remarks: "$remarks"' : null,
+            'type': 'TRANSFER',
+            'icon': Icons.swap_horiz_rounded,
+            'color': const Color(0xFF8B5CF6),
+          });
+        }
+      }
+    }
+
+    // 4. Follow-ups
+    final followUpsRaw = lead['followUps'];
+    if (followUpsRaw is List) {
+      for (final f in followUpsRaw) {
+        if (f is Map) {
+          final dateStr = f['scheduledDate']?.toString();
+          final timeStr = f['scheduledTime']?.toString();
+          final remarks = f['remarks']?.toString();
+          final fuStatus = f['status']?.toString() ?? 'PENDING';
+          DateTime? dt;
+          if (dateStr != null) {
+            dt = DateTime.tryParse(dateStr);
+          }
+          final formattedDate = dt != null ? DateFormat('dd MMM yyyy').format(dt.toLocal()) : (dateStr ?? '');
+          timeline.add({
+            'time': dt ?? DateTime.fromMillisecondsSinceEpoch(0),
+            'title': 'Follow-up Scheduled: $formattedDate ${timeStr ?? ''}'.trim(),
+            'subtitle': 'Status: $fuStatus${remarks != null && remarks.isNotEmpty ? ' • Note: "$remarks"' : ''}',
+            'type': 'FOLLOW_UP',
+            'icon': Icons.event_note_rounded,
+            'color': const Color(0xFFEA580C),
+          });
+        }
+      }
+    }
+
+    // 5. Call Logs
+    final callLogsRaw = lead['callLogs'];
+    if (callLogsRaw is List) {
+      for (final c in callLogsRaw) {
+        if (c is Map) {
+          final callTimeStr = c['callTime']?.toString();
+          final duration = (c['duration'] as num?)?.toInt() ?? 0;
+          final callStatus = c['callStatus']?.toString() ?? 'COMPLETED';
+          final agentNumber = c['agentNumber']?.toString();
+          DateTime? dt;
+          if (callTimeStr != null) {
+            dt = DateTime.tryParse(callTimeStr);
+          }
+          final mins = duration ~/ 60;
+          final secs = duration % 60;
+          final durationStr = duration > 0 ? '${mins > 0 ? '${mins}m ' : ''}${secs}s' : '0s';
+          timeline.add({
+            'time': dt ?? DateTime.fromMillisecondsSinceEpoch(0),
+            'title': 'Phone Call ($callStatus) • $durationStr',
+            'subtitle': agentNumber != null ? 'Agent: $agentNumber' : null,
+            'type': 'CALL_LOG',
+            'icon': Icons.phone_in_talk_rounded,
+            'color': const Color(0xFF2563EB),
+          });
+        }
+      }
+    }
+
+    // Sort timeline: newest first
+    timeline.sort((a, b) => (b['time'] as DateTime).compareTo(a['time'] as DateTime));
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final screenWidth = MediaQuery.of(ctx).size.width;
+        final dialogWidth = screenWidth < 680 ? screenWidth * 0.94 : 640.0;
+        final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+        final textMuted = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
+        return Dialog(
+          backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: borderColor),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: dialogWidth,
+              maxHeight: 620,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Modal Header
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.6) : const Color(0xFFF8FAFC),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                    border: Border(bottom: BorderSide(color: borderColor)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.manage_history_rounded, size: 22, color: Color(0xFF6366F1)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    leadName,
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                _buildStatusBadgeMini(status, isDark),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '$phone${email.isNotEmpty ? ' • $email' : ''}',
+                              style: TextStyle(fontSize: 12, color: textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20),
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Quick Summary Stats Bar
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.3) : const Color(0xFFF1F5F9),
+                    border: Border(bottom: BorderSide(color: borderColor)),
+                  ),
+                  child: Wrap(
+                    spacing: 16,
+                    runSpacing: 6,
+                    children: [
+                      _buildModalStatItem(Icons.campaign_rounded, 'Campaign', campaign, isDark),
+                      if (telecaller != null && telecaller.isNotEmpty)
+                        _buildModalStatItem(Icons.headset_mic_rounded, 'Telecaller', telecaller, isDark),
+                      if (sales != null && sales.isNotEmpty)
+                        _buildModalStatItem(Icons.person_rounded, 'Sales Agent', sales, isDark),
+                      _buildModalStatItem(Icons.history_rounded, 'Total Events', '${timeline.length}', isDark),
+                    ],
+                  ),
+                ),
+
+                // Timeline List
+                Expanded(
+                  child: timeline.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.history_toggle_off_rounded, size: 36, color: textMuted),
+                              const SizedBox(height: 8),
+                              Text('No history records recorded yet', style: TextStyle(fontSize: 13, color: textMuted)),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                          itemCount: timeline.length,
+                          itemBuilder: (context, i) {
+                            final item = timeline[i];
+                            final dt = item['time'] as DateTime;
+                            final timeText = dt.millisecondsSinceEpoch > 0
+                                ? DateFormat('dd MMM yyyy, hh:mm a').format(dt.toLocal())
+                                : 'Initial';
+                            final isLast = i == timeline.length - 1;
+                            final color = item['color'] as Color;
+                            final icon = item['icon'] as IconData;
+
+                            return IntrinsicHeight(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Left Column: Dot and Vertical Line
+                                  Column(
+                                    children: [
+                                      Container(
+                                        width: 26,
+                                        height: 26,
+                                        decoration: BoxDecoration(
+                                          color: color.withValues(alpha: isDark ? 0.25 : 0.15),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: color, width: 1.6),
+                                        ),
+                                        child: Icon(icon, size: 14, color: color),
+                                      ),
+                                      if (!isLast)
+                                        Expanded(
+                                          child: Container(
+                                            width: 1.5,
+                                            color: borderColor,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Right Column: Event Content Card
+                                  Expanded(
+                                    child: Padding(
+                                      padding: EdgeInsets.only(bottom: isLast ? 0 : 16),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.5) : const Color(0xFFF8FAFC),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: borderColor),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    item['title']?.toString() ?? '',
+                                                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                                                  ),
+                                                ),
+                                                Text(
+                                                  timeText,
+                                                  style: TextStyle(fontSize: 10.5, color: textMuted, fontWeight: FontWeight.w500),
+                                                ),
+                                              ],
+                                            ),
+                                            if (item['subtitle'] != null && item['subtitle'].toString().isNotEmpty) ...[
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                item['subtitle'].toString(),
+                                                style: TextStyle(
+                                                  fontSize: 11.5,
+                                                  color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+
+                // Modal Footer
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.4) : const Color(0xFFF8FAFC),
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(15)),
+                    border: Border(top: BorderSide(color: borderColor)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6366F1),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Close', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildModalStatItem(IconData icon, String label, String value, bool isDark) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: const Color(0xFF6366F1)),
+        const SizedBox(width: 4),
+        Text('$label: ', style: TextStyle(fontSize: 11, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))),
+        Text(value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+      ],
     );
   }
 

@@ -2871,14 +2871,20 @@ export const crmService = {
         leadSource: true,
         createdAt: true,
         lastCallAt: true,
+        notInterestedReason: true,
+        notInterestedRemark: true,
         campaign: { select: { id: true, name: true, code: true, project: { select: { name: true } } } },
         telecaller: { select: { id: true, generalInfo: { select: { fullName: true } } } },
         assignedTo: { select: { id: true, generalInfo: { select: { fullName: true } } } },
         followUps: {
-          where: { status: 'PENDING' },
           orderBy: { scheduledDate: 'desc' },
-          take: 1,
-          select: { scheduledDate: true, scheduledTime: true, remarks: true, status: true },
+          take: 15,
+          select: { id: true, scheduledDate: true, scheduledTime: true, remarks: true, status: true, createdAt: true },
+        },
+        callLogs: {
+          orderBy: { callTime: 'desc' },
+          take: 15,
+          select: { id: true, callTime: true, duration: true, callStatus: true, agentNumber: true, recordingUrl: true },
         },
       },
     });
@@ -2897,7 +2903,14 @@ export const crmService = {
       leadSource?: string;
       createdAt: Date;
       lastCallAt?: Date | null;
+      notInterestedReason?: string | null;
+      notInterestedRemark?: string | null;
+      deletedAt?: Date | null;
       latestFollowUp?: { scheduledDate: Date; scheduledTime?: string | null; remarks?: string | null; status?: string | null } | null;
+      followUps?: any[];
+      callLogs?: any[];
+      leadEventHistory?: any[];
+      transferHistory?: any[];
       customFields: Record<string, any>;
     }
 
@@ -2910,6 +2923,8 @@ export const crmService = {
       const norm = normalizePhoneWithCountryCode(el.phone, elCc);
       const key = norm.dedupeKey;
       const isTargetCamp = el.campaignId === targetCampaignId;
+      const events = Array.isArray(cf.leadEventHistory) ? cf.leadEventHistory : [];
+      const transfers = Array.isArray(cf.transferHistory) ? cf.transferHistory : [];
       const leadMatch: EnrichedCrmLeadMatch = {
         id: el.id,
         name: el.name || 'Unnamed',
@@ -2923,7 +2938,13 @@ export const crmService = {
         leadSource: el.leadSource || undefined,
         createdAt: el.createdAt,
         lastCallAt: el.lastCallAt,
+        notInterestedReason: el.notInterestedReason,
+        notInterestedRemark: el.notInterestedRemark,
         latestFollowUp: el.followUps?.[0] || null,
+        followUps: el.followUps || [],
+        callLogs: el.callLogs || [],
+        leadEventHistory: events,
+        transferHistory: transfers,
         customFields: cf,
       };
 
@@ -3046,7 +3067,14 @@ export const crmService = {
               leadSource: match.leadSource,
               createdAt: match.createdAt,
               lastCallAt: match.lastCallAt,
+              notInterestedReason: match.notInterestedReason,
+              notInterestedRemark: match.notInterestedRemark,
+              deletedAt: match.deletedAt,
               latestFollowUp: match.latestFollowUp,
+              followUps: match.followUps,
+              callLogs: match.callLogs,
+              leadEventHistory: match.leadEventHistory,
+              transferHistory: match.transferHistory,
               customFields: match.customFields,
             },
             incomingRow: row,
@@ -3110,7 +3138,14 @@ export const crmService = {
               leadSource: match.leadSource,
               createdAt: match.createdAt,
               lastCallAt: match.lastCallAt,
+              notInterestedReason: match.notInterestedReason,
+              notInterestedRemark: match.notInterestedRemark,
+              deletedAt: match.deletedAt,
               latestFollowUp: match.latestFollowUp,
+              followUps: match.followUps,
+              callLogs: match.callLogs,
+              leadEventHistory: match.leadEventHistory,
+              transferHistory: match.transferHistory,
               customFields: match.customFields,
             },
             incomingRow: row,
@@ -3643,13 +3678,22 @@ export const crmService = {
           const searchPhone = norm.nationalNumber || phone;
           if (searchPhone || email) {
             const phoneFilter = searchPhone && searchPhone.length >= 7 ? searchPhone.slice(-10) : searchPhone;
-            const existing = await prisma.crmLead.findFirst({
+            let existing = await prisma.crmLead.findFirst({
               where: {
                 campaignId: targetCampaignId,
                 isDeleted: false,
-                phone: { contains: phoneFilter },
+                ...(phoneFilter ? { phone: { contains: phoneFilter } } : {}),
               },
             });
+            if (!existing && phoneFilter) {
+              existing = await prisma.crmLead.findFirst({
+                where: {
+                  scope: campaignScope,
+                  isDeleted: false,
+                  phone: { contains: phoneFilter },
+                },
+              });
+            }
             if (existing) {
               const currentCustom = (existing.customFields as Record<string, any>) || {};
               const mergedCustom = { ...currentCustom, ...customFields };
@@ -3664,6 +3708,62 @@ export const crmService = {
               updatedCount++;
               continue;
             }
+          }
+        }
+
+        // When duplicate lead from another campaign is explicitly KEPT to import into current campaign,
+        // delete it from that other campaign and import freshly into this campaign!
+        if (isExplicitlyKept && (phone || email)) {
+          const searchPhone = norm.nationalNumber || phone;
+          const phoneFilter = searchPhone && searchPhone.length >= 7 ? searchPhone.slice(-10) : searchPhone;
+          const otherCampaignLead = await prisma.crmLead.findFirst({
+            where: {
+              scope: campaignScope,
+              campaignId: { not: targetCampaignId },
+              isDeleted: false,
+              OR: [
+                ...(phoneFilter ? [{ phone: { contains: phoneFilter } }] : []),
+                ...(email ? [{ customFields: { path: ['email'], string_contains: email } }] : []),
+              ],
+            },
+            include: {
+              campaign: { select: { id: true, name: true } },
+            },
+          });
+
+          if (otherCampaignLead) {
+            const otherCustom = (otherCampaignLead.customFields as Record<string, any>) || {};
+            const events = Array.isArray(otherCustom.leadEventHistory) ? [...otherCustom.leadEventHistory] : [];
+            events.push({
+              at: new Date().toISOString(),
+              type: 'MOVED_TO_CAMPAIGN',
+              summary: `Moved to campaign "${targetCampaign?.name || targetCampaignId}" via Excel import (Row #${rowNumber}). Deleted from "${otherCampaignLead.campaign?.name || 'Previous Campaign'}".`,
+              by: createdById || 'SYSTEM',
+            });
+
+            // Soft-delete lead in other campaign
+            await prisma.crmLead.update({
+              where: { id: otherCampaignLead.id },
+              data: {
+                isDeleted: true,
+                deletedAt: new Date(),
+                customFields: {
+                  ...otherCustom,
+                  leadEventHistory: events,
+                  deletedReason: `Moved to campaign "${targetCampaign?.name || targetCampaignId}" via Excel import`,
+                },
+              },
+            });
+
+            // In new imported lead, link previous lead & campaign
+            customFields.transferredFromLeadId = otherCampaignLead.id;
+            customFields.transferredFromCampaign = otherCampaignLead.campaign?.name || otherCampaignLead.campaignId;
+            customFields = appendLeadEvent(customFields, {
+              type: 'IMPORTED_FROM_ANOTHER_CAMPAIGN',
+              summary: `Imported into "${targetCampaign?.name || targetCampaignId}" from previous campaign "${otherCampaignLead.campaign?.name || 'Previous'}". (Old lead #${otherCampaignLead.id.slice(0, 8)} deleted).`,
+              by: createdById || 'SYSTEM',
+              at: new Date().toISOString(),
+            });
           }
         }
 

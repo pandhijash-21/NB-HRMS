@@ -5751,8 +5751,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
           final screenWidth = MediaQuery.of(context).size.width;
           final screenHeight = MediaQuery.of(context).size.height;
-          final dialogWidth = screenWidth > 900 ? 860.0 : (screenWidth * 0.95);
-          final dialogHeight = (screenHeight * 0.88).clamp(520.0, 760.0);
+          // Make dialog spacious and large on desktop so all comparison fields and controls are clearly visible
+          final dialogWidth = screenWidth > 1400
+              ? (screenWidth * 0.94).clamp(1120.0, 1440.0)
+              : (screenWidth > 900 ? (screenWidth * 0.95).clamp(900.0, 1280.0) : (screenWidth * 0.98));
+          final dialogHeight = (screenHeight * 0.94).clamp(580.0, 980.0);
 
           return Dialog(
             backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
@@ -5760,7 +5763,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               borderRadius: BorderRadius.circular(12),
               side: BorderSide(color: borderColor),
             ),
-            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
             child: SizedBox(
               width: dialogWidth,
               height: dialogHeight,
@@ -6935,13 +6938,14 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       return true;
     }).toList();
 
-    final isNarrowScreen = MediaQuery.of(context).size.width < 760;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isNarrowScreen = screenWidth < 900;
 
     return Column(
       children: [
-        // Top Action & Filter Bar
+        // Top Action & Filter Bar (Compact & Comprehensive)
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.6) : const Color(0xFFF1F5F9),
             border: Border(bottom: BorderSide(color: borderColor)),
@@ -6954,35 +6958,38 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Row(
-                          children: [
-                            Text(
-                              '$totalCount duplicate leads identified',
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                            ),
-                            if (sameCampCount > 0) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFDC2626).withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  '$sameCampCount in Target Campaign',
-                                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Color(0xFFDC2626)),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 2),
                         Text(
-                          '$skipCount Skip • $updateCount Update CRM • $keepCount Import as New',
-                          style: TextStyle(fontSize: 11, color: textMuted),
+                          '$totalCount duplicate leads identified',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                        ),
+                        if (sameCampCount > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDC2626).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFFDC2626).withValues(alpha: 0.3)),
+                            ),
+                            child: Text(
+                              '$sameCampCount in Target Campaign',
+                              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Color(0xFFDC2626)),
+                            ),
+                          ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '$skipCount Skip • $updateCount Update • $keepCount Import New',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: textMuted),
+                          ),
                         ),
                       ],
                     ),
@@ -6993,11 +7000,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFFDC2626),
                       side: const BorderSide(color: Color(0xFFDC2626)),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       visualDensity: VisualDensity.compact,
                     ),
                     icon: const Icon(Icons.block_rounded, size: 14),
-                    label: const Text('Skip All', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                    label: const Text('Skip All', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
                     onPressed: () {
                       setModalState(() {
                         for (final d in duplicatesList) {
@@ -7013,11 +7020,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF2563EB),
                       side: const BorderSide(color: Color(0xFF2563EB)),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       visualDensity: VisualDensity.compact,
                     ),
                     icon: const Icon(Icons.sync_rounded, size: 14),
-                    label: const Text('Update All', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                    label: const Text('Update All', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
                     onPressed: () {
                       setModalState(() {
                         for (final d in duplicatesList) {
@@ -7033,11 +7040,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF16A34A),
                       side: const BorderSide(color: Color(0xFF16A34A)),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       visualDensity: VisualDensity.compact,
                     ),
                     icon: const Icon(Icons.add_circle_outline_rounded, size: 14),
-                    label: const Text('Keep All', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                    label: const Text('Keep All', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
                     onPressed: () {
                       setModalState(() {
                         for (final d in duplicatesList) {
@@ -7049,13 +7056,13 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               // Filter Chips Row
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    Text('Filter: ', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: textMuted)),
+                    Text('Filter Scope: ', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: textMuted)),
                     const SizedBox(width: 6),
                     _buildDuplicateFilterChip(
                       label: 'All Duplicates ($totalCount)',
@@ -7065,7 +7072,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     ),
                     const SizedBox(width: 6),
                     _buildDuplicateFilterChip(
-                      label: 'Target Campaign ($sameCampCount)',
+                      label: 'Target Campaign Only ($sameCampCount)',
                       isSelected: filterIndex == 1,
                       onTap: () => onFilterChanged(1),
                       isDark: isDark,
@@ -7152,7 +7159,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Card Header: Row Number, Match Reason & Current Decision Badge
+                          // Card Header: Row Number, Scope Badge & Quick Action Pills
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                             decoration: BoxDecoration(
@@ -7164,7 +7171,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               children: [
                                 Text(
                                   'Row #$rowNum',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
@@ -7202,34 +7209,38 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                     ],
                                   ),
                                 ),
-                                // Current Decision Indicator
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: decision == 'UPDATE'
-                                        ? const Color(0xFF2563EB).withValues(alpha: 0.15)
-                                        : (decision == 'KEEP'
-                                            ? const Color(0xFF16A34A).withValues(alpha: 0.15)
-                                            : const Color(0xFFDC2626).withValues(alpha: 0.12)),
-                                    borderRadius: BorderRadius.circular(5),
-                                    border: Border.all(
-                                      color: decision == 'UPDATE'
-                                          ? const Color(0xFF2563EB)
-                                          : (decision == 'KEEP' ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
+                                const SizedBox(width: 8),
+                                // Header Quick Action Pills (Interactive right in the header!)
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _buildHeaderActionPill(
+                                      label: 'Skip',
+                                      icon: Icons.block_rounded,
+                                      isSelected: decision == 'SKIP',
+                                      color: const Color(0xFFDC2626),
+                                      onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'SKIP'),
+                                      isDark: isDark,
                                     ),
-                                  ),
-                                  child: Text(
-                                    decision == 'UPDATE'
-                                        ? 'Will Update CRM Lead'
-                                        : (decision == 'KEEP' ? 'Will Import as New' : 'Will Skip (Ignored)'),
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: decision == 'UPDATE'
-                                          ? const Color(0xFF2563EB)
-                                          : (decision == 'KEEP' ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
+                                    const SizedBox(width: 4),
+                                    _buildHeaderActionPill(
+                                      label: 'Update CRM',
+                                      icon: Icons.sync_rounded,
+                                      isSelected: decision == 'UPDATE',
+                                      color: const Color(0xFF2563EB),
+                                      onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'UPDATE'),
+                                      isDark: isDark,
                                     ),
-                                  ),
+                                    const SizedBox(width: 4),
+                                    _buildHeaderActionPill(
+                                      label: 'Import New',
+                                      icon: Icons.add_circle_outline_rounded,
+                                      isSelected: decision == 'KEEP',
+                                      color: const Color(0xFF16A34A),
+                                      onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'KEEP'),
+                                      isDark: isDark,
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -7293,7 +7304,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                   ),
                           ),
 
-                          // Card Decision Action Bar
+                          // Card Explanatory Footer & Action Buttons
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
@@ -7301,39 +7312,78 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               borderRadius: const BorderRadius.vertical(bottom: Radius.circular(9)),
                               border: Border(top: BorderSide(color: borderColor)),
                             ),
-                            child: Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // Action 1: Skip (Default)
-                                _buildDecisionChoiceButton(
-                                  label: 'Skip Lead',
-                                  subtitle: 'Leave CRM lead unchanged',
-                                  icon: Icons.block_rounded,
-                                  isSelected: decision == 'SKIP',
-                                  color: const Color(0xFFDC2626),
-                                  onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'SKIP'),
-                                  isDark: isDark,
+                                // Action Consequence Banner
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        decision == 'UPDATE'
+                                            ? Icons.sync_rounded
+                                            : (decision == 'KEEP' ? Icons.add_circle_outline_rounded : Icons.info_outline_rounded),
+                                        size: 13,
+                                        color: decision == 'UPDATE'
+                                            ? const Color(0xFF2563EB)
+                                            : (decision == 'KEEP' ? const Color(0xFF16A34A) : textMuted),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Expanded(
+                                        child: Text(
+                                          decision == 'UPDATE'
+                                              ? 'Will overwrite and merge incoming Excel row into existing CRM lead (${existingLead?['phone'] ?? phone}).'
+                                              : (decision == 'KEEP'
+                                                  ? 'Will create a separate duplicate lead record in this campaign.'
+                                                  : 'Will skip row #$rowNum. Existing CRM lead (${existingLead?['phone'] ?? phone}) remains untouched.'),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: decision != 'SKIP' ? FontWeight.w600 : FontWeight.normal,
+                                            color: decision == 'UPDATE'
+                                                ? const Color(0xFF2563EB)
+                                                : (decision == 'KEEP' ? const Color(0xFF16A34A) : textMuted),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                const SizedBox(width: 8),
-                                // Action 2: Update CRM
-                                _buildDecisionChoiceButton(
-                                  label: 'Update CRM',
-                                  subtitle: 'Merge Excel fields into lead',
-                                  icon: Icons.sync_rounded,
-                                  isSelected: decision == 'UPDATE',
-                                  color: const Color(0xFF2563EB),
-                                  onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'UPDATE'),
-                                  isDark: isDark,
-                                ),
-                                const SizedBox(width: 8),
-                                // Action 3: Import as New
-                                _buildDecisionChoiceButton(
-                                  label: 'Import as New',
-                                  subtitle: 'Add duplicate lead anyway',
-                                  icon: Icons.add_circle_outline_rounded,
-                                  isSelected: decision == 'KEEP',
-                                  color: const Color(0xFF16A34A),
-                                  onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'KEEP'),
-                                  isDark: isDark,
+                                Row(
+                                  children: [
+                                    // Action 1: Skip (Default)
+                                    _buildDecisionChoiceButton(
+                                      label: 'Skip Lead',
+                                      subtitle: 'Leave CRM lead unchanged',
+                                      icon: Icons.block_rounded,
+                                      isSelected: decision == 'SKIP',
+                                      color: const Color(0xFFDC2626),
+                                      onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'SKIP'),
+                                      isDark: isDark,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    // Action 2: Update CRM
+                                    _buildDecisionChoiceButton(
+                                      label: 'Update CRM',
+                                      subtitle: 'Merge Excel fields into lead',
+                                      icon: Icons.sync_rounded,
+                                      isSelected: decision == 'UPDATE',
+                                      color: const Color(0xFF2563EB),
+                                      onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'UPDATE'),
+                                      isDark: isDark,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    // Action 3: Import as New
+                                    _buildDecisionChoiceButton(
+                                      label: 'Import as New',
+                                      subtitle: 'Add duplicate lead anyway',
+                                      icon: Icons.add_circle_outline_rounded,
+                                      isSelected: decision == 'KEEP',
+                                      color: const Color(0xFF16A34A),
+                                      onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'KEEP'),
+                                      isDark: isDark,
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -7345,6 +7395,55 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildHeaderActionPill({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required Color color,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? color : color.withValues(alpha: isDark ? 0.12 : 0.08),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSelected ? color : color.withValues(alpha: 0.3),
+            width: isSelected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 13,
+              color: isSelected ? Colors.white : color,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                color: isSelected ? Colors.white : color,
+              ),
+            ),
+            if (isSelected) ...[
+              const SizedBox(width: 3),
+              const Icon(Icons.check_rounded, size: 12, color: Colors.white),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -7398,7 +7497,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         borderRadius: BorderRadius.circular(8),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
             color: isSelected ? color.withValues(alpha: isDark ? 0.22 : 0.12) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
@@ -7484,8 +7583,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               _buildLeadDataRow('Lead Name', priorRow['name']?.toString() ?? '', textMuted),
               ...priorRowData.entries
                   .where((e) => e.value != null && e.value.toString().trim().isNotEmpty)
-                  .take(6)
-                  .map((e) => _buildLeadDataRow(e.key, e.value.toString(), textMuted)),
+                  .take(8)
+                  .map((e) => _buildLeadDataRow(e.key, _formatExcelCellValue(e.key, e.value), textMuted)),
             ],
           ),
         );
@@ -7547,7 +7646,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         color: bgColor,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isSameCampaign ? const Color(0xFFDC2626).withValues(alpha: 0.3) : borderColor,
+          color: isSameCampaign ? const Color(0xFFDC2626).withValues(alpha: 0.35) : borderColor,
         ),
       ),
       child: Column(
@@ -7558,7 +7657,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             children: [
               Icon(
                 Icons.business_rounded,
-                size: 14,
+                size: 15,
                 color: isSameCampaign ? const Color(0xFFDC2626) : const Color(0xFF2563EB),
               ),
               const SizedBox(width: 6),
@@ -7566,7 +7665,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 child: Text(
                   isSameCampaign ? 'Existing Lead in Target Campaign' : 'Existing Lead in CRM',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: isSameCampaign ? const Color(0xFFDC2626) : const Color(0xFF2563EB),
                   ),
@@ -7575,7 +7674,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               _buildStatusBadgeMini(statusStr, isDark),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
 
           _buildLeadDataRow('Lead Name', lead['name']?.toString() ?? 'Unnamed', textMuted, isHighlighted: true),
           _buildLeadDataRow('Phone Number', lead['phone']?.toString() ?? '', textMuted, isHighlighted: true),
@@ -7624,7 +7723,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 k != 'isd' &&
                 e.value != null &&
                 e.value.toString().trim().isNotEmpty;
-          }).take(6).map((e) {
+          }).map((e) {
             return _buildLeadDataRow(e.key, e.value.toString(), textMuted);
           }),
         ],
@@ -7657,28 +7756,28 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         children: [
           Row(
             children: [
-              const Icon(Icons.table_chart_rounded, size: 14, color: Color(0xFF16A34A)),
+              const Icon(Icons.table_chart_rounded, size: 15, color: Color(0xFF16A34A)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   'Incoming Excel Row (#$rowNumber)',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
                   color: const Color(0xFF16A34A).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: const Text(
                   'From Spreadsheet',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
+                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
 
           if (rowData.isEmpty) ...[
             _buildLeadDataRow('Lead Name', fallbackName, textMuted, isHighlighted: true),
@@ -7691,9 +7790,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               final isKeyContact = e.key.toLowerCase().contains('phone') ||
                   e.key.toLowerCase().contains('name') ||
                   e.key.toLowerCase().contains('client');
+              final formattedVal = _formatExcelCellValue(e.key, e.value);
               return _buildLeadDataRow(
                 e.key,
-                e.value.toString(),
+                formattedVal,
                 textMuted,
                 isHighlighted: isKeyContact,
                 highlightColor: isKeyContact ? const Color(0xFF16A34A) : null,
@@ -7705,6 +7805,25 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     );
   }
 
+  String _formatExcelCellValue(String key, dynamic rawVal) {
+    if (rawVal == null) return '';
+    final str = rawVal.toString().trim();
+    if (str.isEmpty) return '';
+
+    // Check for Excel serial date number (e.g. 46298 -> 20 Nov 2026)
+    final numVal = double.tryParse(str);
+    final keyLower = key.toLowerCase();
+    final isDateKey = keyLower.contains('date') || keyLower.contains('time') || keyLower.contains('created') || keyLower.contains('schedule');
+    if (numVal != null && numVal >= 35000 && numVal <= 65000 && (isDateKey || (numVal == numVal.roundToDouble() && numVal > 40000))) {
+      try {
+        final excelEpoch = DateTime(1899, 12, 30);
+        final date = excelEpoch.add(Duration(days: numVal.floor(), milliseconds: ((numVal % 1) * 86400000).round()));
+        return DateFormat('dd MMM yyyy').format(date);
+      } catch (_) {}
+    }
+    return str;
+  }
+
   Widget _buildLeadDataRow(
     String label,
     String value,
@@ -7714,25 +7833,27 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   }) {
     if (value.trim().isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 3.5),
+      padding: const EdgeInsets.only(bottom: 4.5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 105,
+            width: 145, // Generous width so "Scheduled Follow-up" fits in full without truncation
             child: Text(
               label,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: textMuted),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: textMuted,
+              ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               value,
               style: TextStyle(
-                fontSize: 11.5,
+                fontSize: 12,
                 fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
                 color: isHighlighted ? highlightColor : null,
               ),

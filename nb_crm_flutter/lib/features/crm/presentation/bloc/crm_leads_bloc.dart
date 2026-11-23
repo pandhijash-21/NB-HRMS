@@ -173,6 +173,8 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
     this.selectedHeaders,
     this.excludedRowNumbers,
     this.keepRowNumbers,
+    this.scheduleFollowUps = true,
+    this.customFollowUps,
   });
   final Uint8List fileBytes;
   final String fileName;
@@ -185,6 +187,8 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
   final List<String>? selectedHeaders;
   final List<int>? excludedRowNumbers;
   final List<int>? keepRowNumbers;
+  final bool scheduleFollowUps;
+  final List<Map<String, dynamic>>? customFollowUps;
 
   @override
   List<Object?> get props => [
@@ -199,6 +203,8 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
         selectedHeaders,
         excludedRowNumbers,
         keepRowNumbers,
+        scheduleFollowUps,
+        customFollowUps,
       ];
 }
 
@@ -998,6 +1004,8 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         selectedHeaders: event.selectedHeaders,
         excludedRowNumbers: event.excludedRowNumbers,
         keepRowNumbers: event.keepRowNumbers,
+        scheduleFollowUps: event.scheduleFollowUps,
+        customFollowUps: event.customFollowUps,
       );
       final count = res['count'] ?? 0;
       final msg = res['message'] ?? 'Imported $count leads';

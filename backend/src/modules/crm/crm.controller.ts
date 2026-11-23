@@ -256,6 +256,7 @@ export const crmController = {
         scope: getScope(req),
         fromDate: (req.query.fromDate || req.query.startDate) as string,
         toDate: (req.query.toDate || req.query.endDate) as string,
+        includeFollowUps: req.query.includeFollowUps === 'true' || (req.query.includeFollowUps as any) === true,
       });
 
       const dateTag = new Date().toISOString().split('T')[0];
@@ -374,6 +375,23 @@ export const crmController = {
         req.body.skipDuplicates !== 'false' &&
         req.body.skipDuplicates !== 0;
 
+      const scheduleFollowUps = req.body.scheduleFollowUps !== false &&
+        req.body.scheduleFollowUps !== 'false' &&
+        req.body.scheduleFollowUps !== 0 &&
+        req.body.scheduleFollowUps !== '0';
+
+      let customFollowUps: any[] | undefined = undefined;
+      if (req.body.customFollowUps) {
+        try {
+          const parsed = typeof req.body.customFollowUps === 'string'
+            ? JSON.parse(req.body.customFollowUps)
+            : req.body.customFollowUps;
+          if (Array.isArray(parsed)) {
+            customFollowUps = parsed;
+          }
+        } catch (_) {}
+      }
+
       const result = await crmService.importExcelLeads(
         req.file.buffer,
         authUser?.id,
@@ -390,6 +408,8 @@ export const crmController = {
           selectedHeaders,
           excludedRowNumbers,
           keepRowNumbers,
+          scheduleFollowUps,
+          customFollowUps,
         },
       );
       res.json(ok(result));

@@ -4414,6 +4414,90 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     CrmLeadsState state,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final cardBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
+    final textMuted = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
+    bool includeFollowUps = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: borderColor),
+            ),
+            title: const Row(
+              children: [
+                Icon(Icons.file_download_outlined, size: 20),
+                SizedBox(width: 8),
+                Text('Export Leads to Excel', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              ],
+            ),
+            content: SizedBox(
+              width: 440,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Export ${leadsToExport.length} leads matching current filters to an Excel (.xlsx) file.',
+                    style: TextStyle(fontSize: 13, color: textMuted),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: borderColor),
+                    ),
+                    child: CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: includeFollowUps,
+                      activeColor: const Color(0xFF16A34A),
+                      onChanged: (val) => setDialogState(() => includeFollowUps = val ?? false),
+                      title: const Text(
+                        'Include Scheduled Follow-ups',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        'Exports Followup Date, Time, Remarks & Status in standardized format so that re-importing this file automatically restores and schedules follow-ups.',
+                        style: TextStyle(fontSize: 11, color: textMuted),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              OutlinedButton(
+                onPressed: () => Navigator.pop(dialogCtx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF16A34A),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                icon: const Icon(Icons.file_download_outlined, size: 16),
+                label: const Text('Export Now'),
+                onPressed: () => Navigator.pop(dialogCtx, true),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (confirmed != true) return;
+
     try {
       messenger.showSnackBar(
         const SnackBar(
@@ -4441,6 +4525,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         search: state.search.isEmpty ? null : state.search,
         fromDate: state.fromDate,
         toDate: state.toDate,
+        includeFollowUps: includeFollowUps,
       );
 
       final dateTag = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
@@ -4454,7 +4539,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Successfully exported ${leadsToExport.length} leads to $fileName'),
+          content: Text('Successfully exported ${leadsToExport.length} leads to $fileName${includeFollowUps ? ' (with follow-ups)' : ''}'),
           backgroundColor: const Color(0xFF16A34A),
           duration: const Duration(seconds: 4),
         ),
@@ -4495,7 +4580,12 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     int validRowsCount = 0;
 
     int currentStep = 1; // 1: Destination, 2: Preview & Headers, 3: Allocation
-    int previewSubTab = 0; // 0: Headers, 1: Duplicates, 2: Sample Rows
+    int previewSubTab = 0; // 0: Headers, 1: Duplicates, 2: Follow-ups, 3: Sample Rows
+
+    // Follow-up scheduling state
+    bool scheduleFollowUps = true;
+    Map<String, dynamic>? followUpInfo;
+    List<Map<String, dynamic>> followUpList = [];
 
     String assignmentMode = 'ROUND_ROBIN';
     int? specificTelecallerId;
@@ -4564,6 +4654,14 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   previewRows = (res['previewRows'] as List)
                       .map((r) => Map<String, dynamic>.from(r as Map))
                       .toList();
+                }
+                if (res['followUpInfo'] is Map) {
+                  followUpInfo = Map<String, dynamic>.from(res['followUpInfo']);
+                  if (followUpInfo?['previewList'] is List) {
+                    followUpList = (followUpInfo!['previewList'] as List)
+                        .map((f) => Map<String, dynamic>.from(f as Map))
+                        .toList();
+                  }
                 }
               });
             } catch (e) {
@@ -4780,6 +4878,20 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                   setModalState(() => selectedSheet = newSheet);
                                   runPreview(selectedCampaignId, newSheet);
                                 },
+                                followUpList: followUpList,
+                                scheduleFollowUps: scheduleFollowUps,
+                                onScheduleFollowUpsChanged: (val) {
+                                  setModalState(() {
+                                    scheduleFollowUps = val;
+                                    if (scheduleFollowUps && followUpList.isNotEmpty) {
+                                      previewSubTab = 2;
+                                    }
+                                  });
+                                },
+                                onPreviewSubTabChanged: (val) {
+                                  setModalState(() => previewSubTab = val);
+                                },
+                                context: context,
                               )),
                   ),
 
@@ -4879,6 +4991,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       skipDuplicates: skipDuplicates,
                                       excludedRowNumbers: excludedRows,
                                       keepRowNumbers: keepRows,
+                                      scheduleFollowUps: scheduleFollowUps,
+                                      customFollowUps: scheduleFollowUps ? followUpList : null,
                                     ),
                                   );
                             },
@@ -4987,6 +5101,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     required int? specificTelecallerId,
     required void Function(String?) onCampaignChanged,
     required void Function(String?) onSheetChanged,
+    required List<Map<String, dynamic>> followUpList,
+    required bool scheduleFollowUps,
+    required void Function(bool) onScheduleFollowUpsChanged,
+    required void Function(int) onPreviewSubTabChanged,
+    required BuildContext context,
   }) {
     if (currentStep == 1) {
       // Step 1: Destination & Sheet Selection
@@ -5144,9 +5263,99 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   '${selectedHeaders.length} of ${detectedHeaders.length}',
                   isDark,
                 ),
+                if (followUpList.isNotEmpty)
+                  _buildMetricChip(
+                    'Follow-ups Detected',
+                    '${followUpList.length}',
+                    isDark,
+                    highlight: true,
+                  ),
               ],
             ),
           ),
+
+          // Follow-up Detection & Strategy Switcher Banner
+          if (followUpList.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: scheduleFollowUps
+                    ? primaryGreen.withValues(alpha: isDark ? 0.12 : 0.07)
+                    : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: scheduleFollowUps ? primaryGreen.withValues(alpha: 0.35) : borderColor,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'Follow-ups Detected in Sheet (${followUpList.length} leads)',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: scheduleFollowUps ? primaryGreen : (isDark ? Colors.white : Colors.black87),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: primaryGreen.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '${followUpList.where((f) => f['enabled'] != false).length} to schedule',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: primaryGreen,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          scheduleFollowUps
+                              ? 'Follow-ups will be scheduled directly into CRM for assigned telecallers with reminder date, time & remarks.'
+                              : 'Follow-up date/time will be kept as plain text columns in lead records without scheduling CRM reminders.',
+                          style: TextStyle(fontSize: 11, color: textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment<bool>(
+                        value: true,
+                        label: Text('Schedule in CRM', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                      ),
+                      ButtonSegment<bool>(
+                        value: false,
+                        label: Text('Text Only', style: TextStyle(fontSize: 11.5)),
+                      ),
+                    ],
+                    selected: {scheduleFollowUps},
+                    onSelectionChanged: (Set<bool> val) {
+                      onScheduleFollowUpsChanged(val.first);
+                    },
+                    style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Sub-tabs bar
           Container(
@@ -5159,21 +5368,30 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 _buildSubTabButton(
                   title: 'Column Headers (${detectedHeaders.length})',
                   isSelected: previewSubTab == 0,
-                  onTap: () => setModalState(() => previewSubTab = 0),
+                  onTap: () => onPreviewSubTabChanged(0),
                   primaryColor: primaryGreen,
                 ),
                 const SizedBox(width: 8),
                 _buildSubTabButton(
                   title: 'Duplicate Leads ($duplicateCount)',
                   isSelected: previewSubTab == 1,
-                  onTap: () => setModalState(() => previewSubTab = 1),
+                  onTap: () => onPreviewSubTabChanged(1),
                   primaryColor: primaryGreen,
                 ),
+                if (followUpList.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  _buildSubTabButton(
+                    title: 'Follow-ups Preview (${followUpList.length})',
+                    isSelected: previewSubTab == 2,
+                    onTap: () => onPreviewSubTabChanged(2),
+                    primaryColor: primaryGreen,
+                  ),
+                ],
                 const SizedBox(width: 8),
                 _buildSubTabButton(
                   title: 'Data Rows Preview (${previewRows.length})',
-                  isSelected: previewSubTab == 2,
-                  onTap: () => setModalState(() => previewSubTab = 2),
+                  isSelected: previewSubTab == 3 || (followUpList.isEmpty && previewSubTab == 2),
+                  onTap: () => onPreviewSubTabChanged(followUpList.isNotEmpty ? 3 : 2),
                   primaryColor: primaryGreen,
                 ),
               ],
@@ -5201,14 +5419,25 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         borderColor: borderColor,
                         isDark: isDark,
                       )
-                    : _buildRowsPreviewTab(
-                        previewRows: previewRows,
-                        detectedHeaders: detectedHeaders,
-                        selectedHeaders: selectedHeaders,
-                        borderColor: borderColor,
-                        textMuted: textMuted,
-                        isDark: isDark,
-                      )),
+                    : ((previewSubTab == 2 && followUpList.isNotEmpty)
+                        ? _buildImportFollowUpsTab(
+                            context: context,
+                            followUpList: followUpList,
+                            scheduleFollowUps: scheduleFollowUps,
+                            setModalState: setModalState,
+                            textMuted: textMuted,
+                            borderColor: borderColor,
+                            isDark: isDark,
+                            primaryColor: primaryGreen,
+                          )
+                        : _buildRowsPreviewTab(
+                            previewRows: previewRows,
+                            detectedHeaders: detectedHeaders,
+                            selectedHeaders: selectedHeaders,
+                            borderColor: borderColor,
+                            textMuted: textMuted,
+                            isDark: isDark,
+                          ))),
           ),
         ],
       );
@@ -5419,6 +5648,21 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     );
                   },
                 ),
+                if (followUpList.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Builder(
+                    builder: (_) {
+                      final scheduledCount = followUpList.where((f) => f['enabled'] != false).length;
+                      return _buildDetailField(
+                        'Scheduled Follow-ups',
+                        scheduleFollowUps
+                            ? '$scheduledCount follow-ups to schedule in CRM (${followUpList.length - scheduledCount} skipped)'
+                            : 'Kept as plain text columns only (CRM reminders disabled)',
+                        textMuted,
+                      );
+                    },
+                  ),
+                ],
               ],
             ),
           ),
@@ -5875,6 +6119,373 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                 ),
                               ),
                             ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImportFollowUpsTab({
+    required BuildContext context,
+    required List<Map<String, dynamic>> followUpList,
+    required bool scheduleFollowUps,
+    required void Function(void Function()) setModalState,
+    required Color textMuted,
+    required Color borderColor,
+    required bool isDark,
+    required Color primaryColor,
+  }) {
+    final scheduledCount = followUpList.where((f) => f['enabled'] != false).length;
+    final skippedCount = followUpList.length - scheduledCount;
+
+    return Column(
+      children: [
+        // Top Action Bar
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.5) : const Color(0xFFF1F5F9),
+            border: Border(bottom: BorderSide(color: borderColor)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${followUpList.length} follow-ups detected in sheet',
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      '$scheduledCount to Schedule • $skippedCount Skipped (Text Only)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheduledCount > 0 ? primaryColor : textMuted,
+                        fontWeight: scheduledCount > 0 ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // "Schedule All" Button
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor.withValues(alpha: 0.15),
+                  foregroundColor: primaryColor,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  visualDensity: VisualDensity.compact,
+                  side: BorderSide(color: primaryColor),
+                ),
+                icon: const Icon(Icons.check_rounded, size: 16),
+                label: const Text('Schedule All', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  setModalState(() {
+                    for (final f in followUpList) {
+                      f['enabled'] = true;
+                    }
+                  });
+                },
+              ),
+              const SizedBox(width: 8),
+              // "Skip All" Button
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFDC2626).withValues(alpha: 0.12),
+                  foregroundColor: const Color(0xFFDC2626),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  visualDensity: VisualDensity.compact,
+                  side: const BorderSide(color: Color(0xFFDC2626)),
+                ),
+                icon: const Icon(Icons.close_rounded, size: 16),
+                label: const Text('Skip All', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  setModalState(() {
+                    for (final f in followUpList) {
+                      f['enabled'] = false;
+                    }
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+
+        // List of Follow-up Rows
+        Expanded(
+          child: followUpList.isEmpty
+              ? Center(
+                  child: Text(
+                    'No follow-up dates detected in this sheet',
+                    style: TextStyle(fontSize: 12, color: textMuted),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: followUpList.length,
+                  separatorBuilder: (_, __) => Divider(height: 1, color: borderColor),
+                  itemBuilder: (ctx, idx) {
+                    final item = followUpList[idx];
+                    final isEnabled = item['enabled'] != false;
+                    final rowNum = item['rowNumber'] ?? (idx + 1);
+                    final leadName = item['leadName']?.toString() ?? 'Lead #$rowNum';
+                    final phone = item['phone']?.toString() ?? '';
+                    final dateStr = item['scheduledDate']?.toString() ?? '';
+                    final timeStr = item['scheduledTime']?.toString() ?? '10:00';
+                    final remarks = item['remarks']?.toString() ?? '';
+
+                    return Container(
+                      color: isEnabled
+                          ? primaryColor.withValues(alpha: isDark ? 0.08 : 0.04)
+                          : (isDark ? const Color(0xFF1E293B).withValues(alpha: 0.3) : const Color(0xFFF8FAFC)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Lead details & row number
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Row #$rowNum: ',
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textMuted),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        phone.isNotEmpty ? '$leadName • $phone' : leadName,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          decoration: isEnabled ? null : TextDecoration.lineThrough,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: isEnabled
+                                            ? primaryColor.withValues(alpha: 0.15)
+                                            : const Color(0xFFDC2626).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        isEnabled ? 'Will Schedule' : 'Text Only',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: isEnabled ? primaryColor : const Color(0xFFDC2626),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                // Inline editable remarks
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(4),
+                                  onTap: () async {
+                                    final controller = TextEditingController(text: remarks);
+                                    final newRemarks = await showDialog<String>(
+                                      context: context,
+                                      builder: (dCtx) => AlertDialog(
+                                        title: Text('Edit Remarks (Row #$rowNum)', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                                        content: TextField(
+                                          controller: controller,
+                                          maxLines: 3,
+                                          decoration: const InputDecoration(
+                                            hintText: 'Enter follow-up notes/remarks...',
+                                            border: OutlineInputBorder(),
+                                          ),
+                                        ),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel')),
+                                          ElevatedButton(onPressed: () => Navigator.pop(dCtx, controller.text), child: const Text('Save')),
+                                        ],
+                                      ),
+                                    );
+                                    if (newRemarks != null) {
+                                      setModalState(() {
+                                        item['remarks'] = newRemarks.trim();
+                                      });
+                                    }
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 2),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.edit_note_outlined, size: 14, color: textMuted),
+                                        const SizedBox(width: 4),
+                                        Flexible(
+                                          child: Text(
+                                            remarks.isNotEmpty ? remarks : 'Add remarks...',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: remarks.isNotEmpty ? textMuted : primaryColor,
+                                              fontStyle: remarks.isNotEmpty ? FontStyle.normal : FontStyle.italic,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+
+                          // Date picker button
+                          InkWell(
+                            borderRadius: BorderRadius.circular(6),
+                            onTap: () async {
+                              DateTime initDate = DateTime.tryParse(dateStr) ?? DateTime.now();
+                              if (initDate.isBefore(DateTime(2020))) initDate = DateTime.now();
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: initDate,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2035),
+                              );
+                              if (picked != null) {
+                                setModalState(() {
+                                  item['scheduledDate'] = DateFormat('yyyy-MM-dd').format(picked);
+                                });
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF334155) : const Color(0xFFEEF2F6),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: borderColor),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.calendar_today_outlined, size: 13, color: primaryColor),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    dateStr.isNotEmpty ? dateStr : 'Pick Date',
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+
+                          // Time picker button
+                          InkWell(
+                            borderRadius: BorderRadius.circular(6),
+                            onTap: () async {
+                              final parts = timeStr.split(':');
+                              final initHour = parts.isNotEmpty ? (int.tryParse(parts[0]) ?? 10) : 10;
+                              final initMin = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+                              final picked = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay(hour: initHour, minute: initMin),
+                              );
+                              if (picked != null) {
+                                final h = picked.hour.toString().padLeft(2, '0');
+                                final m = picked.minute.toString().padLeft(2, '0');
+                                setModalState(() {
+                                  item['scheduledTime'] = '$h:$m';
+                                });
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF334155) : const Color(0xFFEEF2F6),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: borderColor),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.access_time_rounded, size: 13, color: primaryColor),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    timeStr,
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+
+                          // Right Tick: Keep / Schedule
+                          Tooltip(
+                            message: 'Schedule follow-up',
+                            child: InkWell(
+                              onTap: () => setModalState(() => item['enabled'] = true),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: isEnabled
+                                      ? primaryColor
+                                      : primaryColor.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: primaryColor,
+                                    width: isEnabled ? 1.5 : 1,
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.check_rounded,
+                                  size: 15,
+                                  color: isEnabled ? Colors.white : primaryColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+
+                          // Wrong Tick: Skip / Text Only
+                          Tooltip(
+                            message: 'Skip (Keep as text only)',
+                            child: InkWell(
+                              onTap: () => setModalState(() => item['enabled'] = false),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: !isEnabled
+                                      ? const Color(0xFFDC2626)
+                                      : const Color(0xFFDC2626).withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: const Color(0xFFDC2626),
+                                    width: !isEnabled ? 1.5 : 1,
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  size: 15,
+                                  color: !isEnabled ? Colors.white : const Color(0xFFDC2626),
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),

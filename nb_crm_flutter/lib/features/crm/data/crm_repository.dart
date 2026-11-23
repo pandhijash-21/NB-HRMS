@@ -298,10 +298,14 @@ class CrmRepository {
     int? assignedToId,
     DateTime? fromDate,
     DateTime? toDate,
+    bool includeFollowUps = false,
   }) async {
     final query = <String, dynamic>{
       'scope': crmScopeNotifier.value,
     };
+    if (includeFollowUps) {
+      query['includeFollowUps'] = 'true';
+    }
     if (projectId != null && projectId != 'ALL' && projectId.isNotEmpty) {
       query['projectId'] = projectId;
     }
@@ -399,11 +403,17 @@ class CrmRepository {
     List<String>? selectedHeaders,
     List<int>? excludedRowNumbers,
     List<int>? keepRowNumbers,
+    bool scheduleFollowUps = true,
+    List<Map<String, dynamic>>? customFollowUps,
   }) async {
     final map = <String, dynamic>{
       'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
       'skipDuplicates': skipDuplicates,
+      'scheduleFollowUps': scheduleFollowUps,
     };
+    if (customFollowUps != null && customFollowUps.isNotEmpty) {
+      map['customFollowUps'] = jsonEncode(customFollowUps);
+    }
     if (campaignId != null && campaignId.isNotEmpty) {
       map['campaignId'] = campaignId;
     }

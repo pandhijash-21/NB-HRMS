@@ -1856,6 +1856,7 @@ export const crmService = {
     toDate?: string;
     startDate?: string;
     endDate?: string;
+    includeFollowUps?: boolean | string;
   }): Promise<Buffer> {
     const scope = query.scope || 'NB_DEVELOPER';
 
@@ -2044,6 +2045,17 @@ export const crmService = {
         '';
       if (remarksOut) {
         rowData['Remarks / Notes'] = remarksOut;
+      }
+
+      if (query.includeFollowUps === true || query.includeFollowUps === 'true') {
+        const f = lead.followUps?.[0];
+        const dateStr = f?.scheduledDate
+          ? (f.scheduledDate instanceof Date ? f.scheduledDate.toISOString().split('T')[0] : String(f.scheduledDate).split('T')[0])
+          : '';
+        rowData['Followup Date'] = dateStr;
+        rowData['Followup Time'] = f?.scheduledTime || (dateStr ? '10:00' : '');
+        rowData['Followup Remarks'] = f?.remarks || '';
+        rowData['Followup Status'] = f?.status || (dateStr ? 'PENDING' : '');
       }
 
       return rowData;
@@ -2540,6 +2552,172 @@ export const crmService = {
     return String(val).trim();
   },
 
+  _excelIsFollowUpDateHeader(lower: string): boolean {
+    const l = lower
+      .trim()
+      .toLowerCase()
+      .replace(/[_/\-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!l) return false;
+    if (
+      l.includes('lead date') ||
+      l.includes('created') ||
+      l.includes('last call') ||
+      l.includes('visit') ||
+      l.includes('site visit') ||
+      l.includes('dob') ||
+      l.includes('birth')
+    ) {
+      return false;
+    }
+    return (
+      l === 'followup date' ||
+      l === 'follow up date' ||
+      l === 'follow update' ||
+      l === 'next followup date' ||
+      l === 'next follow up date' ||
+      l === 'next call date' ||
+      l === 'next action date' ||
+      l === 'callback date' ||
+      l === 'call back date' ||
+      l === 'pending follow up' ||
+      l === 'pending followup' ||
+      l === 'scheduled call date' ||
+      l === 'followup' ||
+      l === 'follow up' ||
+      (l.includes('follow') && l.includes('date')) ||
+      (l.includes('next') && l.includes('call') && l.includes('date')) ||
+      (l.includes('callback') && l.includes('date'))
+    );
+  },
+
+  _excelIsFollowUpTimeHeader(lower: string): boolean {
+    const l = lower
+      .trim()
+      .toLowerCase()
+      .replace(/[_/\-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!l) return false;
+    if (l.includes('created') || l.includes('visit') || l.includes('last call')) return false;
+    return (
+      l === 'followup time' ||
+      l === 'follow up time' ||
+      l === 'follow uptime' ||
+      l === 'next followup time' ||
+      l === 'next follow up time' ||
+      l === 'next call time' ||
+      l === 'callback time' ||
+      l === 'call back time' ||
+      l === 'scheduled time' ||
+      l === 'call time' ||
+      (l.includes('follow') && l.includes('time')) ||
+      (l.includes('callback') && l.includes('time'))
+    );
+  },
+
+  _excelIsFollowUpRemarksHeader(lower: string): boolean {
+    const l = lower
+      .trim()
+      .toLowerCase()
+      .replace(/[_/\-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!l) return false;
+    return (
+      l === 'followup remarks' ||
+      l === 'follow up remarks' ||
+      l === 'followup notes' ||
+      l === 'follow up notes' ||
+      l === 'followup comment' ||
+      l === 'follow up comments' ||
+      l === 'next action remarks' ||
+      l === 'callback remarks' ||
+      l === 'callback notes' ||
+      (l.includes('follow') && (l.includes('remark') || l.includes('note') || l.includes('comment')))
+    );
+  },
+
+  _parseExcelDate(val: unknown): Date | null {
+    if (val === null || val === undefined || val === '') return null;
+    if (val instanceof Date && !isNaN(val.getTime())) {
+      return val;
+    }
+    if (typeof val === 'number') {
+      if (val > 10000 && val < 100000) {
+        // Excel serial date to JS Date
+        const ms = Math.round((val - 25569) * 86400 * 1000);
+        const d = new Date(ms);
+        if (!isNaN(d.getTime())) return d;
+      }
+      return null;
+    }
+    const str = String(val).trim();
+    if (!str) return null;
+
+    // YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+    const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    if (ymdMatch) {
+      const y = parseInt(ymdMatch[1], 10);
+      const m = parseInt(ymdMatch[2], 10) - 1;
+      const d = parseInt(ymdMatch[3], 10);
+      const dateObj = new Date(Date.UTC(y, m, d, 0, 0, 0));
+      if (!isNaN(dateObj.getTime())) return dateObj;
+    }
+
+    // DD-MM-YYYY or DD/MM/YYYY
+    const dmyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+    if (dmyMatch) {
+      const d = parseInt(dmyMatch[1], 10);
+      const m = parseInt(dmyMatch[2], 10) - 1;
+      const y = parseInt(dmyMatch[3], 10);
+      const dateObj = new Date(Date.UTC(y, m, d, 0, 0, 0));
+      if (!isNaN(dateObj.getTime())) return dateObj;
+    }
+
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      return parsed;
+    }
+    return null;
+  },
+
+  _parseExcelTime(val: unknown): string {
+    if (val === null || val === undefined || val === '') return '10:00';
+    if (typeof val === 'number') {
+      if (val >= 0 && val < 1) {
+        const totalMinutes = Math.round(val * 24 * 60);
+        const hrs = Math.floor(totalMinutes / 60) % 24;
+        const mins = totalMinutes % 60;
+        return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+      }
+    }
+    const str = String(val).trim();
+    if (!str) return '10:00';
+
+    // 12-hour format e.g. "10:30 AM", "2:45 pm"
+    const ampmMatch = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)$/i);
+    if (ampmMatch) {
+      let hrs = parseInt(ampmMatch[1], 10);
+      const mins = parseInt(ampmMatch[2], 10);
+      const isPm = ampmMatch[3].toLowerCase() === 'pm';
+      if (isPm && hrs < 12) hrs += 12;
+      if (!isPm && hrs === 12) hrs = 0;
+      return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    }
+
+    // 24-hour format e.g. "14:30" or "09:15:00"
+    const hmsMatch = str.match(/^(\d{1,2}):(\d{2})/);
+    if (hmsMatch) {
+      const hrs = parseInt(hmsMatch[1], 10) % 24;
+      const mins = parseInt(hmsMatch[2], 10) % 60;
+      return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    }
+
+    return '10:00';
+  },
+
   async previewExcelLeads(
     fileBuffer: Buffer,
     campaignId?: string,
@@ -2832,6 +3010,81 @@ export const crmService = {
       }
     });
 
+    // Detect scheduled follow-up headers
+    let detectedFollowUpDateHeader: string | undefined;
+    let detectedFollowUpTimeHeader: string | undefined;
+    let detectedFollowUpRemarksHeader: string | undefined;
+
+    for (const h of orderedHeaders) {
+      const lower = h.toLowerCase().trim();
+      if (!detectedFollowUpDateHeader && this._excelIsFollowUpDateHeader(lower)) {
+        detectedFollowUpDateHeader = h;
+      }
+      if (!detectedFollowUpTimeHeader && this._excelIsFollowUpTimeHeader(lower)) {
+        detectedFollowUpTimeHeader = h;
+      }
+      if (!detectedFollowUpRemarksHeader && this._excelIsFollowUpRemarksHeader(lower)) {
+        detectedFollowUpRemarksHeader = h;
+      }
+    }
+
+    const followUpPreviewList: Array<{
+      rowNumber: number;
+      leadName: string;
+      phone: string;
+      scheduledDate: string;
+      scheduledTime: string;
+      remarks: string;
+      enabled: boolean;
+    }> = [];
+
+    if (detectedFollowUpDateHeader) {
+      rows.forEach((row, idx) => {
+        const rawDateVal = row[detectedFollowUpDateHeader!];
+        const parsedDate = this._parseExcelDate(rawDateVal);
+        if (!parsedDate) return;
+
+        const dateStr = parsedDate.toISOString().split('T')[0];
+        let timeStr = '10:00';
+        if (detectedFollowUpTimeHeader && row[detectedFollowUpTimeHeader]) {
+          timeStr = this._parseExcelTime(row[detectedFollowUpTimeHeader]);
+        } else if (typeof rawDateVal === 'string' && rawDateVal.includes(':')) {
+          timeStr = this._parseExcelTime(rawDateVal);
+        }
+
+        let remStr = '';
+        if (detectedFollowUpRemarksHeader && row[detectedFollowUpRemarksHeader]) {
+          remStr = this._excelCellToString(row[detectedFollowUpRemarksHeader]);
+        } else {
+          for (const [h, v] of Object.entries(row)) {
+            if (this._excelIsRemarksHeader(h.toLowerCase().trim()) && v) {
+              remStr = this._excelCellToString(v);
+              break;
+            }
+          }
+        }
+
+        let name = '';
+        let phone = '';
+        for (const [h, v] of Object.entries(row)) {
+          const lower = h.toLowerCase().trim();
+          const strVal = this._excelCellToString(v);
+          if (!name && this._excelIsNameHeader(lower)) name = strVal;
+          if (!phone && this._excelIsPhoneHeader(lower)) phone = strVal;
+        }
+
+        followUpPreviewList.push({
+          rowNumber: idx + 1,
+          leadName: name || `Lead #${idx + 1}`,
+          phone: phone || '',
+          scheduledDate: dateStr,
+          scheduledTime: timeStr,
+          remarks: remStr || '',
+          enabled: true,
+        });
+      });
+    }
+
     // Preview first 10 rows
     const previewRows = rows.slice(0, 10).map((r, i) => {
       const sanitized: Record<string, string> = { _rowNumber: String(i + 1) };
@@ -2857,6 +3110,14 @@ export const crmService = {
         duplicateCount: duplicateList.length,
         duplicateList: duplicateList.slice(0, 100),
       },
+      followUpInfo: {
+        detected: followUpPreviewList.length > 0,
+        totalDetectedCount: followUpPreviewList.length,
+        dateHeader: detectedFollowUpDateHeader,
+        timeHeader: detectedFollowUpTimeHeader,
+        remarksHeader: detectedFollowUpRemarksHeader,
+        previewList: followUpPreviewList,
+      },
       previewRows,
       validRowsCount: Math.max(0, rows.length - duplicateList.length),
     };
@@ -2878,6 +3139,14 @@ export const crmService = {
       selectedHeaders?: string[];
       excludedRowNumbers?: number[];
       keepRowNumbers?: number[];
+      scheduleFollowUps?: boolean;
+      customFollowUps?: Array<{
+        rowNumber: number;
+        scheduledDate: string;
+        scheduledTime?: string;
+        remarks?: string;
+        enabled?: boolean;
+      }>;
     },
   ) {
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
@@ -3073,6 +3342,38 @@ export const crmService = {
     const importBatchId = crypto.randomUUID();
     const importedAt = new Date().toISOString();
     const importFileName = options?.fileName || targetSheetName || 'excel-import.xlsx';
+
+    // Follow-up detection and custom follow-up mapping
+    let detectedFollowUpDateHeader: string | undefined;
+    let detectedFollowUpTimeHeader: string | undefined;
+    let detectedFollowUpRemarksHeader: string | undefined;
+
+    for (const h of sheetHeaders) {
+      const lower = h.toLowerCase().trim();
+      if (!detectedFollowUpDateHeader && this._excelIsFollowUpDateHeader(lower)) {
+        detectedFollowUpDateHeader = h;
+      }
+      if (!detectedFollowUpTimeHeader && this._excelIsFollowUpTimeHeader(lower)) {
+        detectedFollowUpTimeHeader = h;
+      }
+      if (!detectedFollowUpRemarksHeader && this._excelIsFollowUpRemarksHeader(lower)) {
+        detectedFollowUpRemarksHeader = h;
+      }
+    }
+
+    const followUpMap = new Map<number, { scheduledDate: string; scheduledTime?: string; remarks?: string; enabled: boolean }>();
+    if (options?.customFollowUps && options.customFollowUps.length > 0) {
+      for (const fu of options.customFollowUps) {
+        if (fu && fu.rowNumber && fu.enabled !== false) {
+          followUpMap.set(fu.rowNumber, {
+            scheduledDate: fu.scheduledDate,
+            scheduledTime: fu.scheduledTime,
+            remarks: fu.remarks,
+            enabled: true,
+          });
+        }
+      }
+    }
 
     let insertedCount = 0;
     const leadsToInsert: any[] = [];
@@ -3297,26 +3598,68 @@ export const crmService = {
         });
 
         leadsToInsert.push({
-          campaignId: targetCampaignId,
-          scope: campaignScope,
-          phone: phone || 'N/A',
-          name: name || 'Unnamed Lead',
-          status: CrmLeadStatus.NOT_STARTED,
-          customFields,
-          leadSource: 'EXCEL',
-          telecallerId: rowTelecallerId || null,
-          assignedToId: null,
-          createdById,
+          rowNumber,
+          rawRow: row,
+          data: {
+            campaignId: targetCampaignId,
+            scope: campaignScope,
+            phone: phone || 'N/A',
+            name: name || 'Unnamed Lead',
+            status: CrmLeadStatus.NOT_STARTED,
+            customFields,
+            leadSource: 'EXCEL',
+            telecallerId: rowTelecallerId || null,
+            assignedToId: null,
+            createdById,
+          },
         });
       }
     }
 
     const campaignProjectName = targetCampaign?.project?.name || (campaignScope === 'NB_FINSERVE' ? 'NB Capital' : 'Legacy Tower');
 
+    let scheduledFollowUpsCount = 0;
     if (leadsToInsert.length > 0) {
-      for (const lead of leadsToInsert) {
-        const createdLead = await prisma.crmLead.create({ data: lead });
+      for (const item of leadsToInsert) {
+        const createdLead = await prisma.crmLead.create({ data: item.data });
         insertedCount++;
+
+        // Schedule follow-up if requested
+        if (options?.scheduleFollowUps === true) {
+          let fuData = followUpMap.get(item.rowNumber);
+          if (!fuData && detectedFollowUpDateHeader && item.rawRow[detectedFollowUpDateHeader]) {
+            const parsedD = this._parseExcelDate(item.rawRow[detectedFollowUpDateHeader]);
+            if (parsedD) {
+              const dateStr = parsedD.toISOString().split('T')[0];
+              const timeStr = detectedFollowUpTimeHeader ? this._parseExcelTime(item.rawRow[detectedFollowUpTimeHeader]) : '10:00';
+              const remStr = detectedFollowUpRemarksHeader ? this._excelCellToString(item.rawRow[detectedFollowUpRemarksHeader]) : '';
+              fuData = { scheduledDate: dateStr, scheduledTime: timeStr, remarks: remStr, enabled: true };
+            }
+          }
+
+          if (fuData && fuData.enabled !== false && fuData.scheduledDate) {
+            const scheduledD = this._parseExcelDate(fuData.scheduledDate);
+            if (scheduledD) {
+              const scheduledT = this._parseExcelTime(fuData.scheduledTime || '10:00');
+              await prisma.crmFollowUp.create({
+                data: {
+                  leadId: createdLead.id,
+                  scheduledDate: scheduledD,
+                  scheduledTime: scheduledT,
+                  remarks: fuData.remarks ? String(fuData.remarks).trim() : null,
+                  status: 'PENDING',
+                  assignedToId: createdLead.telecallerId || createdLead.assignedToId || null,
+                  createdById,
+                },
+              });
+              await prisma.crmLead.update({
+                where: { id: createdLead.id },
+                data: { status: CrmLeadStatus.FOLLOW_UP },
+              });
+              scheduledFollowUpsCount++;
+            }
+          }
+        }
 
         // WhatsApp Automation: Auto-welcome message with brochure on Excel imported lead
         whatsappService
@@ -3342,6 +3685,7 @@ export const crmService = {
     return {
       count: insertedCount,
       skippedDuplicates: skippedDuplicatesCount,
+      scheduledFollowUpsCount,
       totalRows: rows.length,
       importBatchId: insertedCount > 0 ? importBatchId : null,
       importFileName,
@@ -3350,8 +3694,8 @@ export const crmService = {
       dispatchedCount: dispatchResult.dispatchedCount,
       queuedCount: dispatchResult.remainingQueuedCount,
       message: skippedDuplicatesCount > 0
-        ? `Successfully imported ${insertedCount} Excel leads (${skippedDuplicatesCount} duplicates skipped). Batch: ${importBatchId.slice(0, 8)}…`
-        : `Successfully imported ${insertedCount} Excel leads (${dispatchResult.dispatchedCount} dispatched, ${dispatchResult.remainingQueuedCount} waiting). Batch: ${importBatchId.slice(0, 8)}…`,
+        ? `Successfully imported ${insertedCount} Excel leads (${scheduledFollowUpsCount > 0 ? `${scheduledFollowUpsCount} follow-ups scheduled, ` : ''}${skippedDuplicatesCount} duplicates skipped). Batch: ${importBatchId.slice(0, 8)}…`
+        : `Successfully imported ${insertedCount} Excel leads (${scheduledFollowUpsCount > 0 ? `${scheduledFollowUpsCount} follow-ups scheduled, ` : ''}${dispatchResult.dispatchedCount} dispatched, ${dispatchResult.remainingQueuedCount} waiting). Batch: ${importBatchId.slice(0, 8)}…`,
     };
   },
 

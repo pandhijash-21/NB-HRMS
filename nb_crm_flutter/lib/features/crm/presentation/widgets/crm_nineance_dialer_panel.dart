@@ -202,6 +202,8 @@ class _CrmNineanceDialerPanelState extends State<CrmNineanceDialerPanel> {
                           ? blockers
                           : 'Use click-to-call on leads. Expand for live calls.'),
               style: const TextStyle(color: Colors.white70, fontSize: 11),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             trailing: IconButton(
               icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more, color: Colors.white70),

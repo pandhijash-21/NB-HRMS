@@ -113,6 +113,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   String? _focusLeadId;
   bool _focusLeadHandled = false;
   bool _isFullScreenActive = false;
+  bool? _cardViewPreference;
 
   @override
   void initState() {
@@ -1600,6 +1601,24 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             );
           }
 
+          Widget buildViewModeToggle() {
+            final isMobileScreen = MediaQuery.sizeOf(context).width < 700;
+            final isCard = _cardViewPreference ?? isMobileScreen;
+            return Tooltip(
+              message: isCard ? 'Switch to Table View' : 'Switch to Cards View',
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _cardViewPreference = !isCard;
+                  });
+                },
+                icon: Icon(isCard ? Icons.table_chart_rounded : Icons.view_agenda_rounded, size: 16),
+                label: Text(isCard ? 'Table' : 'Cards', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                style: secondaryOutlineStyle(),
+              ),
+            );
+          }
+
           Widget buildFullScreenButton() {
             return Tooltip(
               message: 'Enter Full Screen Focus Mode (Dialer & Leads Table only)',
@@ -1633,6 +1652,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                             children: [
                               Expanded(child: buildSearchField()),
                               const SizedBox(width: 8),
+                              buildViewModeToggle(),
+                              const SizedBox(width: 8),
                               buildFullScreenButton(),
                             ],
                           ),
@@ -1659,6 +1680,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           Expanded(flex: 2, child: buildCampaignSelector()),
                           const SizedBox(width: 10),
                           if (canWrite) buildActionsRow(),
+                          const SizedBox(width: 8),
+                          buildViewModeToggle(),
                           const SizedBox(width: 8),
                           buildFullScreenButton(),
                         ],
@@ -1707,6 +1730,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     required Color primaryColor,
     ScrollController? horizontalController,
     VoidCallback? onStateUpdated,
+    bool? isCardView,
   }) {
     final authState = context.read<AuthBloc>().state;
     final state = context.read<CrmLeadsBloc>().state;
@@ -1758,6 +1782,45 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
     final totalPages = (filteredLeads.length / _leadsPageSize).ceil().clamp(1, 999999);
     if (_leadsPage >= totalPages) _leadsPage = totalPages - 1;
+
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
+    final effectiveIsCardView = isCardView ?? _cardViewPreference ?? isMobile;
+
+    if (effectiveIsCardView) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildLeadsCardList(
+            context: context,
+            filteredLeads: filteredLeads,
+            columns: columns,
+            salesUsers: salesUsers,
+            isAdmin: isAdmin,
+            canWrite: canWrite,
+            canTransfer: canTransfer,
+            isFinserve: isFinserve,
+            userEmployeeId: userEmployeeId,
+            isDark: isDark,
+            cardBg: cardBg,
+            borderColor: borderColor,
+            textMuted: textMuted,
+            primaryColor: primaryColor,
+            onStateUpdated: onStateUpdated,
+          ),
+          const SizedBox(height: 10),
+          _buildLeadsPaginationBar(
+            total: filteredLeads.length,
+            isDark: isDark,
+            borderColor: borderColor,
+            cardBg: cardBg,
+            textMuted: textMuted,
+            primaryColor: primaryColor,
+            onPageChanged: onStateUpdated,
+          ),
+        ],
+      );
+    }
 
     final scrollCtrl = horizontalController ?? _horizontalScrollController;
 
@@ -2566,6 +2629,573 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         ],
       ),
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mobile / Adaptive Leads Card List View
+  // ---------------------------------------------------------------------------
+  Widget _buildLeadsCardList({
+    required BuildContext context,
+    required List<CrmLead> filteredLeads,
+    required List<CrmColumnConfig> columns,
+    required List<CrmSalesUser> salesUsers,
+    required bool isAdmin,
+    required bool canWrite,
+    required bool canTransfer,
+    required bool isFinserve,
+    required int? userEmployeeId,
+    required bool isDark,
+    required Color cardBg,
+    required Color borderColor,
+    required Color textMuted,
+    required Color primaryColor,
+    VoidCallback? onStateUpdated,
+  }) {
+    final authState = context.read<AuthBloc>().state;
+    final totalPages = (filteredLeads.length / _leadsPageSize).ceil().clamp(1, 999999);
+    final page = _leadsPage.clamp(0, totalPages - 1);
+    final start = page * _leadsPageSize;
+    final end = (start + _leadsPageSize).clamp(0, filteredLeads.length);
+    final pagedLeads = filteredLeads.sublist(start, end);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (isAdmin)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: borderColor),
+              ),
+              child: Row(
+                children: [
+                  Checkbox(
+                    tristate: true,
+                    value: filteredLeads.isEmpty
+                        ? false
+                        : (filteredLeads.every((l) => _bulkTransferSelectedIds.contains(l.id))
+                            ? true
+                            : (filteredLeads.any((l) => _bulkTransferSelectedIds.contains(l.id))
+                                ? null
+                                : false)),
+                    onChanged: (val) {
+                      setState(() {
+                        if (val == true) {
+                          _bulkTransferSelectedIds.addAll(filteredLeads.map((l) => l.id));
+                        } else {
+                          for (final l in filteredLeads) {
+                            _bulkTransferSelectedIds.remove(l.id);
+                          }
+                        }
+                      });
+                      onStateUpdated?.call();
+                    },
+                  ),
+                  Text(
+                    _bulkTransferSelectedIds.isEmpty
+                        ? 'Select all for transfer'
+                        : '${_bulkTransferSelectedIds.length} leads selected',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _bulkTransferSelectedIds.isNotEmpty ? primaryColor : textMuted,
+                    ),
+                  ),
+                  if (_bulkTransferSelectedIds.isNotEmpty) ...[
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () {
+                        setState(() => _bulkTransferSelectedIds.clear());
+                        onStateUpdated?.call();
+                      },
+                      child: const Text('Clear', style: TextStyle(fontSize: 11)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ...List.generate(pagedLeads.length, (i) {
+          final lead = pagedLeads[i];
+          final displayIndex = start + i;
+
+          final isAssignedToSales = lead.assignedToId != null;
+          final isAssignedSalesRep = userEmployeeId != null && userEmployeeId == lead.assignedToId;
+          final isBooked = lead.status == CrmStatus.bookingConfirmed || lead.proposals.any((p) => p.isBooked);
+          final isBlockedForTelecaller = (isAssignedToSales && !isAdmin && !isAssignedSalesRep) || isBooked;
+          final canAlterLead = canWrite && !isBlockedForTelecaller && !isBooked;
+
+          final isBulkSelected = _bulkTransferSelectedIds.contains(lead.id);
+          final isFocusLead = _focusLeadId != null && lead.id == _focusLeadId;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isFocusLead
+                    ? const Color(0xFF0EA5E9)
+                    : isBulkSelected
+                        ? primaryColor
+                        : borderColor,
+                width: isFocusLead || isBulkSelected ? 1.6 : 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => _showLeadInfoDialog(context, lead, isAdmin: isAdmin),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Row 1: Checkbox (if admin), Index, Name, Status Dropdown
+                      Row(
+                        children: [
+                          if (isAdmin) ...[
+                            SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: Checkbox(
+                                value: isBulkSelected,
+                                onChanged: (val) {
+                                  setState(() {
+                                    if (val == true) {
+                                      _bulkTransferSelectedIds.add(lead.id);
+                                    } else {
+                                      _bulkTransferSelectedIds.remove(lead.id);
+                                    }
+                                  });
+                                  onStateUpdated?.call();
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '#${displayIndex + 1}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: textMuted,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              lead.name.trim().isNotEmpty ? lead.name : 'Unknown Client',
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          _buildStatusDropdown(context, lead, canAlterLead, salesUsers),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Row 2: Phone number container with 1-Tap Call & WhatsApp
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white.withValues(alpha: 0.03) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: borderColor.withValues(alpha: 0.6)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.phone_rounded, size: 14, color: textMuted),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: SelectableText(
+                                lead.phone.isNotEmpty ? _displayPhone(lead.phone) : 'No phone number',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: lead.phone.isNotEmpty
+                                      ? (isDark ? Colors.white : const Color(0xFF1E293B))
+                                      : textMuted,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Send WhatsApp',
+                              icon: const Icon(Icons.chat_bubble_rounded, size: 17, color: Color(0xFF22C55E)),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                              onPressed: () => showSendWhatsappDialog(context, lead: lead),
+                            ),
+                            const SizedBox(width: 4),
+                            FilledButton.icon(
+                              onPressed: isBlockedForTelecaller
+                                  ? () {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Lead is assigned to Sales (${lead.assignedToName ?? "Sales Rep"}). Telecalling is blocked for telecallers.'),
+                                          backgroundColor: Colors.amber.shade900,
+                                        ),
+                                      );
+                                    }
+                                  : () => _handleNineanceCallAndFollowUp(context, lead),
+                              icon: Icon(
+                                isBlockedForTelecaller ? Icons.phone_disabled_rounded : Icons.phone_in_talk_rounded,
+                                size: 14,
+                              ),
+                              label: const Text('Call', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5)),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: isBlockedForTelecaller ? Colors.grey : const Color(0xFF16A34A),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                visualDensity: VisualDensity.compact,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Row 3: Tags (Flow, Source, Date)
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (!lead.isManual && lead.leadSource == 'META')
+                            _buildTagPill('⚡ Meta', const Color(0xFF2563EB))
+                          else if (!lead.isManual && lead.leadSource == 'GOOGLE')
+                            _buildTagPill('🔍 Google', const Color(0xFFEA4335))
+                          else if (lead.isManual)
+                            _buildTagPill('✏️ Manual', const Color(0xFF8B5CF6))
+                          else
+                            _buildTagPill('📊 Excel', const Color(0xFF16A34A)),
+                          if (lead.leadSource != null && lead.leadSource!.isNotEmpty && lead.leadSource != 'META' && lead.leadSource != 'GOOGLE')
+                            _buildTagPill(lead.leadSource!, const Color(0xFF0891B2)),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.calendar_today_rounded, size: 11, color: textMuted),
+                              const SizedBox(width: 3),
+                              Text(
+                                '${DateFormat("dd MMM yyyy").format(lead.createdAt.toLocal())} • ${DateFormat("hh:mm a").format(lead.createdAt.toLocal())}',
+                                style: TextStyle(fontSize: 10.5, color: textMuted),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Row 4: Telecaller allocation & Sales Rep
+                      Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(6),
+                              onTap: (isAdmin || (canAlterLead && canTransfer && userEmployeeId != null && userEmployeeId == lead.telecallerId))
+                                  ? () => _showTransferLeadModal(context, lead, salesUsers)
+                                  : null,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                                decoration: BoxDecoration(
+                                  color: (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
+                                      ? const Color(0xFF16A34A).withValues(alpha: 0.1)
+                                      : const Color(0xFFD97706).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
+                                        ? const Color(0xFF16A34A).withValues(alpha: 0.3)
+                                        : const Color(0xFFD97706).withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
+                                          ? Icons.headset_mic_rounded
+                                          : Icons.hourglass_top_rounded,
+                                      size: 12,
+                                      color: (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
+                                          ? const Color(0xFF16A34A)
+                                          : const Color(0xFFD97706),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
+                                            ? lead.telecallerName!
+                                            : 'Waiting List (WL)',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
+                                              ? const Color(0xFF16A34A)
+                                              : const Color(0xFFD97706),
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (isAdmin || (canTransfer && userEmployeeId != null && userEmployeeId == lead.telecallerId))
+                                      const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFF16A34A)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (lead.assignedToName != null && lead.assignedToName!.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.badge_rounded, size: 12, color: Color(0xFF2563EB)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    lead.assignedToName!,
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+
+                      // Custom Info / Project / Budget Snippet
+                      ..._buildLeadCustomInfoSnippet(lead, isDark, textMuted),
+
+                      const SizedBox(height: 6),
+                      Divider(height: 1, color: borderColor.withValues(alpha: 0.4)),
+                      const SizedBox(height: 2),
+
+                      // Row 5: Action Buttons footer
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (isAdmin ||
+                              canWrite ||
+                              canTransfer ||
+                              Permissions.canViewFullPhoneNumbers(authState.permissions, authState.user?.role) ||
+                              (userEmployeeId != null &&
+                                  (lead.telecallerId == userEmployeeId || lead.assignedToId == userEmployeeId)))
+                            TextButton.icon(
+                              onPressed: () => _showLeadInfoDialog(context, lead, isAdmin: isAdmin),
+                              icon: const Icon(Icons.info_outline_rounded, size: 14, color: Color(0xFF0EA5E9)),
+                              label: const Text('Details', style: TextStyle(fontSize: 11, color: Color(0xFF0EA5E9))),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              ),
+                            ),
+                          if (canAlterLead)
+                            TextButton.icon(
+                              onPressed: () => _showFollowUpSchedulingModal(context, lead),
+                              icon: const Icon(Icons.event_repeat_rounded, size: 14, color: Color(0xFFEA580C)),
+                              label: const Text('Follow-up', style: TextStyle(fontSize: 11, color: Color(0xFFEA580C))),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              ),
+                            ),
+                          IconButton(
+                            tooltip: canAlterLead ? 'Edit Lead' : 'View Only',
+                            icon: Icon(
+                              canAlterLead ? Icons.edit_outlined : Icons.lock_outline_rounded,
+                              size: 15,
+                              color: canAlterLead ? textMuted : Colors.amber.shade700,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                            onPressed: () => _showEditLeadDialog(
+                              context,
+                              lead,
+                              columns,
+                              salesUsers,
+                              isReadOnly: !canAlterLead,
+                            ),
+                          ),
+                          if (canAlterLead && (isAdmin || !isBlockedForTelecaller))
+                            PopupMenuButton<String>(
+                              tooltip: 'More actions',
+                              icon: Icon(Icons.more_vert_rounded, size: 15, color: textMuted),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                              onSelected: (val) {
+                                if (val == 'merge') {
+                                  _showMergeLeadModal(context, lead);
+                                } else if (val == 'bin') {
+                                  _confirmMoveToBin(context, lead);
+                                }
+                              },
+                              itemBuilder: (ctx) => [
+                                const PopupMenuItem(
+                                  value: 'merge',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.call_merge_rounded, size: 16, color: Color(0xFF0284C7)),
+                                      SizedBox(width: 8),
+                                      Text('Merge duplicate lead', style: TextStyle(fontSize: 12)),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'bin',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent),
+                                      SizedBox(width: 8),
+                                      Text('Move to Bin', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildTagPill(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.bold,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildLeadCustomInfoSnippet(CrmLead lead, bool isDark, Color textMuted) {
+    final chips = <Widget>[];
+    final project = lead.projectName ?? lead.customFields['Project']?.toString() ?? lead.customFields['project']?.toString();
+    if (project != null && project.isNotEmpty && project != '-') {
+      chips.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.apartment_rounded, size: 11, color: textMuted),
+              const SizedBox(width: 3),
+              Text(project, style: TextStyle(fontSize: 10.5, color: textMuted, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final budget = lead.customFields['Budget']?.toString() ?? lead.customFields['budget']?.toString() ?? lead.customFields['Amount']?.toString();
+    if (budget != null && budget.isNotEmpty && budget != '-') {
+      chips.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.currency_rupee_rounded, size: 11, color: textMuted),
+              const SizedBox(width: 2),
+              Text(budget, style: TextStyle(fontSize: 10.5, color: textMuted, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final remark = lead.customFields['Remarks']?.toString() ?? lead.customFields['remarks']?.toString() ?? lead.customFields['Notes']?.toString() ?? lead.customFields['notes']?.toString();
+    if (remark != null && remark.isNotEmpty && remark != '-') {
+      chips.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.chat_bubble_outline_rounded, size: 11, color: textMuted),
+              const SizedBox(width: 3),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 160),
+                child: Text(remark, style: TextStyle(fontSize: 10.5, color: textMuted), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (chips.isEmpty) return const [];
+    return [
+      const SizedBox(height: 5),
+      Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        children: chips,
+      ),
+    ];
   }
 
   // ---------------------------------------------------------------------------
@@ -10690,6 +11320,7 @@ class _CrmPreSalesFullScreenStation extends StatefulWidget {
 
 class _CrmPreSalesFullScreenStationState extends State<_CrmPreSalesFullScreenStation> {
   bool _isFilterSidebarOpen = false;
+  bool? _isCardViewPreference;
   final ScrollController _hScrollController = ScrollController();
   final TextEditingController _focusSearchController = TextEditingController();
 
@@ -10870,6 +11501,8 @@ class _CrmPreSalesFullScreenStationState extends State<_CrmPreSalesFullScreenSta
 
         final activeFilterCount = _getActiveFilterCount(state);
         final hasActiveFilters = activeFilterCount > 0;
+        final isMobile = MediaQuery.sizeOf(context).width < 700;
+        final effectiveIsCardView = _isCardViewPreference ?? widget.parentState._cardViewPreference ?? isMobile;
 
         return PopScope(
           canPop: false,
@@ -10903,251 +11536,496 @@ class _CrmPreSalesFullScreenStationState extends State<_CrmPreSalesFullScreenSta
                   children: [
                     // 1. Focus Station Header Bar
                     Container(
-                      height: 52,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: isMobile ? 8 : 0),
+                      height: isMobile ? null : 52,
                       decoration: BoxDecoration(
                         color: isDark ? const Color(0xFF1E1B18) : Colors.white,
                         border: Border(bottom: BorderSide(color: borderColor)),
                       ),
-                      child: Row(
+                      child: isMobile
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'Exit Focus Mode (Back / Esc)',
+                                      icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                      onPressed: () {
+                                        if (_isFilterSidebarOpen) {
+                                          setState(() => _isFilterSidebarOpen = false);
+                                        } else {
+                                          Navigator.of(context).pop();
+                                        }
+                                      },
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFC5A059).withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFFC5A059).withValues(alpha: 0.4)),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.fullscreen_rounded, size: 14, color: Color(0xFFC5A059)),
+                                          SizedBox(width: 3),
+                                          Text(
+                                            'FOCUS',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w800,
+                                              color: Color(0xFFC5A059),
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '${filteredLeads.length}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark ? Colors.white70 : const Color(0xFF334155),
+                                        ),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    IconButton(
+                                      tooltip: effectiveIsCardView ? 'Switch to Table View' : 'Switch to Cards View',
+                                      icon: Icon(
+                                        effectiveIsCardView ? Icons.table_chart_rounded : Icons.view_agenda_rounded,
+                                        size: 18,
+                                        color: primaryGold,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                      onPressed: () {
+                                        setState(() {
+                                          _isCardViewPreference = !effectiveIsCardView;
+                                        });
+                                      },
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Badge(
+                                      isLabelVisible: hasActiveFilters,
+                                      label: Text('$activeFilterCount', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                      backgroundColor: primaryGold,
+                                      child: IconButton(
+                                        tooltip: 'Filters',
+                                        icon: Icon(
+                                          _isFilterSidebarOpen ? Icons.close_rounded : Icons.tune_rounded,
+                                          size: 18,
+                                          color: hasActiveFilters ? primaryGold : null,
+                                        ),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                        onPressed: () => setState(() => _isFilterSidebarOpen = !_isFilterSidebarOpen),
+                                      ),
+                                    ),
+                                    if (canWrite) ...[
+                                      const SizedBox(width: 4),
+                                      IconButton(
+                                        tooltip: 'Add Lead',
+                                        icon: const Icon(Icons.person_add_rounded, size: 17, color: Colors.white),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: primaryGold,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                        ),
+                                        onPressed: () => widget.parentState._showAddLeadDialog(context, state.columns),
+                                      ),
+                                    ],
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      tooltip: 'Exit Focus Mode',
+                                      icon: const Icon(Icons.fullscreen_exit_rounded, size: 18),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                      onPressed: () => Navigator.of(context).pop(),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                SizedBox(
+                                  height: 36,
+                                  child: TextField(
+                                    controller: _focusSearchController,
+                                    decoration: InputDecoration(
+                                      hintText: 'Search name or phone...',
+                                      hintStyle: TextStyle(fontSize: 12, color: textMuted),
+                                      prefixIcon: Icon(Icons.search_rounded, size: 16, color: textMuted),
+                                      suffixIcon: _focusSearchController.text.isNotEmpty
+                                          ? IconButton(
+                                              icon: const Icon(Icons.clear_rounded, size: 14),
+                                              padding: EdgeInsets.zero,
+                                              onPressed: () {
+                                                _focusSearchController.clear();
+                                                widget.parentState._searchController.clear();
+                                                context.read<CrmLeadsBloc>().add(const CrmLeadsSearchChanged(''));
+                                                setState(() {});
+                                              },
+                                            )
+                                          : null,
+                                      isDense: true,
+                                      filled: true,
+                                      fillColor: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
+                                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(color: primaryGold, width: 1.4),
+                                      ),
+                                    ),
+                                    onChanged: (val) {
+                                      widget.parentState._searchController.text = val;
+                                      context.read<CrmLeadsBloc>().add(CrmLeadsSearchChanged(val.trim()));
+                                      setState(() {});
+                                    },
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                IconButton(
+                                  tooltip: 'Exit Focus Mode (Back / Esc)',
+                                  icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                                  onPressed: () {
+                                    if (_isFilterSidebarOpen) {
+                                      setState(() => _isFilterSidebarOpen = false);
+                                    } else {
+                                      Navigator.of(context).pop();
+                                    }
+                                  },
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFC5A059).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFFC5A059).withValues(alpha: 0.4)),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.fullscreen_rounded, size: 16, color: Color(0xFFC5A059)),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'FOCUS MODE',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFFC5A059),
+                                          letterSpacing: 0.6,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    '${filteredLeads.length} leads',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark ? Colors.white70 : const Color(0xFF334155),
+                                    ),
+                                  ),
+                                ),
+                                const Spacer(),
+                                SizedBox(
+                                  width: 280,
+                                  height: 38,
+                                  child: TextField(
+                                    controller: _focusSearchController,
+                                    decoration: InputDecoration(
+                                      hintText: 'Quick search name or phone...',
+                                      hintStyle: TextStyle(fontSize: 12, color: textMuted),
+                                      prefixIcon: Icon(Icons.search_rounded, size: 16, color: textMuted),
+                                      suffixIcon: _focusSearchController.text.isNotEmpty
+                                          ? IconButton(
+                                              icon: const Icon(Icons.clear_rounded, size: 14),
+                                              onPressed: () {
+                                                _focusSearchController.clear();
+                                                widget.parentState._searchController.clear();
+                                                context.read<CrmLeadsBloc>().add(const CrmLeadsSearchChanged(''));
+                                                setState(() {});
+                                              },
+                                            )
+                                          : null,
+                                      isDense: true,
+                                      filled: true,
+                                      fillColor: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
+                                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(color: primaryGold, width: 1.4),
+                                      ),
+                                    ),
+                                    onChanged: (val) {
+                                      widget.parentState._searchController.text = val;
+                                      context.read<CrmLeadsBloc>().add(CrmLeadsSearchChanged(val.trim()));
+                                      setState(() {});
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Tooltip(
+                                  message: effectiveIsCardView ? 'Switch to Table View' : 'Switch to Cards View',
+                                  child: IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _isCardViewPreference = !effectiveIsCardView;
+                                      });
+                                    },
+                                    icon: Icon(
+                                      effectiveIsCardView ? Icons.table_chart_rounded : Icons.view_agenda_rounded,
+                                      size: 18,
+                                      color: isDark ? Colors.white70 : const Color(0xFF334155),
+                                    ),
+                                    style: IconButton.styleFrom(
+                                      side: BorderSide(color: borderColor),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                OutlinedButton.icon(
+                                  onPressed: () => setState(() => _isFilterSidebarOpen = !_isFilterSidebarOpen),
+                                  icon: Icon(
+                                    _isFilterSidebarOpen ? Icons.close_rounded : Icons.tune_rounded,
+                                    size: 15,
+                                  ),
+                                  label: Text(
+                                    hasActiveFilters ? 'Filters ($activeFilterCount)' : 'Filters',
+                                    style: TextStyle(
+                                      fontWeight: hasActiveFilters ? FontWeight.w700 : FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: hasActiveFilters ? primaryGold : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                                    side: BorderSide(
+                                      color: hasActiveFilters ? primaryGold : borderColor,
+                                      width: hasActiveFilters ? 1.5 : 1,
+                                    ),
+                                    backgroundColor: hasActiveFilters
+                                        ? primaryGold.withValues(alpha: 0.1)
+                                        : (isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                if (canWrite) ...[
+                                  FilledButton.icon(
+                                    onPressed: () => widget.parentState._showAddLeadDialog(context, state.columns),
+                                    icon: const Icon(Icons.person_add_rounded, size: 14),
+                                    label: const Text('Add Lead', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: primaryGold,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                IconButton(
+                                  tooltip: 'Exit Focus Mode (Esc)',
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  icon: const Icon(Icons.fullscreen_exit_rounded, size: 20),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+
+                    // 2. 9ance Dialer Dock
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(isMobile ? 10 : 14, 8, isMobile ? 10 : 14, 0),
+                      child: CrmNineanceDialerPanel(
+                        onIncomingLead: (leadId) {
+                          context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // 3. Body: Leads Table / Cards + Filter Sidebar
+                    Expanded(
+                      child: Stack(
                         children: [
-                          // Back / Exit Focus Button
-                          IconButton(
-                            tooltip: 'Exit Focus Mode (Back / Esc)',
-                            icon: const Icon(Icons.arrow_back_rounded, size: 20),
-                            onPressed: () {
-                              if (_isFilterSidebarOpen) {
-                                setState(() => _isFilterSidebarOpen = false);
-                              } else {
-                                Navigator.of(context).pop();
-                              }
-                            },
+                          Positioned.fill(
+                            child: SingleChildScrollView(
+                              padding: EdgeInsets.fromLTRB(isMobile ? 10 : 14, 0, isMobile ? 10 : 14, 14),
+                              child: widget.parentState._buildLeadsTableAndPagination(
+                                context: context,
+                                filteredLeads: filteredLeads,
+                                columns: columns,
+                                salesUsers: salesUsers,
+                                isAdmin: isAdmin,
+                                canWrite: canWrite,
+                                canTransfer: canTransfer,
+                                isFinserve: isFinserve,
+                                userEmployeeId: userEmployeeId,
+                                isDark: isDark,
+                                cardBg: cardBg,
+                                borderColor: borderColor,
+                                textMuted: textMuted,
+                                primaryColor: primaryGold,
+                                horizontalController: _hScrollController,
+                                onStateUpdated: () => setState(() {}),
+                                isCardView: effectiveIsCardView,
+                              ),
+                            ),
                           ),
-                          const SizedBox(width: 6),
-                          // Focus Mode Badge
-                          Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFC5A059).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFFC5A059).withValues(alpha: 0.4)),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.fullscreen_rounded, size: 16, color: Color(0xFFC5A059)),
-                              SizedBox(width: 6),
-                              Text(
-                                'FOCUS MODE',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFFC5A059),
-                                  letterSpacing: 0.6,
+
+                          // If mobile: full screen modal overlay for filter sidebar
+                          if (isMobile && _isFilterSidebarOpen)
+                            Positioned.fill(
+                              child: Container(
+                                color: cardBg,
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                                        border: Border(bottom: BorderSide(color: borderColor)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.tune_rounded, size: 18),
+                                          const SizedBox(width: 8),
+                                          const Text('Filters & Flow', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                          const Spacer(),
+                                          FilledButton(
+                                            onPressed: () => setState(() => _isFilterSidebarOpen = false),
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor: primaryGold,
+                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                              visualDensity: VisualDensity.compact,
+                                            ),
+                                            child: const Text('Apply / Close'),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: SingleChildScrollView(
+                                        child: _buildFilterSidebarContent(
+                                          context: context,
+                                          state: state,
+                                          leads: leads,
+                                          filteredLeads: filteredLeads,
+                                          projects: projects,
+                                          selectedProjectId: selectedProjectId,
+                                          campaigns: campaigns,
+                                          selectedCampaignId: selectedCampaignId,
+                                          isAdmin: isAdmin,
+                                          canWrite: canWrite,
+                                          userEmployeeId: userEmployeeId,
+                                          isExcelAssigned: isExcelAssigned,
+                                          isMetaAssigned: isMetaAssigned,
+                                          isGoogleAssigned: isGoogleAssigned,
+                                          isOnlyExcel: isOnlyExcel,
+                                          isOnlyWebhook: isOnlyWebhook,
+                                          effectiveFlow: effectiveFlow,
+                                          isDark: isDark,
+                                          cardBg: cardBg,
+                                          borderColor: borderColor,
+                                          textMuted: textMuted,
+                                          primaryColor: primaryGold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '${filteredLeads.length} leads',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: isDark ? Colors.white70 : const Color(0xFF334155),
                             ),
-                          ),
-                        ),
-                        const Spacer(),
-                        // Fast search input
-                        SizedBox(
-                          width: 300,
-                          height: 38,
-                          child: TextField(
-                            controller: _focusSearchController,
-                            decoration: InputDecoration(
-                              hintText: 'Quick search name or phone...',
-                              hintStyle: TextStyle(fontSize: 12, color: textMuted),
-                              prefixIcon: Icon(Icons.search_rounded, size: 16, color: textMuted),
-                              suffixIcon: _focusSearchController.text.isNotEmpty
-                                  ? IconButton(
-                                      icon: const Icon(Icons.clear_rounded, size: 14),
-                                      onPressed: () {
-                                        _focusSearchController.clear();
-                                        widget.parentState._searchController.clear();
-                                        context.read<CrmLeadsBloc>().add(const CrmLeadsSearchChanged(''));
-                                        setState(() {});
-                                      },
-                                    )
-                                  : null,
-                              isDense: true,
-                              filled: true,
-                              fillColor: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
-                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor)),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(color: primaryGold, width: 1.4),
+
+                          // If desktop: side drawer
+                          if (!isMobile)
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              bottom: 0,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 240),
+                                curve: Curves.easeInOutCubic,
+                                width: _isFilterSidebarOpen ? 340 : 0,
+                                decoration: BoxDecoration(
+                                  color: cardBg,
+                                  border: Border(
+                                    left: BorderSide(
+                                      color: _isFilterSidebarOpen ? borderColor : Colors.transparent,
+                                    ),
+                                  ),
+                                  boxShadow: _isFilterSidebarOpen
+                                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 10, offset: const Offset(-2, 0))]
+                                      : null,
+                                ),
+                                clipBehavior: Clip.hardEdge,
+                                child: _isFilterSidebarOpen
+                                    ? _buildFilterSidebarContent(
+                                        context: context,
+                                        state: state,
+                                        leads: leads,
+                                        filteredLeads: filteredLeads,
+                                        projects: projects,
+                                        selectedProjectId: selectedProjectId,
+                                        campaigns: campaigns,
+                                        selectedCampaignId: selectedCampaignId,
+                                        isAdmin: isAdmin,
+                                        canWrite: canWrite,
+                                        userEmployeeId: userEmployeeId,
+                                        isExcelAssigned: isExcelAssigned,
+                                        isMetaAssigned: isMetaAssigned,
+                                        isGoogleAssigned: isGoogleAssigned,
+                                        isOnlyExcel: isOnlyExcel,
+                                        isOnlyWebhook: isOnlyWebhook,
+                                        effectiveFlow: effectiveFlow,
+                                        isDark: isDark,
+                                        cardBg: cardBg,
+                                        borderColor: borderColor,
+                                        textMuted: textMuted,
+                                        primaryColor: primaryGold,
+                                      )
+                                    : const SizedBox.shrink(),
                               ),
                             ),
-                            onChanged: (val) {
-                              widget.parentState._searchController.text = val;
-                              context.read<CrmLeadsBloc>().add(CrmLeadsSearchChanged(val.trim()));
-                              setState(() {});
-                            },
-                          ),
-                        ),
-                        const Spacer(),
-                        // Filter sidebar toggle button
-                        OutlinedButton.icon(
-                          onPressed: () => setState(() => _isFilterSidebarOpen = !_isFilterSidebarOpen),
-                          icon: Icon(
-                            _isFilterSidebarOpen ? Icons.close_rounded : Icons.tune_rounded,
-                            size: 15,
-                          ),
-                          label: Text(
-                            hasActiveFilters ? 'Filters ($activeFilterCount)' : 'Filters',
-                            style: TextStyle(
-                              fontWeight: hasActiveFilters ? FontWeight.w700 : FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: hasActiveFilters ? primaryGold : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                            side: BorderSide(
-                              color: hasActiveFilters ? primaryGold : borderColor,
-                              width: hasActiveFilters ? 1.5 : 1,
-                            ),
-                            backgroundColor: hasActiveFilters
-                                ? primaryGold.withValues(alpha: 0.1)
-                                : (isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        if (canWrite) ...[
-                          FilledButton.icon(
-                            onPressed: () => widget.parentState._showAddLeadDialog(context, state.columns),
-                            icon: const Icon(Icons.person_add_rounded, size: 14),
-                            label: const Text('Add Lead', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: primaryGold,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
                         ],
-                        // Exit Full Screen Button
-                        IconButton(
-                          tooltip: 'Exit Focus Mode (Esc)',
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.fullscreen_exit_rounded, size: 20),
-                          style: IconButton.styleFrom(
-                            backgroundColor: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-
-                  // 2. 9ance Dialer Dock
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-                    child: CrmNineanceDialerPanel(
-                      onIncomingLead: (leadId) {
-                        context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // 3. Body: Leads Table (Full Width) + Slide-Out Filter Sidebar
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Leads Table area
-                        Expanded(
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                            child: widget.parentState._buildLeadsTableAndPagination(
-                              context: context,
-                              filteredLeads: filteredLeads,
-                              columns: columns,
-                              salesUsers: salesUsers,
-                              isAdmin: isAdmin,
-                              canWrite: canWrite,
-                              canTransfer: canTransfer,
-                              isFinserve: isFinserve,
-                              userEmployeeId: userEmployeeId,
-                              isDark: isDark,
-                              cardBg: cardBg,
-                              borderColor: borderColor,
-                              textMuted: textMuted,
-                              primaryColor: primaryGold,
-                              horizontalController: _hScrollController,
-                              onStateUpdated: () => setState(() {}),
-                            ),
-                          ),
-                        ),
-
-                        // Slide-out Filter Sidebar
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 240),
-                          curve: Curves.easeInOutCubic,
-                          width: _isFilterSidebarOpen ? 340 : 0,
-                          decoration: BoxDecoration(
-                            color: cardBg,
-                            border: Border(
-                              left: BorderSide(
-                                color: _isFilterSidebarOpen ? borderColor : Colors.transparent,
-                              ),
-                            ),
-                          ),
-                          clipBehavior: Clip.hardEdge,
-                          child: _isFilterSidebarOpen
-                              ? _buildFilterSidebarContent(
-                                  context: context,
-                                  state: state,
-                                  leads: leads,
-                                  filteredLeads: filteredLeads,
-                                  projects: projects,
-                                  selectedProjectId: selectedProjectId,
-                                  campaigns: campaigns,
-                                  selectedCampaignId: selectedCampaignId,
-                                  isAdmin: isAdmin,
-                                  canWrite: canWrite,
-                                  userEmployeeId: userEmployeeId,
-                                  isExcelAssigned: isExcelAssigned,
-                                  isMetaAssigned: isMetaAssigned,
-                                  isGoogleAssigned: isGoogleAssigned,
-                                  isOnlyExcel: isOnlyExcel,
-                                  isOnlyWebhook: isOnlyWebhook,
-                                  effectiveFlow: effectiveFlow,
-                                  isDark: isDark,
-                                  cardBg: cardBg,
-                                  borderColor: borderColor,
-                                  textMuted: textMuted,
-                                  primaryColor: primaryGold,
-                                )
-                              : const SizedBox.shrink(),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                  ],
               ),
             ),
           ),

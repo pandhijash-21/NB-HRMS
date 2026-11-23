@@ -469,8 +469,9 @@ export const crmController = {
   async checkPhone(req: Request, res: Response) {
     try {
       const phone = String(req.query.phone || req.body.phone || '');
+      const countryCode = String(req.query.countryCode || req.body.countryCode || '');
       const scope = (req.query.scope as string) || getScope(req);
-      const result = await crmService.checkPhone(phone, scope);
+      const result = await crmService.checkPhone(phone, scope, countryCode);
       res.json(ok(result));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to check phone duplicate'));

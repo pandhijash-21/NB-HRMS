@@ -39,6 +39,11 @@ import { sendFinserveClientOtpEmail } from '../../utils/mailer';
 import { effectiveCompanyAdminRoleName, isAdminRole } from '../auth/permissions-map';
 import { deriveDayInOut } from '../attendance/dayPunch.rules';
 import {
+  normalizePhoneWithCountryCode,
+  isCountryCodeHeader,
+  isDummyOrPlaceholderPhone,
+} from './phone.util';
+import {
   clearPortalOtp,
   ensureLoanApplication,
   findLoanByPortalToken,
@@ -966,19 +971,19 @@ export const crmService = {
         : 'Webhook Integration';
     const inboundLeadSource = isMetaWebhook ? 'META' : isGoogleWebhook ? 'GOOGLE' : 'WEBHOOK';
 
-    // Smart Deduplication for incoming Webhook / Meta / Google Ads:
-    // If an active lead with the same phone (matched on 10 digits) already exists in this scope,
+    // Smart Deduplication for incoming Webhook / Meta / Google Ads with Country Code awareness:
+    // If an active lead with the same canonical phone already exists in this scope,
     // do NOT create a duplicate lead row! Instead, append the new inquiry into the existing lead's
     // activity history and notify/log follow-up for the telecaller.
-    const cleanPhoneDigits = rawPhone.replace(/\D/g, '');
-    const phone10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
+    const norm = normalizePhoneWithCountryCode(rawPhone);
+    let existingLead: any = null;
 
-    if (phone10.length >= 7) {
-      const existingLead = await prisma.crmLead.findFirst({
+    if (norm.isStandard && norm.nationalNumber.length >= 7) {
+      const candidates = await prisma.crmLead.findMany({
         where: {
           scope: campaignScope,
           isDeleted: false,
-          phone: { contains: phone10 },
+          phone: { contains: norm.nationalNumber },
         },
         include: {
           campaign: { select: { id: true, name: true, project: { select: { name: true } } } },
@@ -986,7 +991,14 @@ export const crmService = {
           assignedTo: { include: { generalInfo: true } },
         },
         orderBy: { createdAt: 'desc' },
+        take: 10,
       });
+      existingLead =
+        candidates.find((cand) => {
+          const candCf = (cand.customFields as Record<string, any>) || {};
+          const candNorm = normalizePhoneWithCountryCode(cand.phone, candCf.countryCode || candCf.isd);
+          return candNorm.dedupeKey === norm.dedupeKey;
+        }) || null;
 
       if (existingLead) {
         const existingCustom = (existingLead.customFields && typeof existingLead.customFields === 'object')
@@ -1078,7 +1090,7 @@ export const crmService = {
 
         return {
           status: 'success',
-          message: `Re-inquiry logged for existing lead (${existingLead.name || phone10})`,
+          message: `Re-inquiry logged for existing lead (${existingLead.name || norm.nationalNumber || rawPhone})`,
           leadId: existingLead.id,
           campaignId: campaign.id,
           campaignName: campaign.name,
@@ -2167,29 +2179,40 @@ export const crmService = {
     const finalRefType = dto.referenceType || custom.referenceType || null;
     const finalRefName = dto.referenceName || custom.referenceName || null;
 
-    // Duplicate Lead Prevention for Manual / API Creation:
-    const cleanDigits = phone.replace(/\D/g, '');
-    const phone10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
-
-    if (phone10.length >= 7 && !dto.allowDuplicate) {
-      const existingLead = await prisma.crmLead.findFirst({
+    // Duplicate Lead Prevention for Manual / API Creation with Country Code awareness:
+    const norm = normalizePhoneWithCountryCode(phone, dto.countryCode || custom.countryCode || custom.isd);
+    if (norm.isStandard && norm.nationalNumber.length >= 7 && !dto.allowDuplicate) {
+      const candidates = await prisma.crmLead.findMany({
         where: {
           scope,
           isDeleted: false,
-          phone: { contains: phone10 },
+          phone: { contains: norm.nationalNumber },
         },
         include: {
           telecaller: { include: { generalInfo: true } },
           assignedTo: { include: { generalInfo: true } },
         },
+        take: 10,
       });
 
-      if (existingLead) {
-        const assignedStaff = existingLead.telecaller?.generalInfo?.fullName || existingLead.assignedTo?.generalInfo?.fullName || 'Unassigned';
+      const matchedExisting = candidates.find((cand) => {
+        const candCf = (cand.customFields as Record<string, any>) || {};
+        const candNorm = normalizePhoneWithCountryCode(cand.phone, candCf.countryCode || candCf.isd);
+        return candNorm.dedupeKey === norm.dedupeKey;
+      });
+
+      if (matchedExisting) {
+        const assignedStaff =
+          matchedExisting.telecaller?.generalInfo?.fullName ||
+          matchedExisting.assignedTo?.generalInfo?.fullName ||
+          'Unassigned';
         throw new Error(
-          `DUPLICATE_LEAD: A lead with phone ${phone} already exists ("${existingLead.name || 'Unnamed'}", Status: ${existingLead.status}, Assigned to: ${assignedStaff}). ID: ${existingLead.id}`
+          `DUPLICATE_LEAD: A lead with phone ${norm.e164 || phone} already exists ("${matchedExisting.name || 'Unnamed'}", Status: ${matchedExisting.status}, Assigned to: ${assignedStaff}). ID: ${matchedExisting.id}`
         );
       }
+    }
+    if (norm.isStandard) {
+      custom.countryCode = norm.countryCode;
     }
 
     const newLead = await prisma.crmLead.create({
@@ -2479,13 +2502,12 @@ export const crmService = {
     return l === 'email' || l === 'email id' || l === 'email_id' || l === 'email address' || l.includes('email');
   },
 
+  _excelIsCountryCodeHeader(lower: string): boolean {
+    return isCountryCodeHeader(lower);
+  },
+
   _isDummyOrPlaceholderPhone(digits: string): boolean {
-    if (!digits || digits.length < 7) return true;
-    // Repeating identical digit (0000000000, 1111111111, 9999999999)
-    if (/^(\d)\1+$/.test(digits)) return true;
-    // Sequential ascending or descending: 1234567890, 0123456789, 9876543210
-    if (['1234567890', '0123456789', '9876543210', '0000000000'].includes(digits)) return true;
-    return false;
+    return isDummyOrPlaceholderPhone(digits);
   },
 
   /** Excel headers that mean remarks/notes (canonical columnKey: Notes). */
@@ -2859,19 +2881,20 @@ export const crmService = {
     >();
 
     for (const el of existingLeads) {
-      const d = String(el.phone || '').replace(/\D/g, '');
-      const key = d.length >= 10 ? d.slice(-10) : (d.length >= 7 ? d : '');
-      if (key && !this._isDummyOrPlaceholderPhone(key) && !dbPhoneMap.has(key)) {
+      const cf = (el.customFields as Record<string, any>) || {};
+      const elCc = cf.countryCode || cf.CountryCode || cf.isd || cf.isdCode || '';
+      const norm = normalizePhoneWithCountryCode(el.phone, elCc);
+      const key = norm.dedupeKey;
+      if (key && !this._isDummyOrPlaceholderPhone(norm.nationalNumber) && !dbPhoneMap.has(key)) {
         dbPhoneMap.set(key, {
           id: el.id,
           name: el.name || 'Unnamed',
-          phone: el.phone || '',
+          phone: norm.e164 || el.phone || '',
           campaignId: el.campaignId || undefined,
           campaignName: el.campaign?.name,
           telecallerName: el.telecaller?.generalInfo?.fullName,
         });
       }
-      const cf = (el.customFields as Record<string, any>) || {};
       const elEmail = String(cf.email || cf.Email || cf.Email_Id || cf.email_id || '').trim().toLowerCase();
       if (elEmail && elEmail.includes('@') && !dbEmailMap.has(elEmail)) {
         dbEmailMap.set(elEmail, {
@@ -2904,6 +2927,7 @@ export const crmService = {
       let phone = '';
       let name = '';
       let email = '';
+      let countryCode = '';
 
       for (const [h, v] of Object.entries(row)) {
         const lower = h.toLowerCase().trim();
@@ -2918,41 +2942,44 @@ export const crmService = {
         if (this._excelIsEmailHeader(lower) && !email && strVal.includes('@')) {
           email = strVal.trim().toLowerCase();
         }
+        if (this._excelIsCountryCodeHeader(lower) && !countryCode) {
+          countryCode = strVal;
+        }
       }
 
-      const cleanDigits = String(phone || '').replace(/\D/g, '');
-      const phone10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
-      const isDummyPhone = this._isDummyOrPlaceholderPhone(phone10);
+      const norm = normalizePhoneWithCountryCode(phone, countryCode);
+      const phoneKey = norm.dedupeKey;
+      const isDummyPhone = this._isDummyOrPlaceholderPhone(norm.nationalNumber);
 
       let isDuplicateFound = false;
 
-      // 1. Phone number deduplication (ignores placeholder/dummy phones to prevent false duplicates)
-      if (phone10.length >= 7 && !isDummyPhone) {
-        if (seenInSheetPhones.has(phone10)) {
-          const prior = seenInSheetPhones.get(phone10)!;
+      // 1. Phone number deduplication with Country Code awareness
+      if (phoneKey && !isDummyPhone && norm.nationalNumber.length >= 7) {
+        if (seenInSheetPhones.has(phoneKey)) {
+          const prior = seenInSheetPhones.get(phoneKey)!;
           const sameName = prior.name.toLowerCase().trim() === (name || '').toLowerCase().trim();
           duplicateList.push({
             rowNumber: idx + 1,
             name: name || 'Unnamed Lead',
-            phone,
+            phone: norm.e164 || phone,
             email,
             duplicateType: 'DUPLICATE_IN_SHEET',
             isSameCampaign: true,
             details: sameName
               ? `Duplicate of Row #${prior.rowIdx + 1} ("${prior.name || 'Unnamed'}") in this sheet`
-              : `Shared phone with Row #${prior.rowIdx + 1} ("${prior.name || 'Unnamed'}") - Different name`,
+              : `Shared phone (${norm.e164 || phone}) with Row #${prior.rowIdx + 1} ("${prior.name || 'Unnamed'}") - Different name`,
             defaultAction: 'SKIP',
           });
           isDuplicateFound = true;
-        } else if (dbPhoneMap.has(phone10)) {
-          const match = dbPhoneMap.get(phone10)!;
+        } else if (dbPhoneMap.has(phoneKey)) {
+          const match = dbPhoneMap.get(phoneKey)!;
           const isSameCamp = match.campaignId === targetCampaignId;
           const callerInfo = match.telecallerName ? ` (Telecaller: ${match.telecallerName})` : '';
           const campInfo = match.campaignName ? ` [${match.campaignName}]` : '';
           duplicateList.push({
             rowNumber: idx + 1,
             name: name || 'Unnamed Lead',
-            phone,
+            phone: norm.e164 || phone,
             email,
             duplicateType: 'EXISTING_IN_CRM',
             isSameCampaign: isSameCamp,
@@ -2963,10 +2990,10 @@ export const crmService = {
               : `Already in CRM${campInfo}: "${match.name}"${callerInfo}`,
             defaultAction: 'SKIP',
           });
-          seenInSheetPhones.set(phone10, { rowIdx: idx, name });
+          seenInSheetPhones.set(phoneKey, { rowIdx: idx, name });
           isDuplicateFound = true;
         } else {
-          seenInSheetPhones.set(phone10, { rowIdx: idx, name });
+          seenInSheetPhones.set(phoneKey, { rowIdx: idx, name });
         }
       }
 
@@ -3317,12 +3344,13 @@ export const crmService = {
         select: { phone: true, customFields: true },
       });
       for (const el of existingLeads) {
-        const d = String(el.phone || '').replace(/\D/g, '');
-        const key = d.length >= 10 ? d.slice(-10) : (d.length >= 7 ? d : '');
-        if (key && !this._isDummyOrPlaceholderPhone(key)) {
+        const cf = (el.customFields as Record<string, any>) || {};
+        const elCc = cf.countryCode || cf.CountryCode || cf.isd || cf.isdCode || '';
+        const norm = normalizePhoneWithCountryCode(el.phone, elCc);
+        const key = norm.dedupeKey;
+        if (key && !this._isDummyOrPlaceholderPhone(norm.nationalNumber)) {
           existingPhonesSet.add(key);
         }
-        const cf = (el.customFields as Record<string, any>) || {};
         const elEmail = String(cf.email || cf.Email || cf.Email_Id || cf.email_id || '').trim().toLowerCase();
         if (elEmail && elEmail.includes('@')) {
           existingEmailsSet.add(elEmail);
@@ -3401,6 +3429,7 @@ export const crmService = {
       let phone = '';
       let name = '';
       let email = '';
+      let countryCode = '';
       let phoneScore = -1;
       let nameScore = -1;
       let assignedHeaderValue = '';
@@ -3417,6 +3446,10 @@ export const crmService = {
           mappedKey = 'Notes';
         }
         const strVal = this._excelCellToString(val);
+
+        if (this._excelIsCountryCodeHeader(lowerHeader) && !countryCode) {
+          countryCode = strVal;
+        }
 
         if (this._excelIsPhoneHeader(lowerHeader)) {
           const score =
@@ -3481,6 +3514,16 @@ export const crmService = {
             '',
         ).trim();
       }
+      if (!countryCode) {
+        countryCode = String(
+          customFields.CountryCode ||
+            customFields.countryCode ||
+            customFields.country_code ||
+            customFields.isd ||
+            customFields.ISD ||
+            '',
+        ).trim();
+      }
       if (!name) {
         name = String(
           customFields.Name ||
@@ -3496,21 +3539,21 @@ export const crmService = {
       }
 
       if (phone || name || email) {
-        const cleanDigits = String(phone || '').replace(/\D/g, '');
-        const phone10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
-        const isDummyPhone = this._isDummyOrPlaceholderPhone(phone10);
+        const norm = normalizePhoneWithCountryCode(phone, countryCode);
+        const phoneKey = norm.dedupeKey;
+        const isDummyPhone = this._isDummyOrPlaceholderPhone(norm.nationalNumber);
 
         // If user explicitly chose to KEEP this row in the preview (with Right tick), bypass deduplication!
         const isExplicitlyKept = keepRowsSet && keepRowsSet.has(rowNumber);
 
         if (!isExplicitlyKept && shouldSkipDuplicates) {
           let isDup = false;
-          if (phone10.length >= 7 && !isDummyPhone) {
-            if (seenInSheetPhones.has(phone10) || existingPhonesSet.has(phone10)) {
+          if (phoneKey && !isDummyPhone && norm.nationalNumber.length >= 7) {
+            if (seenInSheetPhones.has(phoneKey) || existingPhonesSet.has(phoneKey)) {
               isDup = true;
             } else {
-              seenInSheetPhones.add(phone10);
-              existingPhonesSet.add(phone10);
+              seenInSheetPhones.add(phoneKey);
+              existingPhonesSet.add(phoneKey);
             }
           }
           if (!isDup && email && email.includes('@')) {
@@ -3527,14 +3570,20 @@ export const crmService = {
             continue;
           }
         } else {
-          if (phone10.length >= 7 && !isDummyPhone) {
-            seenInSheetPhones.add(phone10);
-            existingPhonesSet.add(phone10);
+          if (phoneKey && !isDummyPhone && norm.nationalNumber.length >= 7) {
+            seenInSheetPhones.add(phoneKey);
+            existingPhonesSet.add(phoneKey);
           }
           if (email && email.includes('@')) {
             seenInSheetEmails.add(email);
             existingEmailsSet.add(email);
           }
+        }
+
+        if (norm.isStandard) {
+          // Standardize stored phone: E.164 for international; for domestic 91, keep input formatting or 10-digit
+          phone = norm.countryCode !== '91' ? norm.e164 : (phone.startsWith('+91') ? norm.e164 : norm.nationalNumber);
+          customFields.countryCode = norm.countryCode;
         }
 
         let rowTelecallerId = telecallerId;
@@ -4422,17 +4471,16 @@ export const crmService = {
     };
   },
 
-  async checkPhone(phone: string, scope: string = 'NB_DEVELOPER') {
-    const cleanDigits = phone.replace(/\D/g, '');
-    const phone10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
-    if (phone10.length < 7) {
+  async checkPhone(phone: string, scope: string = 'NB_DEVELOPER', countryCode?: string) {
+    const norm = normalizePhoneWithCountryCode(phone, countryCode);
+    if (!norm.isStandard || norm.nationalNumber.length < 7) {
       return { exists: false };
     }
-    const matchedLead = await prisma.crmLead.findFirst({
+    const candidates = await prisma.crmLead.findMany({
       where: {
         scope,
         isDeleted: false,
-        phone: { contains: phone10 },
+        phone: { contains: norm.nationalNumber },
       },
       include: {
         telecaller: { include: { generalInfo: true } },
@@ -4440,6 +4488,12 @@ export const crmService = {
         campaign: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
+    const matchedLead = candidates.find((cand) => {
+      const candCf = (cand.customFields as Record<string, any>) || {};
+      const candNorm = normalizePhoneWithCountryCode(cand.phone, candCf.countryCode || candCf.isd);
+      return candNorm.dedupeKey === norm.dedupeKey;
     });
     if (!matchedLead) {
       return { exists: false };

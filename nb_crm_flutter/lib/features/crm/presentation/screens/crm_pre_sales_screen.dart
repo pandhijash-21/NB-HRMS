@@ -3436,6 +3436,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       context,
       phone: lead.phone,
       leadName: lead.name.isNotEmpty ? lead.name : null,
+      countryCode: lead.customFields?['countryCode']?.toString() ??
+          lead.customFields?['CountryCode']?.toString() ??
+          lead.customFields?['isd']?.toString(),
     );
     if (dial == null || !mounted) return;
 

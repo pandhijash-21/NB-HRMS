@@ -12,6 +12,7 @@ import {
   NineanceTokens,
 } from './nineance.client';
 import { whatsappService } from './whatsapp.service';
+import { normalizePhoneWithCountryCode } from './phone.util';
 
 /** Fetch API Response (avoid clash with Express Response) */
 type FetchResponse = globalThis.Response;
@@ -57,18 +58,20 @@ function normalizePhone10(v: string): string {
   return last10(v);
 }
 
-/** Dial number for CTC: keep full international digits when present; else last 10. */
-function dialNumberFromLeadPhone(phone: string): string {
+/** Dial number for CTC: country-code aware; domestic 91 uses 10 digits for local gateway; international uses full E.164 digits. */
+function dialNumberFromLeadPhone(phone: string, countryCode?: string): string {
   const raw = String(phone || '').trim();
-  const d = digitsOnly(raw);
-  if (!d) return '';
-  if (raw.startsWith('+') || d.length > 10) return d;
-  return last10(d);
+  if (!raw) return '';
+  const norm = normalizePhoneWithCountryCode(raw, countryCode);
+  return norm.dialDigits || digitsOnly(raw);
 }
 
-/** User-confirmed dial override — digits only, no forced last-10 truncation. */
+/** User-confirmed dial override — parses country code and returns proper gateway dial digits. */
 function dialNumberOverride(v: string): string {
-  return digitsOnly(String(v || '').trim());
+  const raw = String(v || '').trim();
+  if (!raw) return '';
+  const norm = normalizePhoneWithCountryCode(raw);
+  return norm.dialDigits || digitsOnly(raw);
 }
 
 function didNumberOf(item: any): string {
@@ -753,9 +756,10 @@ class TelephonyService {
     const personal =
       empId != null && Number.isFinite(empId) ? telecallerMap[String(empId)] : undefined;
 
+    const cf = (lead.customFields as Record<string, any>) || {};
     let customerNumber = customerNumberOverride?.trim()
       ? dialNumberOverride(customerNumberOverride)
-      : dialNumberFromLeadPhone(lead.phone || '');
+      : dialNumberFromLeadPhone(lead.phone || '', cf.countryCode || cf.isd);
     if (!customerNumber) throw new Error('Lead has no phone number');
 
     let agentId = personal?.agent_id || '';
@@ -907,7 +911,8 @@ class TelephonyService {
     );
 
     // Prefer the non-DID party as customer for inbound
-    let customerDigits = normalizePhone10(rawCustomer);
+    const custNorm = normalizePhoneWithCountryCode(rawCustomer);
+    let customerDigits = custNorm.dialDigits || normalizePhone10(rawCustomer);
     const didDigits = digitsOnly(
       String(payload.did_number || payload.did || payload.DID || payload.virtual_number || ''),
     );
@@ -916,13 +921,15 @@ class TelephonyService {
       payload.from_number &&
       normalizePhone10(String(payload.from_number))
     ) {
-      customerDigits = normalizePhone10(String(payload.from_number));
+      const fnNorm = normalizePhoneWithCountryCode(String(payload.from_number));
+      customerDigits = fnNorm.dialDigits || normalizePhone10(String(payload.from_number));
     } else if (
       payload.direction === 'outbound' &&
       payload.to_number &&
       normalizePhone10(String(payload.to_number))
     ) {
-      customerDigits = normalizePhone10(String(payload.to_number));
+      const tnNorm = normalizePhoneWithCountryCode(String(payload.to_number));
+      customerDigits = tnNorm.dialDigits || normalizePhone10(String(payload.to_number));
     }
 
     const rawAgent = String(
@@ -1019,9 +1026,19 @@ class TelephonyService {
       if (!exists) leadId = null;
     }
 
-    if (!leadId && customerDigits.length >= 10) {
+    if (!leadId && customerDigits) {
+      const leadNorm = normalizePhoneWithCountryCode(customerDigits);
+      const matchConditions: any[] = [];
+      if (leadNorm.nationalNumber && leadNorm.nationalNumber.length >= 7) {
+        matchConditions.push({ phone: { contains: leadNorm.nationalNumber } });
+      }
+      if (customerDigits && customerDigits.length >= 7) {
+        matchConditions.push({ phone: { contains: customerDigits } });
+      }
       const matchedLead = await prisma.crmLead.findFirst({
-        where: { phone: { contains: last10(customerDigits) } },
+        where: {
+          OR: matchConditions.length > 0 ? matchConditions : [{ phone: { contains: last10(customerDigits) } }],
+        },
       });
       if (matchedLead) {
         leadId = matchedLead.id;
@@ -1168,9 +1185,19 @@ class TelephonyService {
           if (found) return found.id;
         }
       }
-      if (customerPhone.length >= 10) {
+      if (customerPhone) {
+        const cNorm = normalizePhoneWithCountryCode(customerPhone);
+        const matchConditions: any[] = [];
+        if (cNorm.nationalNumber && cNorm.nationalNumber.length >= 7) {
+          matchConditions.push({ phone: { contains: cNorm.nationalNumber } });
+        }
+        if (customerPhone.length >= 7) {
+          matchConditions.push({ phone: { contains: customerPhone } });
+        }
         const matched = await prisma.crmLead.findFirst({
-          where: { phone: { contains: last10(customerPhone) } },
+          where: {
+            OR: matchConditions.length > 0 ? matchConditions : [{ phone: { contains: last10(customerPhone) } }],
+          },
           select: { id: true },
         });
         if (matched) return matched.id;

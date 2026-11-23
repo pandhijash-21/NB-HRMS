@@ -94,6 +94,7 @@ export interface CreateLeadDto {
   referenceType?: string;
   referenceName?: string;
   allowDuplicate?: boolean;
+  countryCode?: string;
 }
 
 export interface MergeLeadsDto {

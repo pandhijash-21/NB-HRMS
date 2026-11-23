@@ -21,6 +21,120 @@ String digitsOnlyPhone(String? raw) {
   return raw.replaceAll(RegExp(r'\D'), '');
 }
 
+/// Parsed country and phone structure for intelligent telephony and deduplication display
+class ParsedCountryPhone {
+  final String countryCode;
+  final String countryLabel;
+  final String nationalNumber;
+  final String e164;
+  final bool isDomestic;
+
+  const ParsedCountryPhone({
+    required this.countryCode,
+    required this.countryLabel,
+    required this.nationalNumber,
+    required this.e164,
+    required this.isDomestic,
+  });
+}
+
+/// Parses phone string and optional country code into structured ParsedCountryPhone
+ParsedCountryPhone parseCountryPhone(String? phone, [String? countryCode]) {
+  final raw = (phone ?? '').trim();
+  final d = digitsOnlyPhone(raw);
+  var cc = digitsOnlyPhone(countryCode ?? '');
+  var nat = d;
+
+  if (cc.isNotEmpty) {
+    if (nat.startsWith(cc) && nat.length > cc.length + 5) {
+      nat = nat.substring(cc.length);
+    }
+  } else if (raw.startsWith('+') || raw.startsWith('00')) {
+    final clean = raw.startsWith('00') && d.length > 2 ? d.substring(2) : d;
+    const prefixes = [
+      '971', '966', '974', '968', '965', '973', '852', '880', '977', '353',
+      '91', '44', '61', '65', '60', '62', '66', '63', '81', '82', '86', '49',
+      '33', '39', '34', '31', '32', '41', '20', '27', '64', '94', '92', '1', '7'
+    ];
+    for (final p in prefixes) {
+      if (clean.startsWith(p) && clean.length > p.length) {
+        cc = p;
+        nat = clean.substring(p.length);
+        break;
+      }
+    }
+    if (cc.isEmpty) {
+      cc = clean.length > 10 ? clean.substring(0, clean.length - 10) : '91';
+      nat = clean.length > 10 ? clean.substring(clean.length - 10) : clean;
+    }
+  } else {
+    if (d.length == 10) {
+      cc = '91';
+      nat = d;
+    } else if (d.length == 11 && d.startsWith('0')) {
+      cc = '91';
+      nat = d.substring(1);
+    } else if (d.length == 12 && d.startsWith('91')) {
+      cc = '91';
+      nat = d.substring(2);
+    } else if (d.length == 12 && d.startsWith('971')) {
+      cc = '971';
+      nat = d.substring(3);
+    } else if (d.length == 11 && d.startsWith('1')) {
+      cc = '1';
+      nat = d.substring(1);
+    } else {
+      cc = '91';
+      nat = d.length > 10 ? d.substring(d.length - 10) : d;
+    }
+  }
+
+  if (nat.startsWith('0') && nat.length >= 10) {
+    nat = nat.replaceFirst(RegExp(r'^0+'), '');
+  }
+
+  String label;
+  switch (cc) {
+    case '91':
+      label = 'India (+91)';
+      break;
+    case '971':
+      label = 'UAE (+971)';
+      break;
+    case '1':
+      label = 'USA / Canada (+1)';
+      break;
+    case '44':
+      label = 'UK (+44)';
+      break;
+    case '65':
+      label = 'Singapore (+65)';
+      break;
+    case '966':
+      label = 'Saudi Arabia (+966)';
+      break;
+    case '974':
+      label = 'Qatar (+974)';
+      break;
+    case '968':
+      label = 'Oman (+968)';
+      break;
+    case '61':
+      label = 'Australia (+61)';
+      break;
+    default:
+      label = cc.isNotEmpty ? '+$cc' : 'India (+91)';
+  }
+
+  return ParsedCountryPhone(
+    countryCode: cc.isNotEmpty ? cc : '91',
+    countryLabel: label,
+    nationalNumber: nat,
+    e164: '+$cc$nat',
+    isDomestic: cc == '91' || cc.isEmpty,
+  );
+}
+
 /// Builds a click-to-call dial preview like `+919876543210`.
 /// Keeps an existing `+` country code; otherwise defaults to `+91` + last 10.
 String formatClickToCallDialPreview(String? phone) {

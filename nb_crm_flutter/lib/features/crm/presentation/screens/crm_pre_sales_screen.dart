@@ -647,7 +647,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             cardBg: cardBg,
             borderColor: borderColor,
             textMuted: textMuted,
-            primaryColor: primaryGold,
+            primaryColor: primaryColor,
+            isItAdminEmp1: isItAdminEmp1,
           ),
           const SizedBox(height: 12),
           if (isAdmin && _bulkTransferSelectedIds.isNotEmpty) ...[
@@ -785,7 +786,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             cardBg: cardBg,
             borderColor: borderColor,
             textMuted: textMuted,
-            primaryColor: primaryGold,
+            primaryColor: primaryColor,
           ),
         ],
       ),
@@ -813,6 +814,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     required Color borderColor,
     required Color textMuted,
     required Color primaryColor,
+    bool isItAdminEmp1 = false,
   }) {
     final projects = state.projects;
     final selectedProjectId = state.selectedProjectId;
@@ -1583,18 +1585,20 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           }
 
           Widget buildFullScreenButton() {
-            return OutlinedButton.icon(
-              onPressed: _openFullScreenFocusMode,
-              icon: const Icon(Icons.fullscreen_rounded, size: 16),
-              label: const Text('Full Screen', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-              tooltip: 'Enter Full Screen Focus Mode (Dialer & Leads Table only)',
-              style: OutlinedButton.styleFrom(
-                foregroundColor: primaryColor,
-                side: BorderSide(color: primaryColor.withValues(alpha: 0.5)),
-                backgroundColor: primaryColor.withValues(alpha: 0.06),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                visualDensity: VisualDensity.compact,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            return Tooltip(
+              message: 'Enter Full Screen Focus Mode (Dialer & Leads Table only)',
+              child: OutlinedButton.icon(
+                onPressed: _openFullScreenFocusMode,
+                icon: const Icon(Icons.fullscreen_rounded, size: 16),
+                label: const Text('Full Screen', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: primaryColor,
+                  side: BorderSide(color: primaryColor.withValues(alpha: 0.5)),
+                  backgroundColor: primaryColor.withValues(alpha: 0.06),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  visualDensity: VisualDensity.compact,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
             );
           }
@@ -1673,7 +1677,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   Widget _buildLeadsTableAndPagination({
     required BuildContext context,
     required List<CrmLead> filteredLeads,
-    required List<CrmDynamicColumn> columns,
+    required List<CrmColumnConfig> columns,
     required List<CrmSalesUser> salesUsers,
     required bool isAdmin,
     required bool canWrite,
@@ -1688,6 +1692,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     ScrollController? horizontalController,
     VoidCallback? onStateUpdated,
   }) {
+    final authState = context.read<AuthBloc>().state;
     final state = context.read<CrmLeadsBloc>().state;
     if (state.status.isLoading && filteredLeads.isEmpty) {
       return const Center(
@@ -2446,7 +2451,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ),
                 ),
               ),
-            ),,
+            ),
         const SizedBox(height: 10),
         _buildLeadsPaginationBar(
           total: filteredLeads.length,
@@ -2469,6 +2474,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     required Color cardBg,
     required Color textMuted,
     required Color primaryColor,
+    VoidCallback? onPageChanged,
   }) {
     final totalPages = (total / _leadsPageSize).ceil().clamp(1, 999999);
     final page = _leadsPage.clamp(0, totalPages - 1);
@@ -2511,6 +2517,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       _leadsPageSize = v;
                       _leadsPage = 0;
                     });
+                    onPageChanged?.call();
                   },
                 ),
               ),
@@ -2518,7 +2525,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 tooltip: 'Previous page',
                 onPressed: page <= 0
                     ? null
-                    : () => setState(() => _leadsPage = page - 1),
+                    : () {
+                        setState(() => _leadsPage = page - 1);
+                        onPageChanged?.call();
+                      },
                 icon: const Icon(Icons.chevron_left_rounded),
               ),
               Text(
@@ -2529,7 +2539,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 tooltip: 'Next page',
                 onPressed: page >= totalPages - 1
                     ? null
-                    : () => setState(() => _leadsPage = page + 1),
+                    : () {
+                        setState(() => _leadsPage = page + 1);
+                        onPageChanged?.call();
+                      },
                 icon: const Icon(Icons.chevron_right_rounded),
               ),
             ],

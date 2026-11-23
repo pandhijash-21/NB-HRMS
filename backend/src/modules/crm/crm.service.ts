@@ -9057,5 +9057,291 @@ export const crmService = {
       message: `Successfully wiped ${deleteRes.count} Real Estate Pre-Sales leads and associated records.`,
     };
   },
+
+  async getLeadMineData(query: {
+    scope?: string;
+    search?: string;
+    status?: string;
+    binStatus?: string;
+    campaignId?: string;
+    leadSource?: string;
+    telecallerId?: number;
+    fromDate?: string;
+    toDate?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const scope = query.scope && query.scope !== 'ALL' ? query.scope : undefined;
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(5000, Math.max(1, Number(query.limit) || 100));
+    const skip = (page - 1) * limit;
+
+    const baseWhere: any = {};
+    if (scope) {
+      baseWhere.scope = scope;
+    }
+
+    if (query.binStatus === 'BIN') {
+      baseWhere.OR = [
+        { isDeleted: true },
+        { status: CrmLeadStatus.NOT_INTERESTED },
+      ];
+    } else if (query.binStatus === 'ACTIVE') {
+      baseWhere.isDeleted = false;
+      baseWhere.status = { not: CrmLeadStatus.NOT_INTERESTED };
+    }
+
+    if (query.campaignId && query.campaignId !== 'ALL') {
+      baseWhere.campaignId = query.campaignId;
+    }
+
+    if (query.status && query.status !== 'ALL') {
+      baseWhere.status = query.status as CrmLeadStatus;
+    }
+
+    if (query.leadSource && query.leadSource !== 'ALL') {
+      baseWhere.leadSource = query.leadSource;
+    }
+
+    if (query.telecallerId) {
+      baseWhere.telecallerId = Number(query.telecallerId);
+    }
+
+    if (query.fromDate || query.toDate) {
+      baseWhere.createdAt = {};
+      if (query.fromDate) baseWhere.createdAt.gte = new Date(query.fromDate);
+      if (query.toDate) {
+        const toD = new Date(query.toDate);
+        toD.setHours(23, 59, 59, 999);
+        baseWhere.createdAt.lte = toD;
+      }
+    }
+
+    if (query.search && query.search.trim().length > 0) {
+      const term = query.search.trim();
+      const searchConditions: any[] = [
+        { name: { contains: term, mode: 'insensitive' } },
+        { phone: { contains: term, mode: 'insensitive' } },
+        { campaign: { name: { contains: term, mode: 'insensitive' } } },
+      ];
+      if (baseWhere.OR) {
+        baseWhere.AND = [
+          { OR: baseWhere.OR },
+          { OR: searchConditions },
+        ];
+        delete baseWhere.OR;
+      } else {
+        baseWhere.OR = searchConditions;
+      }
+    }
+
+    const statsWhere: any = scope ? { scope } : {};
+
+    const [
+      items,
+      totalFiltered,
+      totalAll,
+      totalActive,
+      totalBin,
+      totalBooked,
+      statusGroups,
+      sourceGroups,
+      campaignGroups,
+      telecallerGroups,
+    ] = await Promise.all([
+      prisma.crmLead.findMany({
+        where: baseWhere,
+        include: {
+          campaign: {
+            select: {
+              id: true,
+              name: true,
+              project: { select: { id: true, name: true } },
+            },
+          },
+          assignedTo: {
+            select: {
+              id: true,
+              generalInfo: { select: { fullName: true } },
+            },
+          },
+          telecaller: {
+            select: {
+              id: true,
+              generalInfo: { select: { fullName: true } },
+            },
+          },
+          followUps: {
+            where: { status: 'PENDING' },
+            orderBy: { scheduledDate: 'asc' },
+            take: 1,
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.crmLead.count({ where: baseWhere }),
+      prisma.crmLead.count({ where: statsWhere }),
+      prisma.crmLead.count({
+        where: {
+          ...statsWhere,
+          isDeleted: false,
+          status: { not: CrmLeadStatus.NOT_INTERESTED },
+        },
+      }),
+      prisma.crmLead.count({
+        where: {
+          ...statsWhere,
+          OR: [
+            { isDeleted: true },
+            { status: CrmLeadStatus.NOT_INTERESTED },
+          ],
+        },
+      }),
+      prisma.crmLead.count({
+        where: {
+          ...statsWhere,
+          status: CrmLeadStatus.BOOKING_CONFIRMED,
+        },
+      }),
+      prisma.crmLead.groupBy({
+        by: ['status'],
+        where: statsWhere,
+        _count: { _all: true },
+      }),
+      prisma.crmLead.groupBy({
+        by: ['leadSource'],
+        where: statsWhere,
+        _count: { _all: true },
+      }),
+      prisma.crmLead.groupBy({
+        by: ['campaignId'],
+        where: statsWhere,
+        _count: { _all: true },
+      }),
+      prisma.crmLead.groupBy({
+        by: ['telecallerId'],
+        where: statsWhere,
+        _count: { _all: true },
+      }),
+    ]);
+
+    const byStatus: Record<string, number> = {};
+    for (const g of statusGroups) {
+      if (g.status) byStatus[g.status] = g._count._all;
+    }
+
+    const bySource: Record<string, number> = {};
+    for (const g of sourceGroups) {
+      const src = g.leadSource || 'UNKNOWN';
+      bySource[src] = g._count._all;
+    }
+
+    const topCampaignIds = campaignGroups
+      .filter((c) => c.campaignId)
+      .sort((a, b) => b._count._all - a._count._all)
+      .slice(0, 10)
+      .map((c) => c.campaignId as string);
+
+    const campaigns = topCampaignIds.length > 0
+      ? await prisma.crmCampaign.findMany({
+          where: { id: { in: topCampaignIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const campaignMap = new Map(campaigns.map((c) => [c.id, c.name]));
+
+    const byCampaign = campaignGroups
+      .filter((c) => c.campaignId)
+      .map((c) => ({
+        id: c.campaignId as string,
+        name: campaignMap.get(c.campaignId as string) || 'Unknown Campaign',
+        count: c._count._all,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const topTelecallerIds = telecallerGroups
+      .filter((t) => t.telecallerId)
+      .sort((a, b) => b._count._all - a._count._all)
+      .slice(0, 10)
+      .map((t) => t.telecallerId as number);
+
+    const telecallers = topTelecallerIds.length > 0
+      ? await prisma.employee.findMany({
+          where: { id: { in: topTelecallerIds } },
+          select: {
+            id: true,
+            generalInfo: { select: { fullName: true } },
+          },
+        })
+      : [];
+    const telecallerMap = new Map(
+      telecallers.map((t) => [t.id, t.generalInfo?.fullName || `Telecaller #${t.id}`])
+    );
+
+    const byTelecaller = telecallerGroups
+      .filter((t) => t.telecallerId)
+      .map((t) => ({
+        id: t.telecallerId as number,
+        name: telecallerMap.get(t.telecallerId as number) || `Telecaller #${t.telecallerId}`,
+        count: t._count._all,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return {
+      summary: {
+        totalLeads: totalAll,
+        activeLeads: totalActive,
+        binLeads: totalBin,
+        bookedLeads: totalBooked,
+        byStatus,
+        bySource,
+        byCampaign,
+        byTelecaller,
+      },
+      items,
+      total: totalFiltered,
+      page,
+      limit,
+    };
+  },
+
+  async getLeadById(leadId: string) {
+    const lead = await prisma.crmLead.findUnique({
+      where: { id: leadId },
+      include: {
+        campaign: {
+          select: {
+            id: true,
+            name: true,
+            project: { select: { id: true, name: true } },
+          },
+        },
+        assignedTo: {
+          select: {
+            id: true,
+            generalInfo: { select: { fullName: true, employeeCode: true } },
+          },
+        },
+        telecaller: {
+          select: {
+            id: true,
+            generalInfo: { select: { fullName: true, employeeCode: true } },
+          },
+        },
+        followUps: {
+          orderBy: { scheduledDate: 'desc' },
+          take: 100,
+        },
+        callLogs: {
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        },
+      },
+    });
+    if (!lead) throw new Error('Lead not found');
+    return lead;
+  },
 };
 

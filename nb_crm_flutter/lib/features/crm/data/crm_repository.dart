@@ -289,6 +289,82 @@ class CrmRepository {
     return all;
   }
 
+  Future<({
+    Map<String, dynamic> summary,
+    List<CrmLead> items,
+    int total,
+    int page,
+    int limit,
+  })> getLeadMineData({
+    String? search,
+    String? status,
+    String? binStatus,
+    String? campaignId,
+    String? leadSource,
+    int? telecallerId,
+    DateTime? fromDate,
+    DateTime? toDate,
+    int page = 1,
+    int limit = 100,
+  }) async {
+    final query = <String, dynamic>{
+      'page': page.toString(),
+      'limit': limit.toString(),
+      'scope': crmScopeNotifier.value,
+    };
+    if (search != null && search.trim().isNotEmpty) query['search'] = search.trim();
+    if (status != null && status != 'ALL' && status.isNotEmpty) query['status'] = status;
+    if (binStatus != null && binStatus != 'ALL' && binStatus.isNotEmpty) query['binStatus'] = binStatus;
+    if (campaignId != null && campaignId != 'ALL' && campaignId.isNotEmpty) query['campaignId'] = campaignId;
+    if (leadSource != null && leadSource != 'ALL' && leadSource.isNotEmpty) query['leadSource'] = leadSource;
+    if (telecallerId != null) query['telecallerId'] = telecallerId.toString();
+    if (fromDate != null) query['fromDate'] = fromDate.toIso8601String();
+    if (toDate != null) query['toDate'] = toDate.toIso8601String();
+
+    return _dio.getEnvelope<({
+      Map<String, dynamic> summary,
+      List<CrmLead> items,
+      int total,
+      int page,
+      int limit,
+    })>(
+      'crm/admin/lead-mine',
+      queryParameters: query,
+      parse: (raw) {
+        if (raw is! Map) {
+          return (summary: <String, dynamic>{}, items: <CrmLead>[], total: 0, page: 1, limit: limit);
+        }
+        final summaryRaw = raw['summary'] is Map ? Map<String, dynamic>.from(raw['summary'] as Map) : <String, dynamic>{};
+        final itemsRaw = raw['items'];
+        final items = itemsRaw is List
+            ? itemsRaw
+                .map((e) => CrmLead.fromJson(Map<String, dynamic>.from(e as Map)))
+                .toList()
+            : <CrmLead>[];
+        final totalCount = (raw['total'] as num?)?.toInt() ?? items.length;
+        final resPage = (raw['page'] as num?)?.toInt() ?? page;
+        final resLimit = (raw['limit'] as num?)?.toInt() ?? limit;
+        return (
+          summary: summaryRaw,
+          items: items,
+          total: totalCount,
+          page: resPage,
+          limit: resLimit,
+        );
+      },
+    );
+  }
+
+  Future<CrmLead> getLeadById(String leadId) async {
+    return _dio.getEnvelope<CrmLead>(
+      'crm/leads/$leadId',
+      parse: (raw) {
+        if (raw is! Map) throw Exception('Lead not found');
+        return CrmLead.fromJson(Map<String, dynamic>.from(raw as Map));
+      },
+    );
+  }
+
   Future<Uint8List> exportLeadsExcel({
     String? projectId,
     String? campaignId,

@@ -669,6 +669,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Bin',
             section: 'CRM',
           ),
+        if (isAdmin)
+          const _Destination(
+            '/crm/lead-mine',
+            Icons.diamond_outlined,
+            Icons.diamond_rounded,
+            'Lead Mine',
+            section: 'CRM',
+          ),
         if (Permissions.canReadCrmSettings(auth.permissions, auth.user?.role, crmScope))
           const _Destination(
             '/crm/settings',

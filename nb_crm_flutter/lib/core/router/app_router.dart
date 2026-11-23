@@ -133,6 +133,9 @@ import '../../features/crm/presentation/screens/crm_headers_screen.dart';
 import '../../features/crm/presentation/screens/crm_post_sales_screen.dart';
 import '../../features/crm/presentation/screens/crm_settings_screen.dart';
 import '../../features/crm/presentation/screens/crm_bin_screen.dart';
+import '../../features/crm/domain/crm_models.dart';
+import '../../features/crm/presentation/screens/crm_lead_mine_screen.dart';
+import '../../features/crm/presentation/screens/crm_lead_detail_screen.dart';
 import '../../features/crm/presentation/screens/crm_visitor_desk_screen.dart';
 import '../../features/crm/presentation/screens/crm_sales_screen.dart';
 import '../../features/crm/presentation/screens/crm_virtual_building_screen.dart';
@@ -369,6 +372,11 @@ GoRouter createAppRouter(AuthBloc authBloc) {
               next = '/crm/pre-sales';
             } else if (loc.startsWith('/crm/settings') && !Permissions.canReadCrmSettings(perms, role)) {
               next = '/crm/pre-sales';
+            } else if (loc.startsWith('/crm/lead-mine')) {
+              final r = (role ?? '').toUpperCase().replaceAll(RegExp(r'[\s_-]+'), '');
+              final adminOk = Permissions.isAdmin(role) ||
+                  const ['ADMIN', 'SUPERADMIN', 'SYSTEMADMIN', 'ITADMIN'].contains(r);
+              if (!adminOk) next = '/crm/dashboard';
             } else if (loc.startsWith('/crm/ops-health')) {
               final r = (role ?? '').toUpperCase().replaceAll(RegExp(r'[\s_-]+'), '');
               final opsOk = Permissions.isAdmin(role) ||
@@ -576,6 +584,18 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           GoRoute(
             path: '/crm/bin',
             builder: (context, state) => const CrmBinScreen(),
+          ),
+          GoRoute(
+            path: '/crm/lead-mine',
+            builder: (context, state) => const CrmLeadMineScreen(),
+          ),
+          GoRoute(
+            path: '/crm/lead-mine/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              final extra = state.extra is CrmLead ? state.extra as CrmLead : null;
+              return CrmLeadDetailScreen(leadId: id, initialLead: extra);
+            },
           ),
           GoRoute(
             path: '/crm/settings',

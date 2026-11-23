@@ -278,6 +278,7 @@ const crmAdminGuard = (req: any, res: any, next: any) => {
 };
 
 // Leads & Excel
+crmRouter.get('/admin/lead-mine', generalCrmGuard, crmAdminGuard, crmController.getLeadMine);
 crmRouter.get('/leads/export-excel', generalCrmGuard, crmAdminGuard, crmController.exportLeadsExcel);
 crmRouter.get('/leads', generalCrmGuard, crmController.getLeads);
 crmRouter.get('/leads/check-phone', generalCrmGuard, crmController.checkPhone);
@@ -292,6 +293,7 @@ crmRouter.post('/leads/bulk-transfer', generalCrmGuard, crmController.bulkTransf
 crmRouter.post('/leads/:id/transfer', generalCrmGuard, crmController.transferLead);
 crmRouter.patch('/leads/:id/status', generalCrmGuard, crmController.updateLeadStatus);
 crmRouter.patch('/leads/:id', generalCrmGuard, crmController.updateLead);
+crmRouter.get('/leads/:id', generalCrmGuard, crmController.getLeadById);
 crmRouter.post('/admin/wipe-real-estate-presales', generalCrmGuard, crmController.wipeRealEstatePreSalesData);
 crmRouter.post('/admin/migrate-finserve-loan-tables', generalCrmGuard, crmController.migrateFinserveLoanTables);
 crmRouter.post('/leads/:id/whatsapp', generalCrmGuard, crmController.sendLeadWhatsapp);

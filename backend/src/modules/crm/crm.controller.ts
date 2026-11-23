@@ -234,6 +234,37 @@ export const crmController = {
     }
   },
 
+  async getLeadMine(req: Request, res: Response) {
+    try {
+      const data = await crmService.getLeadMineData({
+        scope: getScope(req),
+        search: req.query.search as string,
+        status: req.query.status as string,
+        binStatus: req.query.binStatus as string,
+        campaignId: req.query.campaignId as string,
+        leadSource: req.query.leadSource as string,
+        telecallerId: req.query.telecallerId ? parseInt(req.query.telecallerId as string, 10) : undefined,
+        fromDate: (req.query.fromDate || req.query.startDate) as string,
+        toDate: (req.query.toDate || req.query.endDate) as string,
+        page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
+        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 100,
+      });
+      res.json(ok(data));
+    } catch (err: any) {
+      res.status(500).json(fail(err.message || 'Failed to fetch Lead Mine data'));
+    }
+  },
+
+  async getLeadById(req: Request, res: Response) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const lead = await crmService.getLeadById(String(id));
+      res.json(ok(lead));
+    } catch (err: any) {
+      res.status(err.message?.includes('not found') ? 404 : 500).json(fail(err.message || 'Failed to fetch lead'));
+    }
+  },
+
   async exportLeadsExcel(req: Request, res: Response) {
     try {
       const authUser = (req as any).user;

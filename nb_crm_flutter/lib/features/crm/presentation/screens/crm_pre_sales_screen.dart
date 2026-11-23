@@ -5660,6 +5660,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     List<int> multiSelectedTelecallerIds = [];
     bool skipDuplicates = true;
     bool hasInitiated = false;
+    bool isFullScreen = false;
+    String duplicateSortMode = 'ROW_ASC';
 
     showDialog(
       context: context,
@@ -5752,18 +5754,24 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           final screenWidth = MediaQuery.of(context).size.width;
           final screenHeight = MediaQuery.of(context).size.height;
           // Make dialog spacious and large on desktop so all comparison fields and controls are clearly visible
-          final dialogWidth = screenWidth > 1400
-              ? (screenWidth * 0.94).clamp(1120.0, 1440.0)
-              : (screenWidth > 900 ? (screenWidth * 0.95).clamp(900.0, 1280.0) : (screenWidth * 0.98));
-          final dialogHeight = (screenHeight * 0.94).clamp(580.0, 980.0);
+          final dialogWidth = isFullScreen
+              ? screenWidth
+              : (screenWidth > 1400
+                  ? (screenWidth * 0.94).clamp(1120.0, 1440.0)
+                  : (screenWidth > 900 ? (screenWidth * 0.95).clamp(900.0, 1280.0) : (screenWidth * 0.98)));
+          final dialogHeight = isFullScreen
+              ? screenHeight
+              : (screenHeight * 0.94).clamp(580.0, 980.0);
 
           return Dialog(
             backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: borderColor),
+              borderRadius: BorderRadius.circular(isFullScreen ? 0 : 12),
+              side: isFullScreen ? BorderSide.none : BorderSide(color: borderColor),
             ),
-            insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+            insetPadding: isFullScreen
+                ? EdgeInsets.zero
+                : const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
             child: SizedBox(
               width: dialogWidth,
               height: dialogHeight,
@@ -5797,6 +5805,17 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                             ],
                           ),
                         ),
+                        IconButton(
+                          icon: Icon(
+                            isFullScreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
+                            size: 22,
+                            color: isFullScreen ? const Color(0xFF2563EB) : null,
+                          ),
+                          splashRadius: 18,
+                          onPressed: () => setModalState(() => isFullScreen = !isFullScreen),
+                          tooltip: isFullScreen ? 'Exit Full Screen' : 'Full Screen (Maximize)',
+                        ),
+                        const SizedBox(width: 4),
                         IconButton(
                           icon: const Icon(Icons.close, size: 20),
                           splashRadius: 18,
@@ -5939,6 +5958,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                 duplicateDecisions: duplicateDecisions,
                                 duplicateFilterIndex: duplicateFilterIndex,
                                 onDuplicateFilterChanged: (idx) => setModalState(() => duplicateFilterIndex = idx),
+                                isFullScreen: isFullScreen,
+                                onToggleFullScreen: () => setModalState(() => isFullScreen = !isFullScreen),
+                                duplicateSortMode: duplicateSortMode,
+                                onDuplicateSortChanged: (mode) => setModalState(() => duplicateSortMode = mode),
                                 previewRows: previewRows,
                                 skipDuplicates: skipDuplicates,
                                 assignmentMode: assignmentMode,
@@ -5946,6 +5969,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                 multiSelectedTelecallerIds: multiSelectedTelecallerIds,
                                 selectedEmployees: selectedEmployees,
                                 specificTelecallerId: specificTelecallerId,
+                                onAssignmentModeChanged: (mode) => setModalState(() => assignmentMode = mode),
+                                onSpecificTelecallerChanged: (id) => setModalState(() => specificTelecallerId = id),
+                                onMultiSelectedTelecallerIdsChanged: (ids) => setModalState(() => multiSelectedTelecallerIds = ids),
                                 onCampaignChanged: (newCamp) {
                                   setModalState(() => selectedCampaignId = newCamp);
                                   runPreview(newCamp, selectedSheet);
@@ -6175,6 +6201,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     required Map<int, String> duplicateDecisions,
     required int duplicateFilterIndex,
     required void Function(int) onDuplicateFilterChanged,
+    required bool isFullScreen,
+    required VoidCallback onToggleFullScreen,
+    required String duplicateSortMode,
+    required void Function(String) onDuplicateSortChanged,
     required List<Map<String, dynamic>> previewRows,
     required bool skipDuplicates,
     required String assignmentMode,
@@ -6182,6 +6212,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     required List<int> multiSelectedTelecallerIds,
     required List<CrmSalesUser> selectedEmployees,
     required int? specificTelecallerId,
+    required void Function(String) onAssignmentModeChanged,
+    required void Function(int?) onSpecificTelecallerChanged,
+    required void Function(List<int>) onMultiSelectedTelecallerIdsChanged,
     required void Function(String?) onCampaignChanged,
     required void Function(String?) onSheetChanged,
     required List<Map<String, dynamic>> followUpList,
@@ -6507,6 +6540,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         context: context,
                         filterIndex: duplicateFilterIndex,
                         onFilterChanged: onDuplicateFilterChanged,
+                        isFullScreen: isFullScreen,
+                        onToggleFullScreen: onToggleFullScreen,
+                        duplicateSortMode: duplicateSortMode,
+                        onSortChanged: onDuplicateSortChanged,
                       )
                     : ((previewSubTab == 2 && followUpList.isNotEmpty)
                         ? _buildImportFollowUpsTab(
@@ -6559,7 +6596,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             subtitle: Text('Evenly distribute leads among selected agents',
                 style: TextStyle(fontSize: 11, color: textMuted)),
-            onChanged: (val) => setModalState(() => assignmentMode = val ?? 'ROUND_ROBIN'),
+            onChanged: (val) => onAssignmentModeChanged(val ?? 'ROUND_ROBIN'),
           ),
 
           if (assignmentMode == 'ROUND_ROBIN') ...[
@@ -6573,7 +6610,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       context: context,
                       salesUsers: salesUsers,
                       initialSelected: multiSelectedTelecallerIds,
-                      onConfirm: (updated) => setModalState(() => multiSelectedTelecallerIds = updated),
+                      onConfirm: (updated) => onMultiSelectedTelecallerIdsChanged(updated),
                     ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -6611,8 +6648,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           labelPadding: const EdgeInsets.symmetric(horizontal: 4),
                           label: Text(emp.fullName, style: const TextStyle(fontSize: 11)),
                           deleteIcon: const Icon(Icons.close, size: 14),
-                          onDeleted: () =>
-                              setModalState(() => multiSelectedTelecallerIds.remove(emp.employeeId)),
+                          onDeleted: () {
+                            final updated = List<int>.from(multiSelectedTelecallerIds)..remove(emp.employeeId);
+                            onMultiSelectedTelecallerIdsChanged(updated);
+                          },
                         );
                       }).toList(),
                     ),
@@ -6632,7 +6671,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             subtitle: Text('Directly assign every row in this batch to a chosen telecaller',
                 style: TextStyle(fontSize: 11, color: textMuted)),
-            onChanged: (val) => setModalState(() => assignmentMode = val ?? 'SPECIFIC'),
+            onChanged: (val) => onAssignmentModeChanged(val ?? 'SPECIFIC'),
           ),
 
           if (assignmentMode == 'SPECIFIC') ...[
@@ -6653,7 +6692,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     child: Text('${u.fullName} (#${u.employeeId})', overflow: TextOverflow.ellipsis),
                   );
                 }).toList(),
-                onChanged: (val) => setModalState(() => specificTelecallerId = val),
+                onChanged: (val) => onSpecificTelecallerChanged(val),
               ),
             ),
           ],
@@ -6668,7 +6707,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             subtitle: Text('Leads will enter unallocated pool or be dispatched when callers are available',
                 style: TextStyle(fontSize: 11, color: textMuted)),
-            onChanged: (val) => setModalState(() => assignmentMode = val ?? 'UNASSIGNED'),
+            onChanged: (val) => onAssignmentModeChanged(val ?? 'UNASSIGNED'),
           ),
 
           const SizedBox(height: 12),
@@ -6904,6 +6943,35 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     );
   }
 
+  int _countExtraFieldsForDuplicate(Map<String, dynamic> dup) {
+    final rowData = dup['rowData'] is Map ? Map<String, dynamic>.from(dup['rowData'] as Map) : <String, dynamic>{};
+    final existingLead = dup['existingLead'] is Map ? Map<String, dynamic>.from(dup['existingLead'] as Map) : null;
+    final existingCf = (existingLead != null && existingLead['customFields'] is Map)
+        ? Map<String, dynamic>.from(existingLead['customFields'] as Map)
+        : <String, dynamic>{};
+    int count = 0;
+    for (final e in rowData.entries) {
+      final k = e.key.trim();
+      final lower = k.toLowerCase();
+      if (lower.contains('phone') ||
+          lower.contains('mobile') ||
+          lower.contains('name') ||
+          lower.contains('email') ||
+          lower.startsWith('empty') ||
+          lower.startsWith('__empty')) {
+        continue;
+      }
+      final val = e.value?.toString().trim();
+      if (val == null || val.isEmpty || val == 'null') continue;
+
+      final existingVal = existingCf[k] ?? existingCf[lower] ?? existingLead?[k];
+      if (existingVal == null || existingVal.toString().trim().isEmpty) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   Widget _buildDuplicatesTab({
     required List<Map<String, dynamic>> duplicatesList,
     required Map<int, String> duplicateDecisions,
@@ -6915,6 +6983,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     required BuildContext context,
     required int filterIndex,
     required void Function(int) onFilterChanged,
+    required bool isFullScreen,
+    required VoidCallback onToggleFullScreen,
+    required String duplicateSortMode,
+    required void Function(String) onSortChanged,
   }) {
     final totalCount = duplicatesList.length;
     final skipCount = duplicatesList.where((d) {
@@ -6937,6 +7009,38 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       if (filterIndex == 2) return d['isSameCampaign'] != true;
       return true;
     }).toList();
+
+    displayedList.sort((a, b) {
+      final rA = (a['rowNumber'] as num?)?.toInt() ?? 0;
+      final rB = (b['rowNumber'] as num?)?.toInt() ?? 0;
+      switch (duplicateSortMode) {
+        case 'ROW_DESC':
+          return rB.compareTo(rA);
+        case 'EXTRA_DATA_FIRST':
+          final extraA = _countExtraFieldsForDuplicate(a);
+          final extraB = _countExtraFieldsForDuplicate(b);
+          if (extraA != extraB) return extraB.compareTo(extraA);
+          return rA.compareTo(rB);
+        case 'TARGET_FIRST':
+          final isSameA = a['isSameCampaign'] == true ? 1 : 0;
+          final isSameB = b['isSameCampaign'] == true ? 1 : 0;
+          if (isSameA != isSameB) return isSameB.compareTo(isSameA);
+          return rA.compareTo(rB);
+        case 'NAME_ASC':
+          final nameA = (a['rowData'] is Map ? (a['rowData']['name'] ?? a['rowData']['Name'] ?? '') : '').toString().toLowerCase();
+          final nameB = (b['rowData'] is Map ? (b['rowData']['name'] ?? b['rowData']['Name'] ?? '') : '').toString().toLowerCase();
+          final comp = nameA.compareTo(nameB);
+          return comp != 0 ? comp : rA.compareTo(rB);
+        case 'DECISION':
+          final decA = duplicateDecisions[rA] ?? 'SKIP';
+          final decB = duplicateDecisions[rB] ?? 'SKIP';
+          final comp = decA.compareTo(decB);
+          return comp != 0 ? comp : rA.compareTo(rB);
+        case 'ROW_ASC':
+        default:
+          return rA.compareTo(rB);
+      }
+    });
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isNarrowScreen = screenWidth < 900;
@@ -7054,40 +7158,101 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       });
                     },
                   ),
+                  const SizedBox(width: 6),
+                  // Full Screen Toggle Action Button
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: isFullScreen ? const Color(0xFF2563EB) : (isDark ? Colors.white70 : const Color(0xFF475569)),
+                      side: BorderSide(color: isFullScreen ? const Color(0xFF2563EB) : borderColor),
+                      backgroundColor: isFullScreen ? const Color(0xFF2563EB).withValues(alpha: 0.1) : null,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: Icon(isFullScreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded, size: 15),
+                    label: Text(isFullScreen ? 'Exit Full Screen' : 'Full Screen', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                    onPressed: onToggleFullScreen,
+                  ),
                 ],
               ),
               const SizedBox(height: 6),
-              // Filter Chips Row
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    Text('Filter Scope: ', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: textMuted)),
-                    const SizedBox(width: 6),
-                    _buildDuplicateFilterChip(
-                      label: 'All Duplicates ($totalCount)',
-                      isSelected: filterIndex == 0,
-                      onTap: () => onFilterChanged(0),
-                      isDark: isDark,
+              // Filter Chips & Sorting Row
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Filter Scope: ', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: textMuted)),
+                        const SizedBox(width: 6),
+                        _buildDuplicateFilterChip(
+                          label: 'All Duplicates ($totalCount)',
+                          isSelected: filterIndex == 0,
+                          onTap: () => onFilterChanged(0),
+                          isDark: isDark,
+                        ),
+                        const SizedBox(width: 6),
+                        _buildDuplicateFilterChip(
+                          label: 'Target Campaign Only ($sameCampCount)',
+                          isSelected: filterIndex == 1,
+                          onTap: () => onFilterChanged(1),
+                          isDark: isDark,
+                          accentColor: const Color(0xFFDC2626),
+                        ),
+                        const SizedBox(width: 6),
+                        _buildDuplicateFilterChip(
+                          label: 'Other Campaign / Sheet ($otherCampCount)',
+                          isSelected: filterIndex == 2,
+                          onTap: () => onFilterChanged(2),
+                          isDark: isDark,
+                          accentColor: const Color(0xFF2563EB),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 6),
-                    _buildDuplicateFilterChip(
-                      label: 'Target Campaign Only ($sameCampCount)',
-                      isSelected: filterIndex == 1,
-                      onTap: () => onFilterChanged(1),
-                      isDark: isDark,
-                      accentColor: const Color(0xFFDC2626),
+                  ),
+                  // Sort By Selector
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: borderColor),
+                      borderRadius: BorderRadius.circular(6),
+                      color: isDark ? const Color(0xFF0F172A) : Colors.white,
                     ),
-                    const SizedBox(width: 6),
-                    _buildDuplicateFilterChip(
-                      label: 'Other Campaign / Sheet ($otherCampCount)',
-                      isSelected: filterIndex == 2,
-                      onTap: () => onFilterChanged(2),
-                      isDark: isDark,
-                      accentColor: const Color(0xFF2563EB),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.sort_rounded, size: 15, color: Color(0xFF2563EB)),
+                        const SizedBox(width: 4),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: duplicateSortMode,
+                            isDense: true,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'ROW_ASC', child: Text('Sort: Row (1 → N)')),
+                              DropdownMenuItem(value: 'ROW_DESC', child: Text('Sort: Row (N → 1)')),
+                              DropdownMenuItem(value: 'EXTRA_DATA_FIRST', child: Text('Sort: Extra Data First ✨')),
+                              DropdownMenuItem(value: 'TARGET_FIRST', child: Text('Sort: Target Campaign First')),
+                              DropdownMenuItem(value: 'DECISION', child: Text('Sort: Decision (Skip/Merge/Keep)')),
+                              DropdownMenuItem(value: 'NAME_ASC', child: Text('Sort: Name (A-Z)')),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) onSortChanged(val);
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ],
           ),

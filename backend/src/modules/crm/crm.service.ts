@@ -3696,7 +3696,42 @@ export const crmService = {
             }
             if (existing) {
               const currentCustom = (existing.customFields as Record<string, any>) || {};
-              const mergedCustom = { ...currentCustom, ...customFields };
+              const mergedCustom = { ...currentCustom };
+              const addedFields: string[] = [];
+
+              for (const [k, v] of Object.entries(customFields)) {
+                if (v !== null && v !== undefined && String(v).trim() !== '') {
+                  const existingVal = mergedCustom[k];
+                  if (existingVal === null || existingVal === undefined || String(existingVal).trim() === '') {
+                    mergedCustom[k] = v;
+                    addedFields.push(k);
+                  } else if (String(existingVal).trim() !== String(v).trim()) {
+                    mergedCustom[k] = v;
+                    addedFields.push(k);
+                  }
+                }
+              }
+
+              // Also preserve email / countryCode if existing didn't have it
+              if (email && (!currentCustom.email && !currentCustom.Email)) {
+                mergedCustom.email = email;
+                addedFields.push('email');
+              }
+              if (countryCode && !mergedCustom.countryCode) {
+                mergedCustom.countryCode = countryCode;
+              }
+
+              // Append audit trail to leadEventHistory
+              const events = Array.isArray(mergedCustom.leadEventHistory) ? [...mergedCustom.leadEventHistory] : [];
+              const fieldSummary = addedFields.length > 0 ? addedFields.slice(0, 5).join(', ') : 'fields';
+              events.push({
+                at: new Date().toISOString(),
+                type: 'MERGED_DATA',
+                summary: `Merged extra data from Excel import (Row #${rowNumber}): added/updated ${addedFields.length} field(s) (${fieldSummary})`,
+                by: createdById || 'SYSTEM',
+              });
+              mergedCustom.leadEventHistory = events;
+
               await prisma.crmLead.update({
                 where: { id: existing.id },
                 data: {

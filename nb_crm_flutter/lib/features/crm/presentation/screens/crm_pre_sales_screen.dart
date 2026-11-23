@@ -6987,7 +6987,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            '$skipCount Skip • $updateCount Update • $keepCount Import New',
+                            '$skipCount Skip • $updateCount Merge Extra • $keepCount Import New',
                             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: textMuted),
                           ),
                         ),
@@ -7015,16 +7015,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     },
                   ),
                   const SizedBox(width: 6),
-                  // Bulk Action: Update All
+                  // Bulk Action: Merge All (Add extra data to existing leads)
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF2563EB),
-                      side: const BorderSide(color: Color(0xFF2563EB)),
+                      foregroundColor: const Color(0xFF4F46E5),
+                      side: const BorderSide(color: Color(0xFF4F46E5)),
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       visualDensity: VisualDensity.compact,
                     ),
-                    icon: const Icon(Icons.sync_rounded, size: 14),
-                    label: const Text('Update All', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                    icon: const Icon(Icons.call_merge_rounded, size: 14),
+                    label: const Text('Merge All', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
                     onPressed: () {
                       setModalState(() {
                         for (final d in duplicatesList) {
@@ -7285,12 +7285,21 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                         onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'KEEP'),
                                         isDark: isDark,
                                       ),
+                                      const SizedBox(width: 4),
+                                      _buildHeaderActionPill(
+                                        label: 'Merge Extra',
+                                        icon: Icons.call_merge_rounded,
+                                        isSelected: decision == 'UPDATE',
+                                        color: const Color(0xFF4F46E5),
+                                        onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'UPDATE'),
+                                        isDark: isDark,
+                                      ),
                                     ] else ...[
                                       _buildHeaderActionPill(
-                                        label: 'Update CRM',
-                                        icon: Icons.sync_rounded,
+                                        label: 'Merge Extra',
+                                        icon: Icons.call_merge_rounded,
                                         isSelected: decision == 'UPDATE',
-                                        color: const Color(0xFF2563EB),
+                                        color: const Color(0xFF4F46E5),
                                         onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'UPDATE'),
                                         isDark: isDark,
                                       ),
@@ -7330,6 +7339,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       _buildIncomingRowDetailsBox(
                                         rowNumber: rowNum,
                                         incomingRow: incomingRow,
+                                        existingLead: existingLead,
                                         fallbackName: name,
                                         fallbackPhone: phone,
                                         fallbackEmail: email,
@@ -7358,6 +7368,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                         child: _buildIncomingRowDetailsBox(
                                           rowNumber: rowNum,
                                           incomingRow: incomingRow,
+                                          existingLead: existingLead,
                                           fallbackName: name,
                                           fallbackPhone: phone,
                                           fallbackEmail: email,
@@ -7390,7 +7401,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                         !isSameCampaign && isExistingInCrm && decision == 'KEEP'
                                             ? Icons.drive_file_move_rounded
                                             : (decision == 'UPDATE'
-                                                ? Icons.sync_rounded
+                                                ? Icons.call_merge_rounded
                                                 : (decision == 'KEEP'
                                                     ? Icons.add_circle_outline_rounded
                                                     : Icons.info_outline_rounded)),
@@ -7398,7 +7409,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                         color: !isSameCampaign && isExistingInCrm && decision == 'KEEP'
                                             ? const Color(0xFF16A34A)
                                             : (decision == 'UPDATE'
-                                                ? const Color(0xFF2563EB)
+                                                ? const Color(0xFF4F46E5)
                                                 : (decision == 'KEEP' ? const Color(0xFF16A34A) : textMuted)),
                                       ),
                                       const SizedBox(width: 5),
@@ -7408,11 +7419,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                               ? (decision == 'KEEP'
                                                   ? 'Will import lead into current campaign and DELETE from "${existingLead?['campaignName'] ?? 'other campaign'}".'
                                                   : (decision == 'UPDATE'
-                                                      ? 'Will merge incoming Excel columns into existing lead in "${existingLead?['campaignName'] ?? 'CRM'}".'
+                                                      ? '✨ Will merge extra data from Excel row #$rowNum into existing CRM lead in "${existingLead?['campaignName'] ?? 'CRM'}" without creating a duplicate.'
                                                       : 'Will skip row #$rowNum. Lead stays in "${existingLead?['campaignName'] ?? 'previous campaign'}" untouched.'))
                                               : (isSameCampaign
                                                   ? (decision == 'UPDATE'
-                                                      ? 'Will overwrite and merge incoming Excel row into existing CRM lead (${existingLead?['phone'] ?? phone}).'
+                                                      ? '✨ Will merge extra data from Excel row #$rowNum into existing CRM lead (${existingLead?['phone'] ?? phone}) without creating a duplicate.'
                                                       : (decision == 'KEEP'
                                                           ? 'Will create a separate duplicate lead record in this campaign.'
                                                           : 'Will skip row #$rowNum. Existing CRM lead (${existingLead?['phone'] ?? phone}) remains untouched.'))
@@ -7423,7 +7434,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                             fontSize: 11,
                                             fontWeight: decision != 'SKIP' ? FontWeight.w600 : FontWeight.normal,
                                             color: decision == 'UPDATE'
-                                                ? const Color(0xFF2563EB)
+                                                ? const Color(0xFF4F46E5)
                                                 : (decision == 'KEEP' ? const Color(0xFF16A34A) : textMuted),
                                           ),
                                         ),
@@ -7457,13 +7468,13 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                         isDark: isDark,
                                       ),
                                       const SizedBox(width: 8),
-                                      // Action 3: Update Existing
+                                      // Action 3: Merge Extra Data into Existing Lead
                                       _buildDecisionChoiceButton(
-                                        label: 'Update CRM',
-                                        subtitle: 'Merge into existing lead',
-                                        icon: Icons.sync_rounded,
+                                        label: 'Merge Extra Data',
+                                        subtitle: 'Add new Excel fields to lead',
+                                        icon: Icons.call_merge_rounded,
                                         isSelected: decision == 'UPDATE',
-                                        color: const Color(0xFF2563EB),
+                                        color: const Color(0xFF4F46E5),
                                         onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'UPDATE'),
                                         isDark: isDark,
                                       ),
@@ -7479,13 +7490,13 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                         isDark: isDark,
                                       ),
                                       const SizedBox(width: 8),
-                                      // Action 2: Update CRM
+                                      // Action 2: Merge Extra Data
                                       _buildDecisionChoiceButton(
-                                        label: 'Update CRM',
-                                        subtitle: 'Merge Excel fields into lead',
-                                        icon: Icons.sync_rounded,
+                                        label: 'Merge Extra Data',
+                                        subtitle: 'Add new Excel fields to lead',
+                                        icon: Icons.call_merge_rounded,
                                         isSelected: decision == 'UPDATE',
-                                        color: const Color(0xFF2563EB),
+                                        color: const Color(0xFF4F46E5),
                                         onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'UPDATE'),
                                         isDark: isDark,
                                       ),
@@ -7923,6 +7934,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   Widget _buildIncomingRowDetailsBox({
     required int rowNumber,
     required Map<String, dynamic>? incomingRow,
+    required Map<String, dynamic>? existingLead,
     required String fallbackName,
     required String fallbackPhone,
     required String fallbackEmail,
@@ -7932,6 +7944,32 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   }) {
     final bgColor = isDark ? const Color(0xFF0F172A).withValues(alpha: 0.3) : const Color(0xFFF1F5F9);
     final rowData = incomingRow ?? {};
+
+    final existingCf = (existingLead != null && existingLead['customFields'] is Map)
+        ? Map<String, dynamic>.from(existingLead['customFields'] as Map)
+        : <String, dynamic>{};
+
+    // Identify which incoming Excel fields contain extra/new data not present in the existing lead
+    final extraFields = <String>[];
+    for (final e in rowData.entries) {
+      final k = e.key.trim();
+      final lower = k.toLowerCase();
+      if (lower.contains('phone') ||
+          lower.contains('mobile') ||
+          lower.contains('name') ||
+          lower.contains('email') ||
+          lower.startsWith('empty') ||
+          lower.startsWith('__empty')) {
+        continue;
+      }
+      final val = e.value?.toString().trim();
+      if (val == null || val.isEmpty || val == 'null') continue;
+
+      final existingVal = existingCf[k] ?? existingCf[lower] ?? existingLead?[k];
+      if (existingVal == null || existingVal.toString().trim().isEmpty) {
+        extraFields.add(k);
+      }
+    }
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -7953,6 +7991,28 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
                 ),
               ),
+              if (extraFields.isNotEmpty) ...[
+                Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4F46E5).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFF4F46E5).withValues(alpha: 0.4), width: 0.8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.call_merge_rounded, size: 12, color: Color(0xFF4F46E5)),
+                      const SizedBox(width: 3),
+                      Text(
+                        '+${extraFields.length} Extra Field${extraFields.length > 1 ? 's' : ''} to Merge',
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF4F46E5)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
@@ -7992,7 +8052,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 textMuted,
               ),
 
-            // Only show essential incoming columns, filtering out blank or raw empty columns
+            // Only show essential incoming columns, highlighting extra data that will be merged
             ...rowData.entries.where((e) {
               final k = e.key.toLowerCase().trim();
               if (k.contains('phone') || k.contains('mobile') || k.contains('name') || k.contains('email') || k.startsWith('empty') || k.startsWith('__empty')) {
@@ -8002,7 +8062,15 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               return val != null && val.isNotEmpty && val != 'null';
             }).take(6).map((e) {
               final formattedVal = _formatExcelCellValue(e.key, e.value);
-              return _buildLeadDataRow(e.key, formattedVal, textMuted);
+              final isExtra = extraFields.contains(e.key.trim());
+              return _buildLeadDataRow(
+                e.key,
+                formattedVal,
+                textMuted,
+                isHighlighted: isExtra,
+                highlightColor: isExtra ? const Color(0xFF4F46E5) : null,
+                suffixBadge: isExtra ? '✨ Extra Data' : null,
+              );
             }),
           ],
         ],
@@ -8411,6 +8479,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     Color textMuted, {
     bool isHighlighted = false,
     Color? highlightColor,
+    String? suffixBadge,
   }) {
     if (value.trim().isEmpty) return const SizedBox.shrink();
     return Padding(
@@ -8431,13 +8500,32 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
-                color: isHighlighted ? highlightColor : null,
-              ),
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
+                    color: isHighlighted ? highlightColor : null,
+                  ),
+                ),
+                if (suffixBadge != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4F46E5).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(3),
+                      border: Border.all(color: const Color(0xFF4F46E5).withValues(alpha: 0.4), width: 0.8),
+                    ),
+                    child: Text(
+                      suffixBadge,
+                      style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFF4F46E5)),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],

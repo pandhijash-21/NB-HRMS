@@ -1046,81 +1046,97 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               // Theme Toggle and Sign Out inside drawer bottom
               Container(
                 margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
                 decoration: BoxDecoration(
                   color: _SideC.card,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: _SideC.line),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    InkWell(
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.read<ThemeCubit>().toggleTheme();
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: SizedBox(
-                        height: 44,
-                        child: Row(
-                          children: [
-                            const SizedBox(width: 12),
-                            NbIcon(
-                              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                              color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF263238),
-                              size: 22,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                isDark ? 'Light Mode' : 'Dark Mode',
-                                style: TextStyle(
-                                  color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF263238),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          ],
+                    const Expanded(
+                      child: Center(
+                        child: TourTarget(
+                          id: 'shell.notifications',
+                          child: NotificationBellButton(
+                            variant: NotificationBellVariant.sidebar,
+                            expanded: false,
+                          ),
                         ),
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Divider(
-                        height: 8,
-                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCCD6DD),
-                      ),
+                    Container(
+                      width: 1,
+                      height: 22,
+                      color: _SideC.line,
                     ),
-                    InkWell(
-                      onTap: () {
-                        Navigator.pop(context);
-                        _signOut(context);
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: SizedBox(
-                        height: 44,
-                        child: Row(
-                          children: [
-                            const SizedBox(width: 12),
-                            NbIcon(
-                              Icons.logout_rounded,
-                              color: const Color(0xFFEF4444).withValues(alpha: 0.9),
-                              size: 22,
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Text(
-                                'Sign out',
-                                style: TextStyle(
-                                  color: Color(0xFFEF4444),
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
+                    Expanded(
+                      child: Center(
+                        child: Tooltip(
+                          message: isDark ? 'Light Mode' : 'Dark Mode',
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.pop(context);
+                              context.read<ThemeCubit>().toggleTheme();
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _SideC.goldSoft.withValues(alpha: 0.12),
+                                border: Border.all(
+                                  color: _SideC.goldSoft.withValues(alpha: 0.25),
                                 ),
                               ),
+                              alignment: Alignment.center,
+                              child: NbIcon(
+                                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                                color: _SideC.goldSoft,
+                                size: 18,
+                              ),
                             ),
-                          ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 22,
+                      color: _SideC.line,
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: Tooltip(
+                          message: auth.user?.onTrip == true
+                              ? 'Sign out is available after the trip ends'
+                              : 'Sign out',
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.pop(context);
+                              _signOut(context);
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                                border: Border.all(
+                                  color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: NbIcon(
+                                Icons.logout_rounded,
+                                color: const Color(0xFFEF4444).withValues(alpha: 0.9),
+                                size: 18,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -1858,117 +1874,172 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
             margin: EdgeInsets.fromLTRB(expanded ? 12 : 8, 8, expanded ? 12 : 8, 6),
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
             decoration: BoxDecoration(
               color: _SideC.card,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: _SideC.line),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TourTarget(
-                  id: 'shell.notifications',
-                  child: NotificationBellButton(
-                    variant: NotificationBellVariant.sidebar,
-                    expanded: expanded,
-                  ),
-                ),
-                Tooltip(
-                  message: isDark ? 'Light Mode' : 'Dark Mode',
-                  child: InkWell(
-                    onTap: () => context.read<ThemeCubit>().toggleTheme(),
-                    borderRadius: BorderRadius.circular(10),
-                    child: SizedBox(
-                      height: 42,
-                      child: expanded
-                          ? Row(
-                              children: [
-                                const SizedBox(width: 12),
-                                NbIcon(
-                                  isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                                  color: _SideC.goldSoft,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    isDark ? 'Light Mode' : 'Dark Mode',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.sourceSans3(
-                                      color: _SideC.ink,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
+            child: expanded
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // Notifications
+                      const Expanded(
+                        child: Center(
+                          child: TourTarget(
+                            id: 'shell.notifications',
+                            child: NotificationBellButton(
+                              variant: NotificationBellVariant.sidebar,
+                              expanded: false,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 22,
+                        color: _SideC.line,
+                      ),
+                      // Theme Toggle
+                      Expanded(
+                        child: Center(
+                          child: Tooltip(
+                            message: isDark ? 'Light Mode' : 'Dark Mode',
+                            child: InkWell(
+                              onTap: () => context.read<ThemeCubit>().toggleTheme(),
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: _SideC.goldSoft.withValues(alpha: 0.12),
+                                  border: Border.all(
+                                    color: _SideC.goldSoft.withValues(alpha: 0.25),
                                   ),
                                 ),
-                              ],
-                            )
-                          : Center(
-                              child: NbIcon(
-                                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                                color: _SideC.goldSoft,
-                                size: 20,
+                                alignment: Alignment.center,
+                                child: NbIcon(
+                                  isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                                  color: _SideC.goldSoft,
+                                  size: 18,
+                                ),
                               ),
                             ),
-                    ),
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Divider(
-                    height: 8,
-                    color: _SideC.line,
-                  ),
-                ),
-                Tooltip(
-                  message: authOnTrip
-                      ? 'Sign out is available after the trip ends'
-                      : 'Sign out',
-                  child: InkWell(
-                    onTap: () => _signOut(context),
-                    borderRadius: BorderRadius.circular(10),
-                    child: SizedBox(
-                      height: 42,
-                      child: expanded
-                          ? Row(
-                              children: [
-                                const SizedBox(width: 12),
-                                NbIcon(
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 22,
+                        color: _SideC.line,
+                      ),
+                      // Sign Out
+                      Expanded(
+                        child: Center(
+                          child: Tooltip(
+                            message: authOnTrip
+                                ? 'Sign out is available after the trip ends'
+                                : 'Sign out',
+                            child: InkWell(
+                              onTap: () => _signOut(context),
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                                  border: Border.all(
+                                    color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+                                  ),
+                                ),
+                                alignment: Alignment.center,
+                                child: NbIcon(
                                   Icons.logout_rounded,
                                   color: (authOnTrip ? const Color(0xFF9AA399) : const Color(0xFFEF5350))
                                       .withValues(alpha: 0.95),
-                                  size: 20,
+                                  size: 18,
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    'Sign out',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.sourceSans3(
-                                      color: authOnTrip ? const Color(0xFF9AA399) : const Color(0xFFEF5350),
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Center(
-                              child: NbIcon(
-                                Icons.logout_rounded,
-                                color: (authOnTrip ? const Color(0xFF9AA399) : const Color(0xFFEF5350))
-                                    .withValues(alpha: 0.95),
-                                size: 20,
                               ),
                             ),
-                    ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const TourTarget(
+                        id: 'shell.notifications',
+                        child: NotificationBellButton(
+                          variant: NotificationBellVariant.sidebar,
+                          expanded: false,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Tooltip(
+                        message: isDark ? 'Light Mode' : 'Dark Mode',
+                        child: InkWell(
+                          onTap: () => context.read<ThemeCubit>().toggleTheme(),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _SideC.goldSoft.withValues(alpha: 0.12),
+                              border: Border.all(
+                                color: _SideC.goldSoft.withValues(alpha: 0.25),
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: NbIcon(
+                              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                              color: _SideC.goldSoft,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        child: Divider(
+                          height: 8,
+                          color: _SideC.line,
+                        ),
+                      ),
+                      Tooltip(
+                        message: authOnTrip
+                            ? 'Sign out is available after the trip ends'
+                            : 'Sign out',
+                        child: InkWell(
+                          onTap: () => _signOut(context),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                              border: Border.all(
+                                color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: NbIcon(
+                              Icons.logout_rounded,
+                              color: (authOnTrip ? const Color(0xFF9AA399) : const Color(0xFFEF5350))
+                                  .withValues(alpha: 0.95),
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),

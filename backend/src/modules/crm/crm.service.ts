@@ -2855,6 +2855,7 @@ export const crmService = {
     });
 
     // Check duplicate phone numbers & emails against DB and within sheet
+    // Prioritize checking against the target campaign where Excel is being imported
     const existingLeads = await prisma.crmLead.findMany({
       where: {
         scope: campaignScope,
@@ -2864,52 +2865,85 @@ export const crmService = {
         id: true,
         name: true,
         phone: true,
+        status: true,
         customFields: true,
         campaignId: true,
-        campaign: { select: { id: true, name: true, code: true } },
-        telecaller: { select: { generalInfo: { select: { fullName: true } } } },
+        leadSource: true,
+        createdAt: true,
+        lastCallAt: true,
+        campaign: { select: { id: true, name: true, code: true, project: { select: { name: true } } } },
+        telecaller: { select: { id: true, generalInfo: { select: { fullName: true } } } },
+        assignedTo: { select: { id: true, generalInfo: { select: { fullName: true } } } },
+        followUps: {
+          where: { status: 'PENDING' },
+          orderBy: { scheduledDate: 'desc' },
+          take: 1,
+          select: { scheduledDate: true, scheduledTime: true, remarks: true, status: true },
+        },
       },
     });
 
-    const dbPhoneMap = new Map<
-      string,
-      { id: string; name: string; phone: string; campaignId?: string; campaignName?: string; telecallerName?: string }
-    >();
-    const dbEmailMap = new Map<
-      string,
-      { id: string; name: string; email: string; campaignId?: string; campaignName?: string; telecallerName?: string }
-    >();
+    interface EnrichedCrmLeadMatch {
+      id: string;
+      name: string;
+      phone: string;
+      email?: string;
+      status: string;
+      campaignId?: string;
+      campaignName?: string;
+      projectName?: string;
+      telecallerName?: string;
+      assignedToName?: string;
+      leadSource?: string;
+      createdAt: Date;
+      lastCallAt?: Date | null;
+      latestFollowUp?: { scheduledDate: Date; scheduledTime?: string | null; remarks?: string | null; status?: string | null } | null;
+      customFields: Record<string, any>;
+    }
+
+    const dbPhoneMap = new Map<string, EnrichedCrmLeadMatch>();
+    const dbEmailMap = new Map<string, EnrichedCrmLeadMatch>();
 
     for (const el of existingLeads) {
       const cf = (el.customFields as Record<string, any>) || {};
       const elCc = cf.countryCode || cf.CountryCode || cf.isd || cf.isdCode || '';
       const norm = normalizePhoneWithCountryCode(el.phone, elCc);
       const key = norm.dedupeKey;
-      if (key && !this._isDummyOrPlaceholderPhone(norm.nationalNumber) && !dbPhoneMap.has(key)) {
-        dbPhoneMap.set(key, {
-          id: el.id,
-          name: el.name || 'Unnamed',
-          phone: norm.e164 || el.phone || '',
-          campaignId: el.campaignId || undefined,
-          campaignName: el.campaign?.name,
-          telecallerName: el.telecaller?.generalInfo?.fullName,
-        });
+      const isTargetCamp = el.campaignId === targetCampaignId;
+      const leadMatch: EnrichedCrmLeadMatch = {
+        id: el.id,
+        name: el.name || 'Unnamed',
+        phone: norm.e164 || el.phone || '',
+        status: String(el.status || 'NOT_STARTED'),
+        campaignId: el.campaignId || undefined,
+        campaignName: el.campaign?.name,
+        projectName: el.campaign?.project?.name,
+        telecallerName: el.telecaller?.generalInfo?.fullName,
+        assignedToName: el.assignedTo?.generalInfo?.fullName,
+        leadSource: el.leadSource || undefined,
+        createdAt: el.createdAt,
+        lastCallAt: el.lastCallAt,
+        latestFollowUp: el.followUps?.[0] || null,
+        customFields: cf,
+      };
+
+      if (key && !this._isDummyOrPlaceholderPhone(norm.nationalNumber)) {
+        // If not mapped yet, or if this lead belongs to the target campaign, store/override it
+        if (!dbPhoneMap.has(key) || isTargetCamp) {
+          dbPhoneMap.set(key, leadMatch);
+        }
       }
       const elEmail = String(cf.email || cf.Email || cf.Email_Id || cf.email_id || '').trim().toLowerCase();
-      if (elEmail && elEmail.includes('@') && !dbEmailMap.has(elEmail)) {
-        dbEmailMap.set(elEmail, {
-          id: el.id,
-          name: el.name || 'Unnamed',
-          email: elEmail,
-          campaignId: el.campaignId || undefined,
-          campaignName: el.campaign?.name,
-          telecallerName: el.telecaller?.generalInfo?.fullName,
-        });
+      if (elEmail && elEmail.includes('@')) {
+        leadMatch.email = elEmail;
+        if (!dbEmailMap.has(elEmail) || isTargetCamp) {
+          dbEmailMap.set(elEmail, leadMatch);
+        }
       }
     }
 
-    const seenInSheetPhones = new Map<string, { rowIdx: number; name: string }>();
-    const seenInSheetEmails = new Map<string, { rowIdx: number; name: string }>();
+    const seenInSheetPhones = new Map<string, { rowIdx: number; name: string; rowData: Record<string, any> }>();
+    const seenInSheetEmails = new Map<string, { rowIdx: number; name: string; rowData: Record<string, any> }>();
     const duplicateList: Array<{
       rowNumber: number;
       name: string;
@@ -2920,7 +2954,10 @@ export const crmService = {
       campaignName?: string;
       telecallerName?: string;
       details: string;
-      defaultAction: 'SKIP' | 'KEEP';
+      defaultAction: 'SKIP' | 'UPDATE' | 'KEEP';
+      existingLead?: any;
+      incomingRow?: Record<string, any>;
+      priorRow?: { rowNumber: number; name: string; incomingRow?: Record<string, any> };
     }> = [];
 
     rows.forEach((row, idx) => {
@@ -2969,6 +3006,12 @@ export const crmService = {
               ? `Duplicate of Row #${prior.rowIdx + 1} ("${prior.name || 'Unnamed'}") in this sheet`
               : `Shared phone (${norm.e164 || phone}) with Row #${prior.rowIdx + 1} ("${prior.name || 'Unnamed'}") - Different name`,
             defaultAction: 'SKIP',
+            incomingRow: row,
+            priorRow: {
+              rowNumber: prior.rowIdx + 1,
+              name: prior.name,
+              incomingRow: prior.rowData,
+            },
           });
           isDuplicateFound = true;
         } else if (dbPhoneMap.has(phoneKey)) {
@@ -2989,11 +3032,29 @@ export const crmService = {
               ? `Already in this campaign: "${match.name}"${callerInfo}`
               : `Already in CRM${campInfo}: "${match.name}"${callerInfo}`,
             defaultAction: 'SKIP',
+            existingLead: {
+              id: match.id,
+              name: match.name,
+              phone: match.phone,
+              email: match.email,
+              status: match.status,
+              campaignId: match.campaignId,
+              campaignName: match.campaignName,
+              projectName: match.projectName,
+              telecallerName: match.telecallerName,
+              assignedToName: match.assignedToName,
+              leadSource: match.leadSource,
+              createdAt: match.createdAt,
+              lastCallAt: match.lastCallAt,
+              latestFollowUp: match.latestFollowUp,
+              customFields: match.customFields,
+            },
+            incomingRow: row,
           });
-          seenInSheetPhones.set(phoneKey, { rowIdx: idx, name });
+          seenInSheetPhones.set(phoneKey, { rowIdx: idx, name, rowData: row });
           isDuplicateFound = true;
         } else {
-          seenInSheetPhones.set(phoneKey, { rowIdx: idx, name });
+          seenInSheetPhones.set(phoneKey, { rowIdx: idx, name, rowData: row });
         }
       }
 
@@ -3010,6 +3071,12 @@ export const crmService = {
             isSameCampaign: true,
             details: `Duplicate email (${email}) with Row #${prior.rowIdx + 1} in this sheet`,
             defaultAction: 'SKIP',
+            incomingRow: row,
+            priorRow: {
+              rowNumber: prior.rowIdx + 1,
+              name: prior.name,
+              incomingRow: prior.rowData,
+            },
           });
         } else if (dbEmailMap.has(email)) {
           const match = dbEmailMap.get(email)!;
@@ -3029,10 +3096,28 @@ export const crmService = {
               ? `Already in this campaign by email: "${match.name}"${callerInfo}`
               : `Already in CRM${campInfo} by email: "${match.name}"${callerInfo}`,
             defaultAction: 'SKIP',
+            existingLead: {
+              id: match.id,
+              name: match.name,
+              phone: match.phone,
+              email: match.email,
+              status: match.status,
+              campaignId: match.campaignId,
+              campaignName: match.campaignName,
+              projectName: match.projectName,
+              telecallerName: match.telecallerName,
+              assignedToName: match.assignedToName,
+              leadSource: match.leadSource,
+              createdAt: match.createdAt,
+              lastCallAt: match.lastCallAt,
+              latestFollowUp: match.latestFollowUp,
+              customFields: match.customFields,
+            },
+            incomingRow: row,
           });
-          seenInSheetEmails.set(email, { rowIdx: idx, name });
+          seenInSheetEmails.set(email, { rowIdx: idx, name, rowData: row });
         } else {
-          seenInSheetEmails.set(email, { rowIdx: idx, name });
+          seenInSheetEmails.set(email, { rowIdx: idx, name, rowData: row });
         }
       }
     });
@@ -3166,6 +3251,7 @@ export const crmService = {
       selectedHeaders?: string[];
       excludedRowNumbers?: number[];
       keepRowNumbers?: number[];
+      updateRowNumbers?: number[];
       scheduleFollowUps?: boolean;
       customFollowUps?: Array<{
         rowNumber: number;
@@ -3338,7 +3424,7 @@ export const crmService = {
     if (shouldSkipDuplicates) {
       const existingLeads = await prisma.crmLead.findMany({
         where: {
-          scope: campaignScope,
+          campaignId: targetCampaignId,
           isDeleted: false,
         },
         select: { phone: true, customFields: true },
@@ -3366,6 +3452,12 @@ export const crmService = {
       options?.keepRowNumbers && options.keepRowNumbers.length > 0
         ? new Set(options.keepRowNumbers)
         : null;
+    const updateRowsSet =
+      options?.updateRowNumbers && options.updateRowNumbers.length > 0
+        ? new Set(options.updateRowNumbers)
+        : null;
+
+    let updatedCount = 0;
 
     const importBatchId = crypto.randomUUID();
     const importedAt = new Date().toISOString();
@@ -3545,6 +3637,35 @@ export const crmService = {
 
         // If user explicitly chose to KEEP this row in the preview (with Right tick), bypass deduplication!
         const isExplicitlyKept = keepRowsSet && keepRowsSet.has(rowNumber);
+        const isExplicitlyUpdated = updateRowsSet && updateRowsSet.has(rowNumber);
+
+        if (isExplicitlyUpdated) {
+          const searchPhone = norm.nationalNumber || phone;
+          if (searchPhone || email) {
+            const phoneFilter = searchPhone && searchPhone.length >= 7 ? searchPhone.slice(-10) : searchPhone;
+            const existing = await prisma.crmLead.findFirst({
+              where: {
+                campaignId: targetCampaignId,
+                isDeleted: false,
+                phone: { contains: phoneFilter },
+              },
+            });
+            if (existing) {
+              const currentCustom = (existing.customFields as Record<string, any>) || {};
+              const mergedCustom = { ...currentCustom, ...customFields };
+              await prisma.crmLead.update({
+                where: { id: existing.id },
+                data: {
+                  name: (name && name.trim()) ? name.trim() : existing.name,
+                  customFields: mergedCustom,
+                  updatedAt: new Date(),
+                },
+              });
+              updatedCount++;
+              continue;
+            }
+          }
+        }
 
         if (!isExplicitlyKept && shouldSkipDuplicates) {
           let isDup = false;
@@ -3733,6 +3854,7 @@ export const crmService = {
 
     return {
       count: insertedCount,
+      updatedCount,
       skippedDuplicates: skippedDuplicatesCount,
       scheduledFollowUpsCount,
       totalRows: rows.length,
@@ -3742,9 +3864,7 @@ export const crmService = {
       campaignId: targetCampaignId,
       dispatchedCount: dispatchResult.dispatchedCount,
       queuedCount: dispatchResult.remainingQueuedCount,
-      message: skippedDuplicatesCount > 0
-        ? `Successfully imported ${insertedCount} Excel leads (${scheduledFollowUpsCount > 0 ? `${scheduledFollowUpsCount} follow-ups scheduled, ` : ''}${skippedDuplicatesCount} duplicates skipped). Batch: ${importBatchId.slice(0, 8)}…`
-        : `Successfully imported ${insertedCount} Excel leads (${scheduledFollowUpsCount > 0 ? `${scheduledFollowUpsCount} follow-ups scheduled, ` : ''}${dispatchResult.dispatchedCount} dispatched, ${dispatchResult.remainingQueuedCount} waiting). Batch: ${importBatchId.slice(0, 8)}…`,
+      message: `${insertedCount} leads imported${updatedCount > 0 ? `, ${updatedCount} existing leads updated` : ''}${skippedDuplicatesCount > 0 ? `, ${skippedDuplicatesCount} duplicates skipped` : ''}. Batch: ${importBatchId.slice(0, 8)}…`,
     };
   },
 

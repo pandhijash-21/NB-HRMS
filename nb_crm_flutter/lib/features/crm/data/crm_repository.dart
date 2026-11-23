@@ -403,6 +403,7 @@ class CrmRepository {
     List<String>? selectedHeaders,
     List<int>? excludedRowNumbers,
     List<int>? keepRowNumbers,
+    List<int>? updateRowNumbers,
     bool scheduleFollowUps = true,
     List<Map<String, dynamic>>? customFollowUps,
   }) async {
@@ -428,6 +429,9 @@ class CrmRepository {
     }
     if (keepRowNumbers != null && keepRowNumbers.isNotEmpty) {
       map['keepRowNumbers'] = jsonEncode(keepRowNumbers);
+    }
+    if (updateRowNumbers != null && updateRowNumbers.isNotEmpty) {
+      map['updateRowNumbers'] = jsonEncode(updateRowNumbers);
     }
     if (assignmentMode != null && assignmentMode.isNotEmpty) {
       map['assignmentMode'] = assignmentMode;

@@ -367,6 +367,18 @@ export const crmController = {
         } catch (_) {}
       }
 
+      let updateRowNumbers: number[] | undefined = undefined;
+      if (req.body.updateRowNumbers) {
+        try {
+          const parsed = typeof req.body.updateRowNumbers === 'string'
+            ? JSON.parse(req.body.updateRowNumbers)
+            : req.body.updateRowNumbers;
+          if (Array.isArray(parsed)) {
+            updateRowNumbers = parsed.map(Number).filter((n) => !isNaN(n) && n > 0);
+          }
+        } catch (_) {}
+      }
+
       const explicitTelecallerId = req.body.telecallerId
         ? Number(req.body.telecallerId)
         : (isAdmin ? undefined : authUser?.employeeId);
@@ -408,6 +420,7 @@ export const crmController = {
           selectedHeaders,
           excludedRowNumbers,
           keepRowNumbers,
+          updateRowNumbers,
           scheduleFollowUps,
           customFollowUps,
         },

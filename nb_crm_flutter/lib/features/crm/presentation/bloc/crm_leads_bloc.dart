@@ -174,6 +174,7 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
     this.selectedHeaders,
     this.excludedRowNumbers,
     this.keepRowNumbers,
+    this.updateRowNumbers,
     this.scheduleFollowUps = true,
     this.customFollowUps,
   });
@@ -188,6 +189,7 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
   final List<String>? selectedHeaders;
   final List<int>? excludedRowNumbers;
   final List<int>? keepRowNumbers;
+  final List<int>? updateRowNumbers;
   final bool scheduleFollowUps;
   final List<Map<String, dynamic>>? customFollowUps;
 
@@ -1121,6 +1123,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         selectedHeaders: event.selectedHeaders,
         excludedRowNumbers: event.excludedRowNumbers,
         keepRowNumbers: event.keepRowNumbers,
+        updateRowNumbers: event.updateRowNumbers,
         scheduleFollowUps: event.scheduleFollowUps,
         customFollowUps: event.customFollowUps,
       );

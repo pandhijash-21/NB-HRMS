@@ -1603,7 +1603,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
           Widget buildViewModeToggle() {
             final isMobileScreen = MediaQuery.sizeOf(context).width < 700;
-            final isCard = _cardViewPreference ?? isMobileScreen;
+            final isCard = isMobileScreen
+                ? (_cardViewPreference ?? true)
+                : (_cardViewPreference ?? false);
             return Tooltip(
               message: isCard ? 'Switch to Table View' : 'Switch to Cards View',
               child: OutlinedButton.icon(
@@ -1784,7 +1786,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     if (_leadsPage >= totalPages) _leadsPage = totalPages - 1;
 
     final isMobile = MediaQuery.sizeOf(context).width < 700;
-    final effectiveIsCardView = isCardView ?? _cardViewPreference ?? isMobile;
+    final effectiveIsCardView = isCardView ??
+        (isMobile ? (_cardViewPreference ?? true) : (_cardViewPreference ?? false));
 
     if (effectiveIsCardView) {
       return Column(
@@ -3121,7 +3124,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
   List<Widget> _buildLeadCustomInfoSnippet(CrmLead lead, bool isDark, Color textMuted) {
     final chips = <Widget>[];
-    final project = lead.projectName ?? lead.customFields['Project']?.toString() ?? lead.customFields['project']?.toString();
+    final project = lead.customFields['Project']?.toString() ?? lead.customFields['project']?.toString();
     if (project != null && project.isNotEmpty && project != '-') {
       chips.add(
         Container(
@@ -5637,7 +5640,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     List<Map<String, dynamic>> detectedHeaders = [];
     Set<String> selectedHeaders = {};
     List<Map<String, dynamic>> duplicatesList = [];
-    Map<int, bool> duplicateDecisions = {}; // rowNumber -> keep (true=keep, false=skip)
+    Map<int, String> duplicateDecisions = {}; // rowNumber -> 'SKIP' | 'UPDATE' | 'KEEP'
     int duplicateCount = 0;
     List<Map<String, dynamic>> previewRows = [];
     int totalRows = 0;
@@ -5645,6 +5648,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
     int currentStep = 1; // 1: Destination, 2: Preview & Headers, 3: Allocation
     int previewSubTab = 0; // 0: Headers, 1: Duplicates, 2: Follow-ups, 3: Sample Rows
+    int duplicateFilterIndex = 0; // 0: All, 1: Target Campaign, 2: Other Campaign / Sheet
 
     // Follow-up scheduling state
     bool scheduleFollowUps = true;
@@ -5710,7 +5714,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   for (final d in duplicatesList) {
                     final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
                     if (r > 0 && !duplicateDecisions.containsKey(r)) {
-                      duplicateDecisions[r] = false; // default to skip
+                      duplicateDecisions[r] = 'SKIP'; // default to skip
                     }
                   }
                 }
@@ -5806,54 +5810,57 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     decoration: BoxDecoration(
                       border: Border(bottom: BorderSide(color: borderColor)),
                     ),
-                    child: Row(
-                      children: [
-                        _buildStepIndicator(
-                          stepNumber: 1,
-                          title: 'Destination & Sheet',
-                          isActive: currentStep == 1,
-                          isPassed: currentStep > 1,
-                          onTap: () {
-                            if (!isLoadingPreview) setModalState(() => currentStep = 1);
-                          },
-                          isDark: isDark,
-                          primaryColor: primaryGreen,
-                        ),
-                        Container(
-                          width: 24,
-                          height: 1,
-                          color: borderColor,
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                        _buildStepIndicator(
-                          stepNumber: 2,
-                          title: 'Preview & Headers',
-                          isActive: currentStep == 2,
-                          isPassed: currentStep > 2,
-                          onTap: () {
-                            if (!isLoadingPreview && previewError == null) setModalState(() => currentStep = 2);
-                          },
-                          isDark: isDark,
-                          primaryColor: primaryGreen,
-                        ),
-                        Container(
-                          width: 24,
-                          height: 1,
-                          color: borderColor,
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                        _buildStepIndicator(
-                          stepNumber: 3,
-                          title: 'Allocation & Finalize',
-                          isActive: currentStep == 3,
-                          isPassed: false,
-                          onTap: () {
-                            if (!isLoadingPreview && previewError == null) setModalState(() => currentStep = 3);
-                          },
-                          isDark: isDark,
-                          primaryColor: primaryGreen,
-                        ),
-                      ],
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildStepIndicator(
+                            stepNumber: 1,
+                            title: 'Destination & Sheet',
+                            isActive: currentStep == 1,
+                            isPassed: currentStep > 1,
+                            onTap: () {
+                              if (!isLoadingPreview) setModalState(() => currentStep = 1);
+                            },
+                            isDark: isDark,
+                            primaryColor: primaryGreen,
+                          ),
+                          Container(
+                            width: 24,
+                            height: 1,
+                            color: borderColor,
+                            margin: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          _buildStepIndicator(
+                            stepNumber: 2,
+                            title: 'Preview & Headers',
+                            isActive: currentStep == 2,
+                            isPassed: currentStep > 2,
+                            onTap: () {
+                              if (!isLoadingPreview && previewError == null) setModalState(() => currentStep = 2);
+                            },
+                            isDark: isDark,
+                            primaryColor: primaryGreen,
+                          ),
+                          Container(
+                            width: 24,
+                            height: 1,
+                            color: borderColor,
+                            margin: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          _buildStepIndicator(
+                            stepNumber: 3,
+                            title: 'Allocation & Finalize',
+                            isActive: currentStep == 3,
+                            isPassed: false,
+                            onTap: () {
+                              if (!isLoadingPreview && previewError == null) setModalState(() => currentStep = 3);
+                            },
+                            isDark: isDark,
+                            primaryColor: primaryGreen,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
@@ -5927,6 +5934,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                 selectedHeaders: selectedHeaders,
                                 duplicatesList: duplicatesList,
                                 duplicateDecisions: duplicateDecisions,
+                                duplicateFilterIndex: duplicateFilterIndex,
+                                onDuplicateFilterChanged: (idx) => setModalState(() => duplicateFilterIndex = idx),
                                 previewRows: previewRows,
                                 skipDuplicates: skipDuplicates,
                                 assignmentMode: assignmentMode,
@@ -6024,11 +6033,15 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               }
 
                               final excludedRows = duplicatesList
-                                  .where((d) => duplicateDecisions[(d['rowNumber'] as num?)?.toInt() ?? 0] != true)
+                                  .where((d) => (duplicateDecisions[(d['rowNumber'] as num?)?.toInt() ?? 0] ?? 'SKIP') == 'SKIP')
+                                  .map((d) => (d['rowNumber'] as num).toInt())
+                                  .toList();
+                              final updateRows = duplicatesList
+                                  .where((d) => (duplicateDecisions[(d['rowNumber'] as num?)?.toInt() ?? 0] ?? 'SKIP') == 'UPDATE')
                                   .map((d) => (d['rowNumber'] as num).toInt())
                                   .toList();
                               final keepRows = duplicatesList
-                                  .where((d) => duplicateDecisions[(d['rowNumber'] as num?)?.toInt() ?? 0] == true)
+                                  .where((d) => (duplicateDecisions[(d['rowNumber'] as num?)?.toInt() ?? 0] ?? 'SKIP') == 'KEEP')
                                   .map((d) => (d['rowNumber'] as num).toInt())
                                   .toList();
 
@@ -6036,7 +6049,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'Importing ${selectedHeaders.length} columns from "${selectedSheet ?? file.name}" (${keepRows.length} duplicates kept, ${excludedRows.length} skipped)...',
+                                    'Importing ${selectedHeaders.length} columns from "${selectedSheet ?? file.name}" (${updateRows.length} updating, ${keepRows.length} new duplicates, ${excludedRows.length} skipped)...',
                                   ),
                                 ),
                               );
@@ -6055,6 +6068,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       skipDuplicates: skipDuplicates,
                                       excludedRowNumbers: excludedRows,
                                       keepRowNumbers: keepRows,
+                                      updateRowNumbers: updateRows,
                                       scheduleFollowUps: scheduleFollowUps,
                                       customFollowUps: scheduleFollowUps ? followUpList : null,
                                     ),
@@ -6155,7 +6169,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     required List<Map<String, dynamic>> detectedHeaders,
     required Set<String> selectedHeaders,
     required List<Map<String, dynamic>> duplicatesList,
-    required Map<int, bool> duplicateDecisions,
+    required Map<int, String> duplicateDecisions,
+    required int duplicateFilterIndex,
+    required void Function(int) onDuplicateFilterChanged,
     required List<Map<String, dynamic>> previewRows,
     required bool skipDuplicates,
     required String assignmentMode,
@@ -6427,38 +6443,41 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: borderColor)),
             ),
-            child: Row(
-              children: [
-                _buildSubTabButton(
-                  title: 'Column Headers (${detectedHeaders.length})',
-                  isSelected: previewSubTab == 0,
-                  onTap: () => onPreviewSubTabChanged(0),
-                  primaryColor: primaryGreen,
-                ),
-                const SizedBox(width: 8),
-                _buildSubTabButton(
-                  title: 'Duplicate Leads ($duplicateCount)',
-                  isSelected: previewSubTab == 1,
-                  onTap: () => onPreviewSubTabChanged(1),
-                  primaryColor: primaryGreen,
-                ),
-                if (followUpList.isNotEmpty) ...[
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildSubTabButton(
+                    title: 'Column Headers (${detectedHeaders.length})',
+                    isSelected: previewSubTab == 0,
+                    onTap: () => onPreviewSubTabChanged(0),
+                    primaryColor: primaryGreen,
+                  ),
                   const SizedBox(width: 8),
                   _buildSubTabButton(
-                    title: 'Follow-ups Preview (${followUpList.length})',
-                    isSelected: previewSubTab == 2,
-                    onTap: () => onPreviewSubTabChanged(2),
+                    title: 'Duplicate Leads ($duplicateCount)',
+                    isSelected: previewSubTab == 1,
+                    onTap: () => onPreviewSubTabChanged(1),
+                    primaryColor: primaryGreen,
+                  ),
+                  if (followUpList.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    _buildSubTabButton(
+                      title: 'Follow-ups Preview (${followUpList.length})',
+                      isSelected: previewSubTab == 2,
+                      onTap: () => onPreviewSubTabChanged(2),
+                      primaryColor: primaryGreen,
+                    ),
+                  ],
+                  const SizedBox(width: 8),
+                  _buildSubTabButton(
+                    title: 'Data Rows Preview (${previewRows.length})',
+                    isSelected: previewSubTab == 3 || (followUpList.isEmpty && previewSubTab == 2),
+                    onTap: () => onPreviewSubTabChanged(followUpList.isNotEmpty ? 3 : 2),
                     primaryColor: primaryGreen,
                   ),
                 ],
-                const SizedBox(width: 8),
-                _buildSubTabButton(
-                  title: 'Data Rows Preview (${previewRows.length})',
-                  isSelected: previewSubTab == 3 || (followUpList.isEmpty && previewSubTab == 2),
-                  onTap: () => onPreviewSubTabChanged(followUpList.isNotEmpty ? 3 : 2),
-                  primaryColor: primaryGreen,
-                ),
-              ],
+              ),
             ),
           ),
 
@@ -6482,6 +6501,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         textMuted: textMuted,
                         borderColor: borderColor,
                         isDark: isDark,
+                        context: context,
+                        filterIndex: duplicateFilterIndex,
+                        onFilterChanged: onDuplicateFilterChanged,
                       )
                     : ((previewSubTab == 2 && followUpList.isNotEmpty)
                         ? _buildImportFollowUpsTab(
@@ -6689,9 +6711,13 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   builder: (_) {
                     final keptDupsCount = duplicatesList.where((d) {
                       final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
-                      return duplicateDecisions[r] == true;
+                      return (duplicateDecisions[r] ?? 'SKIP') == 'KEEP';
                     }).length;
-                    final removedDupsCount = duplicatesList.length - keptDupsCount;
+                    final updatedDupsCount = duplicatesList.where((d) {
+                      final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
+                      return (duplicateDecisions[r] ?? 'SKIP') == 'UPDATE';
+                    }).length;
+                    final skippedDupsCount = duplicatesList.length - keptDupsCount - updatedDupsCount;
                     return Row(
                       children: [
                         Expanded(
@@ -6703,8 +6729,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         ),
                         Expanded(
                           child: _buildDetailField(
-                            'Expected Lead Rows',
-                            '${validRowsCount + keptDupsCount} leads to import ($removedDupsCount skipped, $keptDupsCount kept)',
+                            'Expected Leads to Import',
+                            '${validRowsCount + keptDupsCount} leads to add, $updatedDupsCount to update ($skippedDupsCount skipped)',
                             textMuted,
                           ),
                         ),
@@ -6877,312 +6903,440 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
   Widget _buildDuplicatesTab({
     required List<Map<String, dynamic>> duplicatesList,
-    required Map<int, bool> duplicateDecisions,
+    required Map<int, String> duplicateDecisions,
     required bool skipDuplicates,
     required void Function(void Function()) setModalState,
     required Color textMuted,
     required Color borderColor,
     required bool isDark,
+    required BuildContext context,
+    required int filterIndex,
+    required void Function(int) onFilterChanged,
   }) {
-    final keptCount = duplicatesList.where((d) {
+    final totalCount = duplicatesList.length;
+    final skipCount = duplicatesList.where((d) {
       final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
-      return duplicateDecisions[r] == true;
+      return (duplicateDecisions[r] ?? 'SKIP') == 'SKIP';
     }).length;
-    final removedCount = duplicatesList.length - keptCount;
+    final updateCount = duplicatesList.where((d) {
+      final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
+      return (duplicateDecisions[r] ?? 'SKIP') == 'UPDATE';
+    }).length;
+    final keepCount = duplicatesList.where((d) {
+      final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
+      return (duplicateDecisions[r] ?? 'SKIP') == 'KEEP';
+    }).length;
+    final sameCampCount = duplicatesList.where((d) => d['isSameCampaign'] == true).length;
+    final otherCampCount = totalCount - sameCampCount;
+
+    final displayedList = duplicatesList.where((d) {
+      if (filterIndex == 1) return d['isSameCampaign'] == true;
+      if (filterIndex == 2) return d['isSameCampaign'] != true;
+      return true;
+    }).toList();
+
+    final isNarrowScreen = MediaQuery.of(context).size.width < 760;
 
     return Column(
       children: [
-        // Top Action Bar with Keep All and Remove All buttons
+        // Top Action & Filter Bar
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.5) : const Color(0xFFF1F5F9),
+            color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.6) : const Color(0xFFF1F5F9),
             border: Border(bottom: BorderSide(color: borderColor)),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${duplicatesList.length} duplicate leads identified',
-                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+              // Top Row: Count & Bulk Actions
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              '$totalCount duplicate leads identified',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                            ),
+                            if (sameCampCount > 0) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDC2626).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '$sameCampCount in Target Campaign',
+                                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Color(0xFFDC2626)),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$skipCount Skip • $updateCount Update CRM • $keepCount Import as New',
+                          style: TextStyle(fontSize: 11, color: textMuted),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 1),
-                    Text(
-                      '$keptCount marked to Keep (Import) • $removedCount marked to Remove (Skip)',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: keptCount > 0 ? const Color(0xFF16A34A) : textMuted,
-                        fontWeight: keptCount > 0 ? FontWeight.w600 : FontWeight.normal,
-                      ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Bulk Action: Skip All
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFDC2626),
+                      side: const BorderSide(color: Color(0xFFDC2626)),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.block_rounded, size: 14),
+                    label: const Text('Skip All', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                    onPressed: () {
+                      setModalState(() {
+                        for (final d in duplicatesList) {
+                          final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
+                          if (r > 0) duplicateDecisions[r] = 'SKIP';
+                        }
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  // Bulk Action: Update All
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF2563EB),
+                      side: const BorderSide(color: Color(0xFF2563EB)),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.sync_rounded, size: 14),
+                    label: const Text('Update All', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                    onPressed: () {
+                      setModalState(() {
+                        for (final d in duplicatesList) {
+                          final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
+                          if (r > 0) duplicateDecisions[r] = 'UPDATE';
+                        }
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  // Bulk Action: Keep All
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF16A34A),
+                      side: const BorderSide(color: Color(0xFF16A34A)),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.add_circle_outline_rounded, size: 14),
+                    label: const Text('Keep All', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                    onPressed: () {
+                      setModalState(() {
+                        for (final d in duplicatesList) {
+                          final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
+                          if (r > 0) duplicateDecisions[r] = 'KEEP';
+                        }
+                      });
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Filter Chips Row
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    Text('Filter: ', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: textMuted)),
+                    const SizedBox(width: 6),
+                    _buildDuplicateFilterChip(
+                      label: 'All Duplicates ($totalCount)',
+                      isSelected: filterIndex == 0,
+                      onTap: () => onFilterChanged(0),
+                      isDark: isDark,
+                    ),
+                    const SizedBox(width: 6),
+                    _buildDuplicateFilterChip(
+                      label: 'Target Campaign ($sameCampCount)',
+                      isSelected: filterIndex == 1,
+                      onTap: () => onFilterChanged(1),
+                      isDark: isDark,
+                      accentColor: const Color(0xFFDC2626),
+                    ),
+                    const SizedBox(width: 6),
+                    _buildDuplicateFilterChip(
+                      label: 'Other Campaign / Sheet ($otherCampCount)',
+                      isSelected: filterIndex == 2,
+                      onTap: () => onFilterChanged(2),
+                      isDark: isDark,
+                      accentColor: const Color(0xFF2563EB),
                     ),
                   ],
                 ),
-              ),
-              // "Keep All" Button
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF16A34A).withValues(alpha: 0.15),
-                  foregroundColor: const Color(0xFF16A34A),
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  visualDensity: VisualDensity.compact,
-                  side: const BorderSide(color: Color(0xFF16A34A)),
-                ),
-                icon: const Icon(Icons.check_rounded, size: 16),
-                label: const Text('Keep All', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                onPressed: () {
-                  setModalState(() {
-                    for (final d in duplicatesList) {
-                      final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
-                      if (r > 0) duplicateDecisions[r] = true;
-                    }
-                  });
-                },
-              ),
-              const SizedBox(width: 8),
-              // "Remove All" Button
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFDC2626).withValues(alpha: 0.12),
-                  foregroundColor: const Color(0xFFDC2626),
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  visualDensity: VisualDensity.compact,
-                  side: const BorderSide(color: Color(0xFFDC2626)),
-                ),
-                icon: const Icon(Icons.close_rounded, size: 16),
-                label: const Text('Remove All', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                onPressed: () {
-                  setModalState(() {
-                    for (final d in duplicatesList) {
-                      final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
-                      if (r > 0) duplicateDecisions[r] = false;
-                    }
-                  });
-                },
               ),
             ],
           ),
         ),
 
-        // Duplicate list
+        // Duplicates List
         Expanded(
-          child: duplicatesList.isEmpty
+          child: displayedList.isEmpty
               ? Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
-                        'No Duplicates Found',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                      Icon(Icons.check_circle_outline_rounded, size: 36, color: const Color(0xFF16A34A)),
+                      const SizedBox(height: 8),
+                      Text(
+                        totalCount == 0 ? 'No Duplicates Found' : 'No duplicates match this filter',
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'All phone numbers and emails in this sheet are unique across the CRM.',
+                        totalCount == 0
+                            ? 'All leads in this sheet are brand new for this campaign.'
+                            : 'Select another filter above to view duplicate entries.',
                         style: TextStyle(fontSize: 12, color: textMuted),
                       ),
                     ],
                   ),
                 )
               : ListView.separated(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  itemCount: duplicatesList.length,
-                  separatorBuilder: (_, __) => Divider(height: 1, color: borderColor),
+                  padding: const EdgeInsets.all(12),
+                  itemCount: displayedList.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (ctx, idx) {
-                    final d = duplicatesList[idx];
+                    final d = displayedList[idx];
                     final rowNum = (d['rowNumber'] as num?)?.toInt() ?? (idx + 1);
                     final name = d['name']?.toString() ?? 'Unnamed';
                     final phone = d['phone']?.toString() ?? '';
                     final email = d['email']?.toString() ?? '';
                     final isExistingInCrm = d['duplicateType'] == 'EXISTING_IN_CRM';
                     final isSameCampaign = d['isSameCampaign'] == true;
-                    final details = d['details']?.toString() ?? '';
-                    final isKept = duplicateDecisions[rowNum] == true;
+                    final existingLead = d['existingLead'] is Map ? Map<String, dynamic>.from(d['existingLead'] as Map) : null;
+                    final incomingRow = d['incomingRow'] is Map ? Map<String, dynamic>.from(d['incomingRow'] as Map) : null;
+                    final priorRow = d['priorRow'] is Map ? Map<String, dynamic>.from(d['priorRow'] as Map) : null;
+
+                    final decision = duplicateDecisions[rowNum] ?? 'SKIP';
+
+                    Color cardBorderColor;
+                    if (decision == 'UPDATE') {
+                      cardBorderColor = const Color(0xFF2563EB);
+                    } else if (decision == 'KEEP') {
+                      cardBorderColor = const Color(0xFF16A34A);
+                    } else {
+                      cardBorderColor = isSameCampaign ? const Color(0xFFDC2626).withValues(alpha: 0.6) : borderColor;
+                    }
 
                     return Container(
-                      color: isKept
-                          ? const Color(0xFF16A34A).withValues(alpha: isDark ? 0.08 : 0.05)
-                          : const Color(0xFFDC2626).withValues(alpha: isDark ? 0.08 : 0.04),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: cardBorderColor, width: decision != 'SKIP' ? 1.6 : 1.2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Left Details Column
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          // Card Header: Row Number, Match Reason & Current Decision Badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.4) : const Color(0xFFF8FAFC),
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(9)),
+                              border: Border(bottom: BorderSide(color: borderColor)),
+                            ),
+                            child: Row(
                               children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      'Row #$rowNum: ',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: textMuted,
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        phone.isNotEmpty ? '$name • $phone' : (email.isNotEmpty ? '$name • $email' : name),
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          decoration: isKept ? null : TextDecoration.lineThrough,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    // Status Badge: Kept vs Removed
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: isKept
-                                            ? const Color(0xFF16A34A).withValues(alpha: 0.15)
-                                            : const Color(0xFFDC2626).withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        isKept ? 'Will Import (Kept)' : 'Will Skip (Removed)',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                          color: isKept ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    // Reason Tag
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: isExistingInCrm
-                                            ? (isSameCampaign
-                                                ? const Color(0xFFDC2626).withValues(alpha: 0.12)
-                                                : const Color(0xFF2563EB).withValues(alpha: 0.12))
-                                            : const Color(0xFFD97706).withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        isExistingInCrm
-                                            ? (isSameCampaign ? 'Same Campaign' : 'Other Campaign')
-                                            : 'Duplicate in Sheet',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: isExistingInCrm
-                                              ? (isSameCampaign ? const Color(0xFFDC2626) : const Color(0xFF2563EB))
-                                              : const Color(0xFFD97706),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                Text(
+                                  'Row #$rowNum',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
                                 ),
-                                if (details.isNotEmpty) ...[
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    details,
-                                    style: TextStyle(fontSize: 11, color: textMuted),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: [
+                                      // Scope Tag
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isSameCampaign
+                                              ? const Color(0xFFDC2626).withValues(alpha: 0.15)
+                                              : (isExistingInCrm
+                                                  ? const Color(0xFF2563EB).withValues(alpha: 0.15)
+                                                  : const Color(0xFFD97706).withValues(alpha: 0.15)),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          isSameCampaign
+                                              ? '🚨 Duplicate in Target Campaign'
+                                              : (isExistingInCrm
+                                                  ? 'ℹ️ Matches Lead in: ${existingLead?['campaignName'] ?? 'Other Campaign'}'
+                                                  : '📑 Duplicate in Sheet (First at Row #${priorRow?['rowNumber'] ?? '?'})'),
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: isSameCampaign
+                                                ? const Color(0xFFDC2626)
+                                                : (isExistingInCrm ? const Color(0xFF2563EB) : const Color(0xFFD97706)),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
+                                ),
+                                // Current Decision Indicator
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: decision == 'UPDATE'
+                                        ? const Color(0xFF2563EB).withValues(alpha: 0.15)
+                                        : (decision == 'KEEP'
+                                            ? const Color(0xFF16A34A).withValues(alpha: 0.15)
+                                            : const Color(0xFFDC2626).withValues(alpha: 0.12)),
+                                    borderRadius: BorderRadius.circular(5),
+                                    border: Border.all(
+                                      color: decision == 'UPDATE'
+                                          ? const Color(0xFF2563EB)
+                                          : (decision == 'KEEP' ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    decision == 'UPDATE'
+                                        ? 'Will Update CRM Lead'
+                                        : (decision == 'KEEP' ? 'Will Import as New' : 'Will Skip (Ignored)'),
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: decision == 'UPDATE'
+                                          ? const Color(0xFF2563EB)
+                                          : (decision == 'KEEP' ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
-                          const SizedBox(width: 12),
 
-                          // Right & Wrong Tick Buttons
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Right Tick: Keep
-                              Tooltip(
-                                message: 'Keep (Import this lead anyway)',
-                                child: InkWell(
-                                  onTap: () => setModalState(() => duplicateDecisions[rowNum] = true),
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: isKept
-                                          ? const Color(0xFF16A34A)
-                                          : const Color(0xFF16A34A).withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: const Color(0xFF16A34A),
-                                        width: isKept ? 1.5 : 1,
+                          // Card Comparison Body: CRM Details vs Incoming Excel Row
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: isNarrowScreen
+                                ? Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      _buildCrmLeadDetailsBox(
+                                        lead: existingLead,
+                                        isSameCampaign: isSameCampaign,
+                                        isDark: isDark,
+                                        borderColor: borderColor,
+                                        textMuted: textMuted,
+                                        priorRow: priorRow,
                                       ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.check_rounded,
-                                          size: 15,
-                                          color: isKept ? Colors.white : const Color(0xFF16A34A),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Keep',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: isKept ? Colors.white : const Color(0xFF16A34A),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              // Wrong Tick / Cross: Remove
-                              Tooltip(
-                                message: 'Remove (Skip this duplicate)',
-                                child: InkWell(
-                                  onTap: () => setModalState(() => duplicateDecisions[rowNum] = false),
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: !isKept
-                                          ? const Color(0xFFDC2626)
-                                          : const Color(0xFFDC2626).withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: const Color(0xFFDC2626),
-                                        width: !isKept ? 1.5 : 1,
+                                      const SizedBox(height: 10),
+                                      _buildIncomingRowDetailsBox(
+                                        rowNumber: rowNum,
+                                        incomingRow: incomingRow,
+                                        fallbackName: name,
+                                        fallbackPhone: phone,
+                                        fallbackEmail: email,
+                                        isDark: isDark,
+                                        borderColor: borderColor,
+                                        textMuted: textMuted,
                                       ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.close_rounded,
-                                          size: 15,
-                                          color: !isKept ? Colors.white : const Color(0xFFDC2626),
+                                    ],
+                                  )
+                                : Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: _buildCrmLeadDetailsBox(
+                                          lead: existingLead,
+                                          isSameCampaign: isSameCampaign,
+                                          isDark: isDark,
+                                          borderColor: borderColor,
+                                          textMuted: textMuted,
+                                          priorRow: priorRow,
                                         ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Remove',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: !isKept ? Colors.white : const Color(0xFFDC2626),
-                                          ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: _buildIncomingRowDetailsBox(
+                                          rowNumber: rowNum,
+                                          incomingRow: incomingRow,
+                                          fallbackName: name,
+                                          fallbackPhone: phone,
+                                          fallbackEmail: email,
+                                          isDark: isDark,
+                                          borderColor: borderColor,
+                                          textMuted: textMuted,
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
+                          ),
+
+                          // Card Decision Action Bar
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.3) : const Color(0xFFF8FAFC),
+                              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(9)),
+                              border: Border(top: BorderSide(color: borderColor)),
+                            ),
+                            child: Row(
+                              children: [
+                                // Action 1: Skip (Default)
+                                _buildDecisionChoiceButton(
+                                  label: 'Skip Lead',
+                                  subtitle: 'Leave CRM lead unchanged',
+                                  icon: Icons.block_rounded,
+                                  isSelected: decision == 'SKIP',
+                                  color: const Color(0xFFDC2626),
+                                  onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'SKIP'),
+                                  isDark: isDark,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 8),
+                                // Action 2: Update CRM
+                                _buildDecisionChoiceButton(
+                                  label: 'Update CRM',
+                                  subtitle: 'Merge Excel fields into lead',
+                                  icon: Icons.sync_rounded,
+                                  isSelected: decision == 'UPDATE',
+                                  color: const Color(0xFF2563EB),
+                                  onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'UPDATE'),
+                                  isDark: isDark,
+                                ),
+                                const SizedBox(width: 8),
+                                // Action 3: Import as New
+                                _buildDecisionChoiceButton(
+                                  label: 'Import as New',
+                                  subtitle: 'Add duplicate lead anyway',
+                                  icon: Icons.add_circle_outline_rounded,
+                                  isSelected: decision == 'KEEP',
+                                  color: const Color(0xFF16A34A),
+                                  onTap: () => setModalState(() => duplicateDecisions[rowNum] = 'KEEP'),
+                                  isDark: isDark,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -7191,6 +7345,456 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDuplicateFilterChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required bool isDark,
+    Color? accentColor,
+  }) {
+    final activeColor = accentColor ?? const Color(0xFFC5A059);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? activeColor.withValues(alpha: isDark ? 0.25 : 0.15)
+              : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? activeColor : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? activeColor : null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDecisionChoiceButton({
+    required String label,
+    required String subtitle,
+    required IconData icon,
+    required bool isSelected,
+    required Color color,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withValues(alpha: isDark ? 0.22 : 0.12) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected ? color : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+              width: isSelected ? 1.6 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 16, color: isSelected ? color : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                        color: isSelected ? color : null,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                Icon(Icons.check_circle_rounded, size: 14, color: color),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCrmLeadDetailsBox({
+    required Map<String, dynamic>? lead,
+    required bool isSameCampaign,
+    required bool isDark,
+    required Color borderColor,
+    required Color textMuted,
+    Map<String, dynamic>? priorRow,
+  }) {
+    final bgColor = isDark ? const Color(0xFF1E1B18).withValues(alpha: 0.5) : const Color(0xFFF8FAFC);
+
+    if (lead == null) {
+      if (priorRow != null) {
+        final priorRowData = priorRow['incomingRow'] is Map ? Map<String, dynamic>.from(priorRow['incomingRow'] as Map) : {};
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.copy_rounded, size: 14, color: Color(0xFFD97706)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Prior Row #${priorRow['rowNumber']} in Excel Sheet',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFD97706)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _buildLeadDataRow('Lead Name', priorRow['name']?.toString() ?? '', textMuted),
+              ...priorRowData.entries
+                  .where((e) => e.value != null && e.value.toString().trim().isNotEmpty)
+                  .take(6)
+                  .map((e) => _buildLeadDataRow(e.key, e.value.toString(), textMuted)),
+            ],
+          ),
+        );
+      }
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: borderColor),
+        ),
+        child: Text('No existing CRM details found.', style: TextStyle(fontSize: 12, color: textMuted)),
+      );
+    }
+
+    final customFields = lead['customFields'] is Map ? Map<String, dynamic>.from(lead['customFields'] as Map) : {};
+    final followUp = lead['latestFollowUp'] is Map ? Map<String, dynamic>.from(lead['latestFollowUp'] as Map) : null;
+    final statusStr = lead['status']?.toString() ?? 'NOT_STARTED';
+
+    String? followUpDisplay;
+    if (followUp != null) {
+      final dateStr = followUp['scheduledDate']?.toString();
+      final timeStr = followUp['scheduledTime']?.toString();
+      final remarks = followUp['remarks']?.toString();
+      String formattedDate = '';
+      if (dateStr != null) {
+        try {
+          final dt = DateTime.tryParse(dateStr);
+          if (dt != null) formattedDate = DateFormat('dd MMM yyyy').format(dt.toLocal());
+        } catch (_) {}
+      }
+      followUpDisplay = '$formattedDate ${timeStr ?? ''}'.trim();
+      if (remarks != null && remarks.isNotEmpty) {
+        followUpDisplay += ' ("$remarks")';
+      }
+    }
+
+    String? createdDisplay;
+    final createdVal = lead['createdAt']?.toString();
+    if (createdVal != null) {
+      try {
+        final dt = DateTime.tryParse(createdVal);
+        if (dt != null) createdDisplay = DateFormat('dd MMM yyyy, hh:mm a').format(dt.toLocal());
+      } catch (_) {}
+    }
+
+    String? lastCallDisplay;
+    final lastCallVal = lead['lastCallAt']?.toString();
+    if (lastCallVal != null) {
+      try {
+        final dt = DateTime.tryParse(lastCallVal);
+        if (dt != null) lastCallDisplay = DateFormat('dd MMM yyyy, hh:mm a').format(dt.toLocal());
+      } catch (_) {}
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isSameCampaign ? const Color(0xFFDC2626).withValues(alpha: 0.3) : borderColor,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with Status Badge
+          Row(
+            children: [
+              Icon(
+                Icons.business_rounded,
+                size: 14,
+                color: isSameCampaign ? const Color(0xFFDC2626) : const Color(0xFF2563EB),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  isSameCampaign ? 'Existing Lead in Target Campaign' : 'Existing Lead in CRM',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isSameCampaign ? const Color(0xFFDC2626) : const Color(0xFF2563EB),
+                  ),
+                ),
+              ),
+              _buildStatusBadgeMini(statusStr, isDark),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          _buildLeadDataRow('Lead Name', lead['name']?.toString() ?? 'Unnamed', textMuted, isHighlighted: true),
+          _buildLeadDataRow('Phone Number', lead['phone']?.toString() ?? '', textMuted, isHighlighted: true),
+          if (lead['email'] != null && lead['email'].toString().isNotEmpty)
+            _buildLeadDataRow('Email Address', lead['email'].toString(), textMuted),
+
+          _buildLeadDataRow(
+            'Allocated To',
+            lead['telecallerName']?.toString() ?? 'Unassigned',
+            textMuted,
+            isHighlighted: lead['telecallerName'] != null,
+            highlightColor: const Color(0xFF16A34A),
+          ),
+          if (lead['assignedToName'] != null && lead['assignedToName'].toString().isNotEmpty)
+            _buildLeadDataRow('Sales Agent', lead['assignedToName'].toString(), textMuted),
+
+          if (lead['campaignName'] != null)
+            _buildLeadDataRow(
+              'Campaign',
+              '${lead['campaignName']}${lead['projectName'] != null ? ' (${lead['projectName']})' : ''}',
+              textMuted,
+            ),
+
+          if (followUpDisplay != null && followUpDisplay.isNotEmpty)
+            _buildLeadDataRow(
+              'Scheduled Follow-up',
+              followUpDisplay,
+              textMuted,
+              isHighlighted: true,
+              highlightColor: const Color(0xFFEA580C),
+            ),
+
+          if (lastCallDisplay != null)
+            _buildLeadDataRow('Last Call', lastCallDisplay, textMuted),
+
+          if (createdDisplay != null)
+            _buildLeadDataRow('Date Added', createdDisplay, textMuted),
+
+          // Custom Fields from CRM
+          ...customFields.entries.where((e) {
+            final k = e.key.toLowerCase();
+            return k != 'phone' &&
+                k != 'name' &&
+                k != 'email' &&
+                k != 'countrycode' &&
+                k != 'isd' &&
+                e.value != null &&
+                e.value.toString().trim().isNotEmpty;
+          }).take(6).map((e) {
+            return _buildLeadDataRow(e.key, e.value.toString(), textMuted);
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncomingRowDetailsBox({
+    required int rowNumber,
+    required Map<String, dynamic>? incomingRow,
+    required String fallbackName,
+    required String fallbackPhone,
+    required String fallbackEmail,
+    required bool isDark,
+    required Color borderColor,
+    required Color textMuted,
+  }) {
+    final bgColor = isDark ? const Color(0xFF0F172A).withValues(alpha: 0.3) : const Color(0xFFF1F5F9);
+    final rowData = incomingRow ?? {};
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.table_chart_rounded, size: 14, color: Color(0xFF16A34A)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Incoming Excel Row (#$rowNumber)',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF16A34A).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'From Spreadsheet',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          if (rowData.isEmpty) ...[
+            _buildLeadDataRow('Lead Name', fallbackName, textMuted, isHighlighted: true),
+            _buildLeadDataRow('Phone Number', fallbackPhone, textMuted, isHighlighted: true),
+            if (fallbackEmail.isNotEmpty) _buildLeadDataRow('Email Address', fallbackEmail, textMuted),
+          ] else ...[
+            ...rowData.entries.where((e) {
+              return e.value != null && e.value.toString().trim().isNotEmpty;
+            }).map((e) {
+              final isKeyContact = e.key.toLowerCase().contains('phone') ||
+                  e.key.toLowerCase().contains('name') ||
+                  e.key.toLowerCase().contains('client');
+              return _buildLeadDataRow(
+                e.key,
+                e.value.toString(),
+                textMuted,
+                isHighlighted: isKeyContact,
+                highlightColor: isKeyContact ? const Color(0xFF16A34A) : null,
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLeadDataRow(
+    String label,
+    String value,
+    Color textMuted, {
+    bool isHighlighted = false,
+    Color? highlightColor,
+  }) {
+    if (value.trim().isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3.5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 105,
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: textMuted),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
+                color: isHighlighted ? highlightColor : null,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBadgeMini(String statusStr, bool isDark) {
+    Color bg;
+    Color fg;
+    String label;
+    final s = statusStr.toUpperCase();
+    if (s.contains('FOLLOW')) {
+      bg = const Color(0xFFEA580C).withValues(alpha: 0.15);
+      fg = const Color(0xFFEA580C);
+      label = 'Follow Up';
+    } else if (s.contains('INTERESTED') || s.contains('BOOKING') || s.contains('SITE')) {
+      bg = const Color(0xFF16A34A).withValues(alpha: 0.15);
+      fg = const Color(0xFF16A34A);
+      label = s.contains('BOOKING') ? 'Booking Confirmed' : (s.contains('SITE') ? 'Site Done' : 'Interested');
+    } else if (s.contains('VISIT') || s.contains('SCHEDULED')) {
+      bg = const Color(0xFF2563EB).withValues(alpha: 0.15);
+      fg = const Color(0xFF2563EB);
+      label = 'Scheduled Visit';
+    } else if (s.contains('ASSIGNED')) {
+      bg = const Color(0xFF6366F1).withValues(alpha: 0.15);
+      fg = const Color(0xFF6366F1);
+      label = 'Assigned';
+    } else if (s.contains('CNR')) {
+      bg = const Color(0xFFF59E0B).withValues(alpha: 0.15);
+      fg = const Color(0xFFF59E0B);
+      label = 'CNR';
+    } else if (s.contains('NOT_INT') || s.contains('REJECT')) {
+      bg = const Color(0xFFEF4444).withValues(alpha: 0.15);
+      fg = const Color(0xFFEF4444);
+      label = s.contains('REJECT') ? 'Rejected' : 'Not Interested';
+    } else {
+      bg = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.08);
+      fg = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+      label = 'Not Started';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: fg, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: fg)),
+        ],
+      ),
     );
   }
 
@@ -11502,7 +12106,8 @@ class _CrmPreSalesFullScreenStationState extends State<_CrmPreSalesFullScreenSta
         final activeFilterCount = _getActiveFilterCount(state);
         final hasActiveFilters = activeFilterCount > 0;
         final isMobile = MediaQuery.sizeOf(context).width < 700;
-        final effectiveIsCardView = _isCardViewPreference ?? widget.parentState._cardViewPreference ?? isMobile;
+        final effectiveIsCardView = _isCardViewPreference ??
+            (isMobile ? true : (widget.parentState._cardViewPreference ?? false));
 
         return PopScope(
           canPop: false,

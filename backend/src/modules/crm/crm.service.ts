@@ -2461,6 +2461,21 @@ export const crmService = {
     );
   },
 
+  _excelIsEmailHeader(lower: string): boolean {
+    const l = lower.trim().toLowerCase();
+    if (!l) return false;
+    return l === 'email' || l === 'email id' || l === 'email_id' || l === 'email address' || l.includes('email');
+  },
+
+  _isDummyOrPlaceholderPhone(digits: string): boolean {
+    if (!digits || digits.length < 7) return true;
+    // Repeating identical digit (0000000000, 1111111111, 9999999999)
+    if (/^(\d)\1+$/.test(digits)) return true;
+    // Sequential ascending or descending: 1234567890, 0123456789, 9876543210
+    if (['1234567890', '0123456789', '9876543210', '0000000000'].includes(digits)) return true;
+    return false;
+  },
+
   /** Excel headers that mean remarks/notes (canonical columnKey: Notes). */
   _excelIsRemarksHeader(lower: string): boolean {
     const l = lower
@@ -2639,7 +2654,7 @@ export const crmService = {
       };
     });
 
-    // Check duplicate phone numbers against DB and within sheet
+    // Check duplicate phone numbers & emails against DB and within sheet
     const existingLeads = await prisma.crmLead.findMany({
       where: {
         scope: campaignScope,
@@ -2649,36 +2664,69 @@ export const crmService = {
         id: true,
         name: true,
         phone: true,
+        customFields: true,
+        campaignId: true,
+        campaign: { select: { id: true, name: true, code: true } },
         telecaller: { select: { generalInfo: { select: { fullName: true } } } },
       },
     });
 
-    const dbPhoneMap = new Map<string, { id: string; name: string; phone: string; telecallerName?: string }>();
+    const dbPhoneMap = new Map<
+      string,
+      { id: string; name: string; phone: string; campaignId?: string; campaignName?: string; telecallerName?: string }
+    >();
+    const dbEmailMap = new Map<
+      string,
+      { id: string; name: string; email: string; campaignId?: string; campaignName?: string; telecallerName?: string }
+    >();
+
     for (const el of existingLeads) {
       const d = String(el.phone || '').replace(/\D/g, '');
       const key = d.length >= 10 ? d.slice(-10) : (d.length >= 7 ? d : '');
-      if (key && !dbPhoneMap.has(key)) {
+      if (key && !this._isDummyOrPlaceholderPhone(key) && !dbPhoneMap.has(key)) {
         dbPhoneMap.set(key, {
           id: el.id,
           name: el.name || 'Unnamed',
           phone: el.phone || '',
+          campaignId: el.campaignId || undefined,
+          campaignName: el.campaign?.name,
+          telecallerName: el.telecaller?.generalInfo?.fullName,
+        });
+      }
+      const cf = (el.customFields as Record<string, any>) || {};
+      const elEmail = String(cf.email || cf.Email || cf.Email_Id || cf.email_id || '').trim().toLowerCase();
+      if (elEmail && elEmail.includes('@') && !dbEmailMap.has(elEmail)) {
+        dbEmailMap.set(elEmail, {
+          id: el.id,
+          name: el.name || 'Unnamed',
+          email: elEmail,
+          campaignId: el.campaignId || undefined,
+          campaignName: el.campaign?.name,
           telecallerName: el.telecaller?.generalInfo?.fullName,
         });
       }
     }
 
-    const seenInSheetPhones = new Map<string, number>();
+    const seenInSheetPhones = new Map<string, { rowIdx: number; name: string }>();
+    const seenInSheetEmails = new Map<string, { rowIdx: number; name: string }>();
     const duplicateList: Array<{
       rowNumber: number;
       name: string;
       phone: string;
+      email?: string;
       duplicateType: 'EXISTING_IN_CRM' | 'DUPLICATE_IN_SHEET';
+      isSameCampaign: boolean;
+      campaignName?: string;
+      telecallerName?: string;
       details: string;
+      defaultAction: 'SKIP' | 'KEEP';
     }> = [];
 
     rows.forEach((row, idx) => {
       let phone = '';
       let name = '';
+      let email = '';
+
       for (const [h, v] of Object.entries(row)) {
         const lower = h.toLowerCase().trim();
         const strVal = this._excelCellToString(v);
@@ -2689,35 +2737,97 @@ export const crmService = {
         if (this._excelIsNameHeader(lower) && !name) {
           name = strVal;
         }
+        if (this._excelIsEmailHeader(lower) && !email && strVal.includes('@')) {
+          email = strVal.trim().toLowerCase();
+        }
       }
 
-      if (phone) {
-        const cleanDigits = String(phone).replace(/\D/g, '');
-        const phone10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+      const cleanDigits = String(phone || '').replace(/\D/g, '');
+      const phone10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+      const isDummyPhone = this._isDummyOrPlaceholderPhone(phone10);
 
-        if (phone10.length >= 7) {
-          if (seenInSheetPhones.has(phone10)) {
-            duplicateList.push({
-              rowNumber: idx + 1,
-              name: name || 'Unnamed Lead',
-              phone,
-              duplicateType: 'DUPLICATE_IN_SHEET',
-              details: `Duplicate of Row #${seenInSheetPhones.get(phone10)! + 1} in this sheet`,
-            });
-          } else if (dbPhoneMap.has(phone10)) {
-            const match = dbPhoneMap.get(phone10)!;
-            const callerInfo = match.telecallerName ? ` (${match.telecallerName})` : '';
-            duplicateList.push({
-              rowNumber: idx + 1,
-              name: name || 'Unnamed Lead',
-              phone,
-              duplicateType: 'EXISTING_IN_CRM',
-              details: `Already in CRM: "${match.name}"${callerInfo}`,
-            });
-            seenInSheetPhones.set(phone10, idx);
-          } else {
-            seenInSheetPhones.set(phone10, idx);
-          }
+      let isDuplicateFound = false;
+
+      // 1. Phone number deduplication (ignores placeholder/dummy phones to prevent false duplicates)
+      if (phone10.length >= 7 && !isDummyPhone) {
+        if (seenInSheetPhones.has(phone10)) {
+          const prior = seenInSheetPhones.get(phone10)!;
+          const sameName = prior.name.toLowerCase().trim() === (name || '').toLowerCase().trim();
+          duplicateList.push({
+            rowNumber: idx + 1,
+            name: name || 'Unnamed Lead',
+            phone,
+            email,
+            duplicateType: 'DUPLICATE_IN_SHEET',
+            isSameCampaign: true,
+            details: sameName
+              ? `Duplicate of Row #${prior.rowIdx + 1} ("${prior.name || 'Unnamed'}") in this sheet`
+              : `Shared phone with Row #${prior.rowIdx + 1} ("${prior.name || 'Unnamed'}") - Different name`,
+            defaultAction: 'SKIP',
+          });
+          isDuplicateFound = true;
+        } else if (dbPhoneMap.has(phone10)) {
+          const match = dbPhoneMap.get(phone10)!;
+          const isSameCamp = match.campaignId === targetCampaignId;
+          const callerInfo = match.telecallerName ? ` (Telecaller: ${match.telecallerName})` : '';
+          const campInfo = match.campaignName ? ` [${match.campaignName}]` : '';
+          duplicateList.push({
+            rowNumber: idx + 1,
+            name: name || 'Unnamed Lead',
+            phone,
+            email,
+            duplicateType: 'EXISTING_IN_CRM',
+            isSameCampaign: isSameCamp,
+            campaignName: match.campaignName,
+            telecallerName: match.telecallerName,
+            details: isSameCamp
+              ? `Already in this campaign: "${match.name}"${callerInfo}`
+              : `Already in CRM${campInfo}: "${match.name}"${callerInfo}`,
+            defaultAction: 'SKIP',
+          });
+          seenInSheetPhones.set(phone10, { rowIdx: idx, name });
+          isDuplicateFound = true;
+        } else {
+          seenInSheetPhones.set(phone10, { rowIdx: idx, name });
+        }
+      }
+
+      // 2. Email deduplication (catches duplicates even if phone was missed or alternate)
+      if (!isDuplicateFound && email && email.includes('@')) {
+        if (seenInSheetEmails.has(email)) {
+          const prior = seenInSheetEmails.get(email)!;
+          duplicateList.push({
+            rowNumber: idx + 1,
+            name: name || 'Unnamed Lead',
+            phone,
+            email,
+            duplicateType: 'DUPLICATE_IN_SHEET',
+            isSameCampaign: true,
+            details: `Duplicate email (${email}) with Row #${prior.rowIdx + 1} in this sheet`,
+            defaultAction: 'SKIP',
+          });
+        } else if (dbEmailMap.has(email)) {
+          const match = dbEmailMap.get(email)!;
+          const isSameCamp = match.campaignId === targetCampaignId;
+          const callerInfo = match.telecallerName ? ` (Telecaller: ${match.telecallerName})` : '';
+          const campInfo = match.campaignName ? ` [${match.campaignName}]` : '';
+          duplicateList.push({
+            rowNumber: idx + 1,
+            name: name || 'Unnamed Lead',
+            phone,
+            email,
+            duplicateType: 'EXISTING_IN_CRM',
+            isSameCampaign: isSameCamp,
+            campaignName: match.campaignName,
+            telecallerName: match.telecallerName,
+            details: isSameCamp
+              ? `Already in this campaign by email: "${match.name}"${callerInfo}`
+              : `Already in CRM${campInfo} by email: "${match.name}"${callerInfo}`,
+            defaultAction: 'SKIP',
+          });
+          seenInSheetEmails.set(email, { rowIdx: idx, name });
+        } else {
+          seenInSheetEmails.set(email, { rowIdx: idx, name });
         }
       }
     });
@@ -2766,6 +2876,8 @@ export const crmService = {
       fileName?: string;
       sheetName?: string;
       selectedHeaders?: string[];
+      excludedRowNumbers?: number[];
+      keepRowNumbers?: number[];
     },
   ) {
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
@@ -2925,6 +3037,7 @@ export const crmService = {
     const shouldSkipDuplicates = options?.skipDuplicates !== false;
     let skippedDuplicatesCount = 0;
     const existingPhonesSet = new Set<string>();
+    const existingEmailsSet = new Set<string>();
 
     if (shouldSkipDuplicates) {
       const existingLeads = await prisma.crmLead.findMany({
@@ -2932,14 +3045,30 @@ export const crmService = {
           scope: campaignScope,
           isDeleted: false,
         },
-        select: { phone: true },
+        select: { phone: true, customFields: true },
       });
       for (const el of existingLeads) {
         const d = String(el.phone || '').replace(/\D/g, '');
-        if (d.length >= 10) existingPhonesSet.add(d.slice(-10));
-        else if (d.length >= 7) existingPhonesSet.add(d);
+        const key = d.length >= 10 ? d.slice(-10) : (d.length >= 7 ? d : '');
+        if (key && !this._isDummyOrPlaceholderPhone(key)) {
+          existingPhonesSet.add(key);
+        }
+        const cf = (el.customFields as Record<string, any>) || {};
+        const elEmail = String(cf.email || cf.Email || cf.Email_Id || cf.email_id || '').trim().toLowerCase();
+        if (elEmail && elEmail.includes('@')) {
+          existingEmailsSet.add(elEmail);
+        }
       }
     }
+
+    const excludedRowsSet =
+      options?.excludedRowNumbers && options.excludedRowNumbers.length > 0
+        ? new Set(options.excludedRowNumbers)
+        : null;
+    const keepRowsSet =
+      options?.keepRowNumbers && options.keepRowNumbers.length > 0
+        ? new Set(options.keepRowNumbers)
+        : null;
 
     const importBatchId = crypto.randomUUID();
     const importedAt = new Date().toISOString();
@@ -2948,8 +3077,18 @@ export const crmService = {
     let insertedCount = 0;
     const leadsToInsert: any[] = [];
     const seenInSheetPhones = new Set<string>();
+    const seenInSheetEmails = new Set<string>();
 
-    for (const row of rows) {
+    for (let idx = 0; idx < rows.length; idx++) {
+      const row = rows[idx];
+      const rowNumber = idx + 1;
+
+      // 1. If user explicitly chose to exclude this duplicate row from preview, skip it!
+      if (excludedRowsSet && excludedRowsSet.has(rowNumber)) {
+        skippedDuplicatesCount++;
+        continue;
+      }
+
       let customFields: Record<string, any> = {
         isExcelImport: true,
         isManual: false,
@@ -2960,6 +3099,7 @@ export const crmService = {
       };
       let phone = '';
       let name = '';
+      let email = '';
       let phoneScore = -1;
       let nameScore = -1;
       let assignedHeaderValue = '';
@@ -2996,6 +3136,10 @@ export const crmService = {
             name = strVal;
             nameScore = score;
           }
+        }
+
+        if (this._excelIsEmailHeader(lowerHeader) && strVal.includes('@') && !email) {
+          email = strVal.trim().toLowerCase();
         }
 
         if (
@@ -3045,18 +3189,51 @@ export const crmService = {
             '',
         ).trim();
       }
+      if (!email && customFields.Email) {
+        const em = String(customFields.Email).trim().toLowerCase();
+        if (em.includes('@')) email = em;
+      }
 
-      if (phone || name) {
+      if (phone || name || email) {
         const cleanDigits = String(phone || '').replace(/\D/g, '');
         const phone10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+        const isDummyPhone = this._isDummyOrPlaceholderPhone(phone10);
 
-        if (shouldSkipDuplicates && phone10.length >= 7) {
-          if (seenInSheetPhones.has(phone10) || existingPhonesSet.has(phone10)) {
+        // If user explicitly chose to KEEP this row in the preview (with Right tick), bypass deduplication!
+        const isExplicitlyKept = keepRowsSet && keepRowsSet.has(rowNumber);
+
+        if (!isExplicitlyKept && shouldSkipDuplicates) {
+          let isDup = false;
+          if (phone10.length >= 7 && !isDummyPhone) {
+            if (seenInSheetPhones.has(phone10) || existingPhonesSet.has(phone10)) {
+              isDup = true;
+            } else {
+              seenInSheetPhones.add(phone10);
+              existingPhonesSet.add(phone10);
+            }
+          }
+          if (!isDup && email && email.includes('@')) {
+            if (seenInSheetEmails.has(email) || existingEmailsSet.has(email)) {
+              isDup = true;
+            } else {
+              seenInSheetEmails.add(email);
+              existingEmailsSet.add(email);
+            }
+          }
+
+          if (isDup) {
             skippedDuplicatesCount++;
             continue;
           }
-          seenInSheetPhones.add(phone10);
-          existingPhonesSet.add(phone10);
+        } else {
+          if (phone10.length >= 7 && !isDummyPhone) {
+            seenInSheetPhones.add(phone10);
+            existingPhonesSet.add(phone10);
+          }
+          if (email && email.includes('@')) {
+            seenInSheetEmails.add(email);
+            existingEmailsSet.add(email);
+          }
         }
 
         let rowTelecallerId = telecallerId;

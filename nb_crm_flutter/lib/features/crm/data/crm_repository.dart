@@ -397,6 +397,8 @@ class CrmRepository {
     bool skipDuplicates = true,
     String? sheetName,
     List<String>? selectedHeaders,
+    List<int>? excludedRowNumbers,
+    List<int>? keepRowNumbers,
   }) async {
     final map = <String, dynamic>{
       'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
@@ -410,6 +412,12 @@ class CrmRepository {
     }
     if (selectedHeaders != null && selectedHeaders.isNotEmpty) {
       map['selectedHeaders'] = jsonEncode(selectedHeaders);
+    }
+    if (excludedRowNumbers != null && excludedRowNumbers.isNotEmpty) {
+      map['excludedRowNumbers'] = jsonEncode(excludedRowNumbers);
+    }
+    if (keepRowNumbers != null && keepRowNumbers.isNotEmpty) {
+      map['keepRowNumbers'] = jsonEncode(keepRowNumbers);
     }
     if (assignmentMode != null && assignmentMode.isNotEmpty) {
       map['assignmentMode'] = assignmentMode;

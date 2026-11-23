@@ -4488,6 +4488,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     List<Map<String, dynamic>> detectedHeaders = [];
     Set<String> selectedHeaders = {};
     List<Map<String, dynamic>> duplicatesList = [];
+    Map<int, bool> duplicateDecisions = {}; // rowNumber -> keep (true=keep, false=skip)
     int duplicateCount = 0;
     List<Map<String, dynamic>> previewRows = [];
     int totalRows = 0;
@@ -4552,6 +4553,12 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   duplicatesList = (dups['duplicateList'] as List)
                       .map((d) => Map<String, dynamic>.from(d as Map))
                       .toList();
+                  for (final d in duplicatesList) {
+                    final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
+                    if (r > 0 && !duplicateDecisions.containsKey(r)) {
+                      duplicateDecisions[r] = false; // default to skip
+                    }
+                  }
                 }
                 if (res['previewRows'] is List) {
                   previewRows = (res['previewRows'] as List)
@@ -4757,6 +4764,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                 detectedHeaders: detectedHeaders,
                                 selectedHeaders: selectedHeaders,
                                 duplicatesList: duplicatesList,
+                                duplicateDecisions: duplicateDecisions,
                                 previewRows: previewRows,
                                 skipDuplicates: skipDuplicates,
                                 assignmentMode: assignmentMode,
@@ -4839,11 +4847,20 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                 return;
                               }
 
+                              final excludedRows = duplicatesList
+                                  .where((d) => duplicateDecisions[(d['rowNumber'] as num?)?.toInt() ?? 0] != true)
+                                  .map((d) => (d['rowNumber'] as num).toInt())
+                                  .toList();
+                              final keepRows = duplicatesList
+                                  .where((d) => duplicateDecisions[(d['rowNumber'] as num?)?.toInt() ?? 0] == true)
+                                  .map((d) => (d['rowNumber'] as num).toInt())
+                                  .toList();
+
                               Navigator.pop(dialogCtx);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'Importing ${selectedHeaders.length} columns from "${selectedSheet ?? file.name}"...',
+                                    'Importing ${selectedHeaders.length} columns from "${selectedSheet ?? file.name}" (${keepRows.length} duplicates kept, ${excludedRows.length} skipped)...',
                                   ),
                                 ),
                               );
@@ -4860,6 +4877,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       assignedTelecallerIds:
                                           assignmentMode == 'ROUND_ROBIN' ? multiSelectedTelecallerIds : null,
                                       skipDuplicates: skipDuplicates,
+                                      excludedRowNumbers: excludedRows,
+                                      keepRowNumbers: keepRows,
                                     ),
                                   );
                             },
@@ -4958,6 +4977,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     required List<Map<String, dynamic>> detectedHeaders,
     required Set<String> selectedHeaders,
     required List<Map<String, dynamic>> duplicatesList,
+    required Map<int, bool> duplicateDecisions,
     required List<Map<String, dynamic>> previewRows,
     required bool skipDuplicates,
     required String assignmentMode,
@@ -5174,6 +5194,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 : (previewSubTab == 1
                     ? _buildDuplicatesTab(
                         duplicatesList: duplicatesList,
+                        duplicateDecisions: duplicateDecisions,
                         skipDuplicates: skipDuplicates,
                         setModalState: setModalState,
                         textMuted: textMuted,
@@ -5371,25 +5392,32 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ],
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildDetailField(
-                        'Headers to Import',
-                        '${selectedHeaders.length} of ${detectedHeaders.length} columns selected',
-                        textMuted,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildDetailField(
-                        'Expected Lead Rows',
-                        skipDuplicates
-                            ? '$validRowsCount valid ($duplicateCount duplicates will be skipped)'
-                            : '$totalRows rows (including duplicates)',
-                        textMuted,
-                      ),
-                    ),
-                  ],
+                Builder(
+                  builder: (_) {
+                    final keptDupsCount = duplicatesList.where((d) {
+                      final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
+                      return duplicateDecisions[r] == true;
+                    }).length;
+                    final removedDupsCount = duplicatesList.length - keptDupsCount;
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: _buildDetailField(
+                            'Headers to Import',
+                            '${selectedHeaders.length} of ${detectedHeaders.length} columns selected',
+                            textMuted,
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildDetailField(
+                            'Expected Lead Rows',
+                            '${validRowsCount + keptDupsCount} leads to import ($removedDupsCount skipped, $keptDupsCount kept)',
+                            textMuted,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -5541,31 +5569,96 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
   Widget _buildDuplicatesTab({
     required List<Map<String, dynamic>> duplicatesList,
+    required Map<int, bool> duplicateDecisions,
     required bool skipDuplicates,
     required void Function(void Function()) setModalState,
     required Color textMuted,
     required Color borderColor,
     required bool isDark,
   }) {
+    final keptCount = duplicatesList.where((d) {
+      final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
+      return duplicateDecisions[r] == true;
+    }).length;
+    final removedCount = duplicatesList.length - keptCount;
+
     return Column(
       children: [
-        // Duplicate handling setting
-        CheckboxListTile(
-          dense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          value: skipDuplicates,
-          activeColor: const Color(0xFF16A34A),
-          title: const Text(
-            'Skip duplicate numbers during import (Recommended)',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+        // Top Action Bar with Keep All and Remove All buttons
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.5) : const Color(0xFFF1F5F9),
+            border: Border(bottom: BorderSide(color: borderColor)),
           ),
-          subtitle: const Text(
-            'Prevents re-importing phone numbers that already exist in this campaign or CRM',
-            style: TextStyle(fontSize: 11),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${duplicatesList.length} duplicate leads identified',
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      '$keptCount marked to Keep (Import) • $removedCount marked to Remove (Skip)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: keptCount > 0 ? const Color(0xFF16A34A) : textMuted,
+                        fontWeight: keptCount > 0 ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // "Keep All" Button
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF16A34A).withValues(alpha: 0.15),
+                  foregroundColor: const Color(0xFF16A34A),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  visualDensity: VisualDensity.compact,
+                  side: const BorderSide(color: Color(0xFF16A34A)),
+                ),
+                icon: const Icon(Icons.check_rounded, size: 16),
+                label: const Text('Keep All', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  setModalState(() {
+                    for (final d in duplicatesList) {
+                      final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
+                      if (r > 0) duplicateDecisions[r] = true;
+                    }
+                  });
+                },
+              ),
+              const SizedBox(width: 8),
+              // "Remove All" Button
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFDC2626).withValues(alpha: 0.12),
+                  foregroundColor: const Color(0xFFDC2626),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  visualDensity: VisualDensity.compact,
+                  side: const BorderSide(color: Color(0xFFDC2626)),
+                ),
+                icon: const Icon(Icons.close_rounded, size: 16),
+                label: const Text('Remove All', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  setModalState(() {
+                    for (final d in duplicatesList) {
+                      final r = (d['rowNumber'] as num?)?.toInt() ?? 0;
+                      if (r > 0) duplicateDecisions[r] = false;
+                    }
+                  });
+                },
+              ),
+            ],
           ),
-          onChanged: (val) => setModalState(() => skipDuplicates = val ?? true),
         ),
-        const Divider(height: 1),
 
         // Duplicate list
         Expanded(
@@ -5580,7 +5673,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'All phone numbers in this sheet are unique across the CRM.',
+                        'All phone numbers and emails in this sheet are unique across the CRM.',
                         style: TextStyle(fontSize: 12, color: textMuted),
                       ),
                     ],
@@ -5592,52 +5685,199 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   separatorBuilder: (_, __) => Divider(height: 1, color: borderColor),
                   itemBuilder: (ctx, idx) {
                     final d = duplicatesList[idx];
-                    final rowNum = d['rowNumber']?.toString() ?? '${idx + 1}';
+                    final rowNum = (d['rowNumber'] as num?)?.toInt() ?? (idx + 1);
                     final name = d['name']?.toString() ?? 'Unnamed';
                     final phone = d['phone']?.toString() ?? '';
+                    final email = d['email']?.toString() ?? '';
                     final isExistingInCrm = d['duplicateType'] == 'EXISTING_IN_CRM';
+                    final isSameCampaign = d['isSameCampaign'] == true;
                     final details = d['details']?.toString() ?? '';
+                    final isKept = duplicateDecisions[rowNum] == true;
 
-                    return ListTile(
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                      title: Row(
+                    return Container(
+                      color: isKept
+                          ? const Color(0xFF16A34A).withValues(alpha: isDark ? 0.08 : 0.05)
+                          : const Color(0xFFDC2626).withValues(alpha: isDark ? 0.08 : 0.04),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Text(
-                            'Row #$rowNum: ',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textMuted),
-                          ),
+                          // Left Details Column
                           Expanded(
-                            child: Text(
-                              '$name • $phone',
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Row #$rowNum: ',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: textMuted,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        phone.isNotEmpty ? '$name • $phone' : (email.isNotEmpty ? '$name • $email' : name),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          decoration: isKept ? null : TextDecoration.lineThrough,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    // Status Badge: Kept vs Removed
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: isKept
+                                            ? const Color(0xFF16A34A).withValues(alpha: 0.15)
+                                            : const Color(0xFFDC2626).withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        isKept ? 'Will Import (Kept)' : 'Will Skip (Removed)',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: isKept ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    // Reason Tag
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: isExistingInCrm
+                                            ? (isSameCampaign
+                                                ? const Color(0xFFDC2626).withValues(alpha: 0.12)
+                                                : const Color(0xFF2563EB).withValues(alpha: 0.12))
+                                            : const Color(0xFFD97706).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        isExistingInCrm
+                                            ? (isSameCampaign ? 'Same Campaign' : 'Other Campaign')
+                                            : 'Duplicate in Sheet',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: isExistingInCrm
+                                              ? (isSameCampaign ? const Color(0xFFDC2626) : const Color(0xFF2563EB))
+                                              : const Color(0xFFD97706),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (details.isNotEmpty) ...[
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    details,
+                                    style: TextStyle(fontSize: 11, color: textMuted),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: isExistingInCrm
-                                  ? const Color(0xFFDC2626).withValues(alpha: 0.12)
-                                  : const Color(0xFFD97706).withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              isExistingInCrm ? 'Already in CRM' : 'Duplicate in Sheet',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w600,
-                                color: isExistingInCrm ? const Color(0xFFDC2626) : const Color(0xFFD97706),
+                          const SizedBox(width: 12),
+
+                          // Right & Wrong Tick Buttons
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Right Tick: Keep
+                              Tooltip(
+                                message: 'Keep (Import this lead anyway)',
+                                child: InkWell(
+                                  onTap: () => setModalState(() => duplicateDecisions[rowNum] = true),
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: isKept
+                                          ? const Color(0xFF16A34A)
+                                          : const Color(0xFF16A34A).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: const Color(0xFF16A34A),
+                                        width: isKept ? 1.5 : 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.check_rounded,
+                                          size: 15,
+                                          color: isKept ? Colors.white : const Color(0xFF16A34A),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Keep',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: isKept ? Colors.white : const Color(0xFF16A34A),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 6),
+                              // Wrong Tick / Cross: Remove
+                              Tooltip(
+                                message: 'Remove (Skip this duplicate)',
+                                child: InkWell(
+                                  onTap: () => setModalState(() => duplicateDecisions[rowNum] = false),
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: !isKept
+                                          ? const Color(0xFFDC2626)
+                                          : const Color(0xFFDC2626).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: const Color(0xFFDC2626),
+                                        width: !isKept ? 1.5 : 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.close_rounded,
+                                          size: 15,
+                                          color: !isKept ? Colors.white : const Color(0xFFDC2626),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Remove',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: !isKept ? Colors.white : const Color(0xFFDC2626),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      subtitle: details.isNotEmpty
-                          ? Text(
-                              details,
-                              style: TextStyle(fontSize: 11, color: textMuted),
-                            )
-                          : null,
                     );
                   },
                 ),

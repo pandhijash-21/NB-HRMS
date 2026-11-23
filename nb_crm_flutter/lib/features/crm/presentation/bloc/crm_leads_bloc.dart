@@ -171,6 +171,8 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
     this.skipDuplicates = true,
     this.sheetName,
     this.selectedHeaders,
+    this.excludedRowNumbers,
+    this.keepRowNumbers,
   });
   final Uint8List fileBytes;
   final String fileName;
@@ -181,6 +183,8 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
   final bool skipDuplicates;
   final String? sheetName;
   final List<String>? selectedHeaders;
+  final List<int>? excludedRowNumbers;
+  final List<int>? keepRowNumbers;
 
   @override
   List<Object?> get props => [
@@ -193,6 +197,8 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
         skipDuplicates,
         sheetName,
         selectedHeaders,
+        excludedRowNumbers,
+        keepRowNumbers,
       ];
 }
 
@@ -990,6 +996,8 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         skipDuplicates: event.skipDuplicates,
         sheetName: event.sheetName,
         selectedHeaders: event.selectedHeaders,
+        excludedRowNumbers: event.excludedRowNumbers,
+        keepRowNumbers: event.keepRowNumbers,
       );
       final count = res['count'] ?? 0;
       final msg = res['message'] ?? 'Imported $count leads';

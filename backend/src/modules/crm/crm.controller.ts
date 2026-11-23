@@ -342,6 +342,30 @@ export const crmController = {
         } catch (_) {}
       }
 
+      let excludedRowNumbers: number[] | undefined = undefined;
+      if (req.body.excludedRowNumbers) {
+        try {
+          const parsed = typeof req.body.excludedRowNumbers === 'string'
+            ? JSON.parse(req.body.excludedRowNumbers)
+            : req.body.excludedRowNumbers;
+          if (Array.isArray(parsed)) {
+            excludedRowNumbers = parsed.map(Number).filter((n) => !isNaN(n) && n > 0);
+          }
+        } catch (_) {}
+      }
+
+      let keepRowNumbers: number[] | undefined = undefined;
+      if (req.body.keepRowNumbers) {
+        try {
+          const parsed = typeof req.body.keepRowNumbers === 'string'
+            ? JSON.parse(req.body.keepRowNumbers)
+            : req.body.keepRowNumbers;
+          if (Array.isArray(parsed)) {
+            keepRowNumbers = parsed.map(Number).filter((n) => !isNaN(n) && n > 0);
+          }
+        } catch (_) {}
+      }
+
       const explicitTelecallerId = req.body.telecallerId
         ? Number(req.body.telecallerId)
         : (isAdmin ? undefined : authUser?.employeeId);
@@ -364,6 +388,8 @@ export const crmController = {
           fileName: req.file.originalname || req.file.filename,
           sheetName,
           selectedHeaders,
+          excludedRowNumbers,
+          keepRowNumbers,
         },
       );
       res.json(ok(result));

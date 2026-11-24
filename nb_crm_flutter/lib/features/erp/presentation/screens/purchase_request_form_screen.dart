@@ -18,6 +18,8 @@ import '../../domain/store_models.dart';
 import '../../domain/work_order_models.dart';
 import '../../../earth/data/earth_repository.dart';
 import '../../../earth/domain/earth_models.dart';
+import '../widgets/quick_create_masters.dart';
+import '../widgets/quick_create_vendor_dialog.dart';
 
 class PurchaseRequestListScreen extends StatefulWidget {
   const PurchaseRequestListScreen({super.key});
@@ -440,24 +442,36 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
                       onChanged: (v) => setState(() => _projectId = v),
                     ),
                     const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
+                    ActivityDropdownWithCreate(
                       value: _activityId,
-                      decoration: const InputDecoration(labelText: 'Activity', border: OutlineInputBorder()),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('Select activity')),
-                        ..._activities.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))),
-                      ],
+                      activities: _activities,
+                      includeNullOption: true,
+                      nullLabel: 'Select activity',
+                      decoration: const InputDecoration(
+                        labelText: 'Activity',
+                        border: OutlineInputBorder(),
+                      ),
                       onChanged: (v) => setState(() => _activityId = v),
+                      onActivityCreated: (created) => setState(() {
+                        _activities = [..._activities, created];
+                        _activityId = created.id;
+                      }),
                     ),
                     const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
+                    VendorDropdownWithCreate(
                       value: _vendorId,
-                      decoration: const InputDecoration(labelText: 'Name of Vendor', border: OutlineInputBorder()),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('Select vendor')),
-                        ..._vendors.map((v) => DropdownMenuItem(value: v.id, child: Text(v.name))),
-                      ],
+                      vendors: _vendors,
+                      includeNullOption: true,
+                      nullLabel: 'Select vendor',
+                      decoration: const InputDecoration(
+                        labelText: 'Name of Vendor',
+                        border: OutlineInputBorder(),
+                      ),
                       onChanged: (v) => setState(() => _vendorId = v),
+                      onVendorCreated: (created) => setState(() {
+                        _vendors = [..._vendors, created];
+                        _vendorId = created.id;
+                      }),
                     ),
                     const SizedBox(height: 10),
                     InputDecorator(
@@ -492,19 +506,20 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
                       onChanged: _onPropertyChanged,
                     ),
                     const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
+                    StoreDropdownWithCreate(
                       value: _storeId,
-                      decoration: const InputDecoration(labelText: 'Store', border: OutlineInputBorder()),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('Select store')),
-                        ...filteredStores.map(
-                          (s) => DropdownMenuItem(
-                            value: s.id,
-                            child: Text('${s.name} (${s.location})'),
-                          ),
-                        ),
-                      ],
+                      stores: filteredStores,
+                      includeNullOption: true,
+                      nullLabel: 'Select store',
+                      decoration: const InputDecoration(
+                        labelText: 'Store',
+                        border: OutlineInputBorder(),
+                      ),
                       onChanged: (v) => setState(() => _storeId = v),
+                      onStoreCreated: (created) => setState(() {
+                        _stores = [..._stores, created];
+                        _storeId = created.id;
+                      }),
                     ),
                     const SizedBox(height: 20),
                     Row(
@@ -541,26 +556,19 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
                                     ),
                                 ],
                               ),
-                              DropdownButtonFormField<String>(
+                              MaterialDropdownWithCreate(
                                 value: _lines[i].materialId,
+                                materials: _inventory,
+                                includeNullOption: true,
+                                nullLabel: 'Select from inventory',
                                 decoration: const InputDecoration(
                                   labelText: 'Item Code / Material',
                                   border: OutlineInputBorder(),
                                 ),
-                                items: [
-                                  const DropdownMenuItem(value: null, child: Text('Select from inventory')),
-                                  ..._inventory.map(
-                                    (m) => DropdownMenuItem(
-                                      value: m.id,
-                                      child: Text(
-                                        [
-                                          if (m.itemCode != null && m.itemCode!.isNotEmpty) m.itemCode!,
-                                          m.name,
-                                        ].join(' — '),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                                itemLabel: (m) => [
+                                  if (m.itemCode != null && m.itemCode!.isNotEmpty) m.itemCode!,
+                                  m.name,
+                                ].join(' — '),
                                 onChanged: (id) {
                                   ErpMaterial? m;
                                   for (final item in _inventory) {
@@ -570,6 +578,12 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
                                     }
                                   }
                                   _applyMaterial(_lines[i], m);
+                                },
+                                onMaterialCreated: (created) {
+                                  setState(() {
+                                    _inventory = [..._inventory, created];
+                                  });
+                                  _applyMaterial(_lines[i], created);
                                 },
                               ),
                               const SizedBox(height: 8),

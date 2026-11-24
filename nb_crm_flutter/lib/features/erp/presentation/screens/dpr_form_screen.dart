@@ -17,6 +17,8 @@ import '../../domain/project_models.dart';
 import '../../domain/resource_models.dart';
 import '../../domain/structure_models.dart';
 import '../../domain/work_order_models.dart';
+import '../widgets/quick_create_masters.dart';
+import '../widgets/quick_create_vendor_dialog.dart';
 
 class DprFormScreen extends StatefulWidget {
   const DprFormScreen({super.key});
@@ -316,13 +318,21 @@ class _DprFormScreenState extends State<DprFormScreen> {
     }
     setState(() => _saving = true);
     try {
-      await context.read<DprRepository>().create({
+      final created = await context.read<DprRepository>().create({
         'reportDate': _reportDate.toIso8601String(),
         'projectId': _projectId,
         'createdByName': _createdByCtrl.text.trim().isEmpty ? null : _createdByCtrl.text.trim(),
         'lines': _lines.map((l) => l.toJson()).toList(),
       });
-      if (mounted) context.go('/erp/dpr');
+      if (!mounted) return;
+      // Open printable Daily Report view once mandatory data is saved.
+      context.go('/erp/dpr/${created.id}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${created.dprNo} saved — view / print Daily Report'),
+          backgroundColor: Colors.green.shade700,
+        ),
+      );
     } catch (e) {
       _toast('$e');
     } finally {
@@ -335,7 +345,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
   }
 
   Future<void> _addMaterialDialog() async {
-    final materials = _materials;
+    var materials = List<ErpMaterial>.from(_materials);
     String? selectedId;
     final qtyCtrl = TextEditingController(text: '0');
     final remCtrl = TextEditingController();
@@ -351,15 +361,21 @@ class _DprFormScreenState extends State<DprFormScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: selectedId,
+                  MaterialDropdownWithCreate(
+                    value: selectedId,
+                    materials: materials,
+                    required: true,
                     decoration: _dec('Item Name', required: true),
-                    items: materials
-                        .where((x) => x.isActive)
-                        .map((x) => DropdownMenuItem(value: x.id, child: Text('${x.name}${x.brand != null ? ' (${x.brand})' : ''}')))
-                        .toList(),
+                    itemLabel: (x) =>
+                        '${x.name}${x.brand != null ? ' (${x.brand})' : ''}',
                     onChanged: (v) => setLocal(() => selectedId = v),
+                    onMaterialCreated: (created) {
+                      setState(() => _materials = [..._materials, created]);
+                      setLocal(() {
+                        materials = [...materials, created];
+                        selectedId = created.id;
+                      });
+                    },
                   ),
                   if (m != null) ...[
                     const SizedBox(height: 8),
@@ -410,7 +426,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
   }
 
   Future<void> _addLabourDialog() async {
-    final labour = _labour;
+    var labour = List<ErpLabour>.from(_labour);
     String? selectedId;
     final qtyCtrl = TextEditingController(text: '0');
     final remCtrl = TextEditingController();
@@ -424,15 +440,19 @@ class _DprFormScreenState extends State<DprFormScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: selectedId,
+                LabourDropdownWithCreate(
+                  value: selectedId,
+                  labour: labour,
+                  required: true,
                   decoration: _dec('Labour Type', required: true),
-                  items: labour
-                      .where((x) => x.isActive)
-                      .map((x) => DropdownMenuItem(value: x.id, child: Text(x.name)))
-                      .toList(),
                   onChanged: (v) => setLocal(() => selectedId = v),
+                  onLabourCreated: (created) {
+                    setState(() => _labour = [..._labour, created]);
+                    setLocal(() {
+                      labour = [...labour, created];
+                      selectedId = created.id;
+                    });
+                  },
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -471,7 +491,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
   }
 
   Future<void> _addMachineDialog() async {
-    final machines = _machines;
+    var machines = List<ErpMachine>.from(_machines);
     String? selectedId;
     final qtyCtrl = TextEditingController(text: '0');
     final remCtrl = TextEditingController();
@@ -487,15 +507,20 @@ class _DprFormScreenState extends State<DprFormScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: selectedId,
+                  MachineDropdownWithCreate(
+                    value: selectedId,
+                    machines: machines,
+                    required: true,
                     decoration: _dec('Machine', required: true),
-                    items: machines
-                        .where((x) => x.isActive)
-                        .map((x) => DropdownMenuItem(value: x.id, child: Text(x.name)))
-                        .toList(),
+                    itemLabel: (x) => x.name,
                     onChanged: (v) => setLocal(() => selectedId = v),
+                    onMachineCreated: (created) {
+                      setState(() => _machines = [..._machines, created]);
+                      setLocal(() {
+                        machines = [...machines, created];
+                        selectedId = created.id;
+                      });
+                    },
                   ),
                   if (m != null) ...[
                     const SizedBox(height: 8),
@@ -620,33 +645,39 @@ class _DprFormScreenState extends State<DprFormScreen> {
                             _grid([
                               _loadingInitial
                                   ? const LinearProgressIndicator()
-                                  : DropdownButtonFormField<String>(
-                                      isExpanded: true,
-                                      initialValue: _contractorId,
+                                  : VendorDropdownWithCreate(
+                                      value: _contractorId,
+                                      vendors: _contractors,
+                                      required: true,
                                       decoration: _dec('Vendor', required: true),
                                       hint: const Text('Select Vendor'),
-                                      items: _contractors
-                                          .where((c) => c.isActive)
-                                          .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis)))
-                                          .toList(),
                                       onChanged: (v) {
                                         setState(() => _contractorId = v);
                                         _fetchContractorResources(v, _reportDate);
                                       },
+                                      onVendorCreated: (created) {
+                                        setState(() {
+                                          _contractors = [..._contractors, created];
+                                          _contractorId = created.id;
+                                        });
+                                        _fetchContractorResources(created.id, _reportDate);
+                                      },
                                     ),
                               _loadingInitial
                                   ? const LinearProgressIndicator()
-                                  : DropdownButtonFormField<String>(
-                                      isExpanded: true,
-                                      initialValue: _activityId,
+                                  : ActivityDropdownWithCreate(
+                                      value: _activityId,
+                                      activities: _activities,
+                                      required: true,
                                       decoration: _dec('Activity', required: true),
                                       hint: const Text('Select Activity'),
-                                      items: _activities
-                                          .where((a) => a.isActive)
-                                          .map((a) => DropdownMenuItem(value: a.id, child: Text(a.name, overflow: TextOverflow.ellipsis)))
-                                          .toList(),
                                       onChanged: (v) => setState(() {
                                         _activityId = v;
+                                        _subtaskId = null;
+                                      }),
+                                      onActivityCreated: (created) => setState(() {
+                                        _activities = [..._activities, created];
+                                        _activityId = created.id;
                                         _subtaskId = null;
                                       }),
                                     ),

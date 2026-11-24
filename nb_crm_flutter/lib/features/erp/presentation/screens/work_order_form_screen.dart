@@ -13,6 +13,7 @@ import '../../domain/tender_models.dart';
 import '../../domain/work_order_lookup_keys.dart';
 import '../../domain/work_order_models.dart';
 import '../bloc/erp_work_orders_bloc.dart';
+import '../widgets/quick_create_vendor_dialog.dart';
 import '../widgets/work_details_editor.dart';
 
 class WorkOrderFormScreen extends StatefulWidget {
@@ -402,15 +403,16 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
                             if (_loadingInitial)
                               const LinearProgressIndicator()
                             else
-                              DropdownButtonFormField<String>(
-                                isExpanded: true,
-                                initialValue: _contractorId,
+                              VendorDropdownWithCreate(
+                                value: _contractorId,
+                                vendors: _contractors,
+                                required: true,
                                 decoration: _dec('Vendor', required: true, hint: 'Select vendor'),
-                                items: _contractors
-                                    .where((c) => c.isActive)
-                                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
-                                    .toList(),
                                 onChanged: (v) => setState(() => _contractorId = v),
+                                onVendorCreated: (created) => setState(() {
+                                  _contractors = [..._contractors, created];
+                                  _contractorId = created.id;
+                                }),
                               ),
                             if (_loadingInitial)
                               const LinearProgressIndicator()

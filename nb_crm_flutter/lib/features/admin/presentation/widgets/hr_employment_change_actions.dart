@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/dropdown_with_add.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../org/domain/org_models.dart';
 import '../../../org/presentation/org_providers.dart';
+import '../../../org/presentation/widgets/quick_create_org_masters.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../admin_notifier.dart';
 
@@ -19,7 +21,8 @@ Future<void> showInstituteTransferDialog({
 }) async {
   final isDark = Theme.of(context).brightness == Brightness.dark;
   await ref.read(activeInstitutesProvider.future).catchError((_) => const <Institute>[]);
-  final institutes = ref.read(activeInstitutesProvider).asData?.value ?? const <Institute>[];
+  var institutes =
+      List<Institute>.from(ref.read(activeInstitutesProvider).asData?.value ?? const <Institute>[]);
   final profile = ref.read(profileProvider).asData?.value;
   final currentId = profile?.generalInfo?.instituteId;
   String? selectedId = institutes.any((i) => i.id == currentId) ? currentId : null;
@@ -49,19 +52,32 @@ Future<void> showInstituteTransferDialog({
                 },
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                initialValue: selectedId,
-                decoration: const InputDecoration(
-                  labelText: 'Transfer to institute *',
-                  border: OutlineInputBorder(),
-                  helperText: 'From Configurations → Institutes',
+              dropdownWithAddButton(
+                tooltip: 'Add new institute',
+                onAdd: () async {
+                  final created = await showQuickCreateInstituteDialog(context);
+                  if (created == null) return;
+                  ref.invalidate(activeInstitutesProvider);
+                  setDialogState(() {
+                    institutes = [...institutes, created];
+                    selectedId = created.id;
+                  });
+                },
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('xfer-inst-$selectedId-${institutes.length}'),
+                  isExpanded: true,
+                  initialValue: selectedId,
+                  decoration: const InputDecoration(
+                    labelText: 'Transfer to institute *',
+                    border: OutlineInputBorder(),
+                    helperText: 'From Configurations → Institutes',
+                  ),
+                  items: [
+                    for (final inst in institutes.where((i) => i.isActive))
+                      DropdownMenuItem(value: inst.id, child: Text('${inst.name} (${inst.code})')),
+                  ],
+                  onChanged: (v) => setDialogState(() => selectedId = v),
                 ),
-                items: [
-                  for (final inst in institutes.where((i) => i.isActive))
-                    DropdownMenuItem(value: inst.id, child: Text('${inst.name} (${inst.code})')),
-                ],
-                onChanged: (v) => setDialogState(() => selectedId = v),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -131,7 +147,7 @@ Future<void> showDesignationUpgradeDialog({
 }) async {
   final isDark = Theme.of(context).brightness == Brightness.dark;
   await ref.read(jobDesignationsProvider.future).catchError((_) => const <Designation>[]);
-  final designations = (ref.read(jobDesignationsProvider).asData?.value ?? const <Designation>[])
+  var designations = (ref.read(jobDesignationsProvider).asData?.value ?? const <Designation>[])
       .where((d) => d.isActive && !d.isAlias)
       .toList()
     ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
@@ -157,22 +173,35 @@ Future<void> showDesignationUpgradeDialog({
                 style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : const Color(0xFF607D8B)),
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                initialValue: selectedName,
-                decoration: const InputDecoration(
-                  labelText: 'New designation *',
-                  border: OutlineInputBorder(),
-                  helperText: 'From Configurations → Designations',
+              dropdownWithAddButton(
+                tooltip: 'Add new designation',
+                onAdd: () async {
+                  final created = await showQuickCreateDesignationDialog(context);
+                  if (created == null) return;
+                  ref.invalidate(jobDesignationsProvider);
+                  setDialogState(() {
+                    designations = [...designations, created];
+                    selectedName = created.name;
+                  });
+                },
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('upg-desig-$selectedName-${designations.length}'),
+                  isExpanded: true,
+                  initialValue: selectedName,
+                  decoration: const InputDecoration(
+                    labelText: 'New designation *',
+                    border: OutlineInputBorder(),
+                    helperText: 'From Configurations → Designations',
+                  ),
+                  items: [
+                    for (final d in designations)
+                      DropdownMenuItem(
+                        value: d.name,
+                        child: Text(d.name == currentName ? '${d.name} (current)' : d.name),
+                      ),
+                  ],
+                  onChanged: (v) => setDialogState(() => selectedName = v),
                 ),
-                items: [
-                  for (final d in designations)
-                    DropdownMenuItem(
-                      value: d.name,
-                      child: Text(d.name == currentName ? '${d.name} (current)' : d.name),
-                    ),
-                ],
-                onChanged: (v) => setDialogState(() => selectedName = v),
               ),
               const SizedBox(height: 12),
               TextField(

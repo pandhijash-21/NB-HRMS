@@ -5,12 +5,12 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/tour/models/tour_models.dart';
 import '../../../../core/tour/widgets/tour_target.dart';
-import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../data/boq_repository.dart';
 import '../../data/work_order_repository.dart';
 import '../../domain/resource_models.dart';
-import '../../domain/work_order_lookup_keys.dart';
 import '../../domain/work_order_models.dart';
+import '../widgets/quick_create_masters.dart';
+import '../widgets/quick_create_vendor_dialog.dart';
 import 'store_po_inward_panel.dart';
 
 class StoreConfigScreen extends StatefulWidget {
@@ -946,7 +946,6 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
   // ── Material Outward Tab ──
   Widget _buildMaterialOutwardTab(bool isDark) {
     final activeMaterials = _materials.where((m) => m.isActive).toList();
-    final activeContractors = _contractors.where((c) => c.isActive).toList();
     final selectedMat = _outwardMaterialId != null
         ? activeMaterials.where((m) => m.id == _outwardMaterialId).firstOrNull
         : null;
@@ -1005,22 +1004,22 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: _outwardMaterialId,
+                    MaterialDropdownWithCreate(
+                      value: _outwardMaterialId,
+                      materials: _materials,
+                      required: true,
                       decoration: const InputDecoration(
                         labelText: 'Which Material *',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.inventory_2_outlined),
                       ),
-                      items: activeMaterials.map((m) {
-                        final label =
-                            '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} - ' : ''}${m.name} (Avail: ${m.qtyAvailable} ${m.unitCode ?? ''})';
-                        return DropdownMenuItem(
-                          value: m.id,
-                          child: Text(label, overflow: TextOverflow.ellipsis),
-                        );
-                      }).toList(),
+                      itemLabel: (m) =>
+                          '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} - ' : ''}${m.name} (Avail: ${m.qtyAvailable} ${m.unitCode ?? ''})',
                       onChanged: (v) => setState(() => _outwardMaterialId = v),
+                      onMaterialCreated: (created) => setState(() {
+                        _materials = [..._materials, created];
+                        _outwardMaterialId = created.id;
+                      }),
                     ),
                     if (selectedMat != null) ...[
                       const SizedBox(height: 6),
@@ -1097,23 +1096,20 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
                 const SizedBox(height: 12),
 
                 // 3. Used by (Contractors Dropdown)
-                DropdownButtonFormField<String>(
-                  initialValue: _outwardContractorId,
+                VendorDropdownWithCreate(
+                  value: _outwardContractorId,
+                  vendors: _contractors,
+                  required: true,
                   decoration: const InputDecoration(
                     labelText: 'Used by (Vendor) *',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.handshake_outlined),
                   ),
-                  items: activeContractors.map((c) {
-                    return DropdownMenuItem(
-                      value: c.id,
-                      child: Text(
-                        c.name,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  }).toList(),
                   onChanged: (v) => setState(() => _outwardContractorId = v),
+                  onVendorCreated: (created) => setState(() {
+                    _contractors = [..._contractors, created];
+                    _outwardContractorId = created.id;
+                  }),
                 ),
                 const SizedBox(height: 12),
 
@@ -1471,7 +1467,6 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
   // ── Machine Issue & Returns (Outward) Tab ──
   Widget _buildMachineIssueTab(bool isDark) {
     final activeMachines = _machines.where((m) => m.isActive).toList();
-    final activeContractors = _contractors.where((c) => c.isActive).toList();
     final selectedMac = _issueMachineId != null
         ? activeMachines.where((m) => m.id == _issueMachineId).firstOrNull
         : null;
@@ -1530,22 +1525,22 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: _issueMachineId,
+                    MachineDropdownWithCreate(
+                      value: _issueMachineId,
+                      machines: _machines,
+                      required: true,
                       decoration: const InputDecoration(
                         labelText: 'Which Machine / Equipment *',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.precision_manufacturing_outlined),
                       ),
-                      items: activeMachines.map((m) {
-                        final label =
-                            '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} - ' : ''}${m.name} (Avail: ${m.qtyAvailable} ${m.unitCode ?? ''})';
-                        return DropdownMenuItem(
-                          value: m.id,
-                          child: Text(label, overflow: TextOverflow.ellipsis),
-                        );
-                      }).toList(),
+                      itemLabel: (m) =>
+                          '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} - ' : ''}${m.name} (Avail: ${m.qtyAvailable} ${m.unitCode ?? ''})',
                       onChanged: (v) => setState(() => _issueMachineId = v),
+                      onMachineCreated: (created) => setState(() {
+                        _machines = [..._machines, created];
+                        _issueMachineId = created.id;
+                      }),
                     ),
                     if (selectedMac != null) ...[
                       const SizedBox(height: 6),
@@ -1622,23 +1617,20 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
                 const SizedBox(height: 12),
 
                 // 3. Used by (Contractors Dropdown)
-                DropdownButtonFormField<String>(
-                  initialValue: _issueContractorId,
+                VendorDropdownWithCreate(
+                  value: _issueContractorId,
+                  vendors: _contractors,
+                  required: true,
                   decoration: const InputDecoration(
                     labelText: 'Used by (Vendor) *',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.handshake_outlined),
                   ),
-                  items: activeContractors.map((c) {
-                    return DropdownMenuItem(
-                      value: c.id,
-                      child: Text(
-                        c.name,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  }).toList(),
                   onChanged: (v) => setState(() => _issueContractorId = v),
+                  onVendorCreated: (created) => setState(() {
+                    _contractors = [..._contractors, created];
+                    _issueContractorId = created.id;
+                  }),
                 ),
                 const SizedBox(height: 12),
 

@@ -27,6 +27,20 @@ dprRouter.get('/contractor-resources', requireAuth, requirePermission('DPR', 'RE
   }
 });
 
+dprRouter.get('/:id/export.xlsx', requireAuth, requirePermission('DPR', 'READ'), async (req, res) => {
+  try {
+    const { buffer, fileName } = await dprService.exportDailyReportXlsx(p(req.params.id));
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return res.send(buffer);
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to export DPR'));
+  }
+});
+
 dprRouter.get('/:id', requireAuth, requirePermission('DPR', 'READ'), async (req, res) => {
   try {
     return res.json(ok(await dprService.getById(p(req.params.id))));

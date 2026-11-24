@@ -12,6 +12,8 @@ import '../../domain/project_models.dart';
 import '../../domain/tender_models.dart';
 import '../../domain/work_order_models.dart';
 import '../bloc/erp_tenders_bloc.dart';
+import '../widgets/quick_create_masters.dart';
+import '../widgets/quick_create_vendor_dialog.dart';
 
 class TenderApplicationFormScreen extends StatefulWidget {
   const TenderApplicationFormScreen({super.key});
@@ -334,22 +336,17 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
                             if (_loadingInitial)
                               const LinearProgressIndicator()
                             else
-                              DropdownButtonFormField<String>(
-                                isExpanded: true,
-                                initialValue: _contractorId,
+                              VendorDropdownWithCreate(
+                                value: _contractorId,
+                                vendors: _contractors,
+                                required: true,
                                 decoration: _dec('Vendor', required: true),
                                 hint: const Text('Select Vendor'),
-                                items: _contractors
-                                    .where((c) => c.isActive)
-                                    .map(
-                                      (c) => DropdownMenuItem(
-                                        value: c.id,
-                                        child: Text(c.name, overflow: TextOverflow.ellipsis),
-                                      ),
-                                    )
-                                    .toList(),
                                 onChanged: (v) => setState(() => _contractorId = v),
-                                validator: (v) => v == null ? 'Required' : null,
+                                onVendorCreated: (created) => setState(() {
+                                  _contractors = [..._contractors, created];
+                                  _contractorId = created.id;
+                                }),
                               ),
                             DropdownButtonFormField<String>(
                               isExpanded: true,

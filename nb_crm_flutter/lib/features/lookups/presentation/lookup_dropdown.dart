@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../data/lookup_repository.dart';
 import '../domain/lookup_models.dart';
+import 'quick_create_lookup_dialog.dart';
 
 /// Resolves active lookup options for [category], with optional hardcoded fallbacks.
 List<LookupOption> resolveLookupOptions(
@@ -30,11 +31,18 @@ class _LookupContextWrapper extends StatefulWidget {
     required this.category,
     required this.builder,
     this.fallback = const [],
+    this.onQuickCreated,
+    this.quickCreateSelectsLabel = false,
+    this.enableQuickCreate = true,
   });
 
   final String category;
   final Widget Function(BuildContext context, List<LookupOption> options, bool isLoading) builder;
   final List<LookupOption> fallback;
+  /// Called with option code (or label when [quickCreateSelectsLabel] is true).
+  final ValueChanged<String>? onQuickCreated;
+  final bool quickCreateSelectsLabel;
+  final bool enableQuickCreate;
 
   @override
   State<_LookupContextWrapper> createState() => _LookupContextWrapperState();
@@ -43,6 +51,10 @@ class _LookupContextWrapper extends StatefulWidget {
 class _LookupContextWrapperState extends State<_LookupContextWrapper> {
   List<LookupOption>? _options;
   bool _isLoading = false;
+  bool _creating = false;
+
+  bool get _showQuickCreate =>
+      widget.enableQuickCreate && lookupQuickCreateAllowed(widget.category);
 
   @override
   void initState() {
@@ -50,9 +62,10 @@ class _LookupContextWrapperState extends State<_LookupContextWrapper> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool force = false}) async {
     final repo = context.read<LookupRepository>();
-    final cached = repo.getCached(widget.category);
+    if (force) repo.invalidateCategory(widget.category);
+    final cached = force ? const <LookupOption>[] : repo.getCached(widget.category);
     if (cached.isNotEmpty) {
       if (mounted) setState(() => _options = cached);
       return;
@@ -76,9 +89,48 @@ class _LookupContextWrapperState extends State<_LookupContextWrapper> {
     }
   }
 
+  Future<void> _onAddPressed() async {
+    if (_creating) return;
+    setState(() => _creating = true);
+    try {
+      final created = await showQuickCreateLookupDialog(
+        context,
+        category: widget.category,
+      );
+      if (!mounted || created == null) return;
+      await _load(force: true);
+      final selectValue =
+          widget.quickCreateSelectsLabel ? created.label : created.code;
+      widget.onQuickCreated?.call(selectValue);
+    } finally {
+      if (mounted) setState(() => _creating = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return widget.builder(context, _options ?? widget.fallback, _isLoading);
+    final child = widget.builder(context, _options ?? widget.fallback, _isLoading);
+    if (!_showQuickCreate) return child;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: child),
+        Padding(
+          padding: const EdgeInsets.only(left: 4, top: 6),
+          child: IconButton(
+            tooltip: 'Add new ${widget.category} option',
+            onPressed: _creating ? null : _onAddPressed,
+            icon: _creating
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.add_circle_outline),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -96,6 +148,7 @@ Widget lookupDropdown({
   return _LookupContextWrapper(
     category: category,
     fallback: fallback,
+    onQuickCreated: onChanged,
     builder: (ctx, options, isLoading) {
       if (isLoading && options.isEmpty) {
         return Padding(
@@ -503,6 +556,7 @@ Widget lookupNullableDropdown({
     return _LookupContextWrapper(
       category: category,
       fallback: fallback,
+      onQuickCreated: (code) => onChanged(code),
       builder: (ctx, options, isLoading) {
         return _LookupNullableCodeDropdown(
           category: category,
@@ -540,6 +594,8 @@ Widget lookupLabelDropdown({
     return _LookupContextWrapper(
       category: category,
       fallback: const [],
+      quickCreateSelectsLabel: true,
+      onQuickCreated: onChanged,
       builder: (ctx, options, isLoading) {
         final labels = List<String>.from(
           options.isNotEmpty ? options.map((o) => o.label) : fallbackLabels,
@@ -585,6 +641,8 @@ Widget lookupNullableLabelDropdown({
     return _LookupContextWrapper(
       category: category,
       fallback: const [],
+      quickCreateSelectsLabel: true,
+      onQuickCreated: (label) => onChanged(label),
       builder: (ctx, options, isLoading) {
         final labels = List<String>.from(
           options.isNotEmpty ? options.map((o) => o.label) : fallbackLabels,

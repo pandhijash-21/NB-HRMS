@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../data/boq_repository.dart';
 import '../../domain/store_models.dart';
+import '../widgets/quick_create_masters.dart';
 
 /// PO-based goods inward form embedded in Material / Machine Inward tabs.
 class StorePoInwardPanel extends StatefulWidget {
@@ -425,20 +426,19 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: DropdownButtonFormField<String>(
+                    child: StoreDropdownWithCreate(
                       value: _storeId,
+                      stores: _stores,
+                      required: true,
                       decoration: const InputDecoration(
                         labelText: 'Store *',
                         border: OutlineInputBorder(),
                       ),
-                      items: [
-                        for (final s in _stores)
-                          DropdownMenuItem(
-                            value: s.id,
-                            child: Text('${s.name} (${s.location})', overflow: TextOverflow.ellipsis),
-                          ),
-                      ],
                       onChanged: (v) => setState(() => _storeId = v),
+                      onStoreCreated: (created) => setState(() {
+                        _stores = [..._stores, created];
+                        _storeId = created.id;
+                      }),
                     ),
                   ),
                 ],

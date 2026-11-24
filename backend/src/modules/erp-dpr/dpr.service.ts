@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
+import { buildDprDailyReportXlsx } from './dpr.export';
 
 function str(v: unknown): string | null {
   if (v == null) return null;
@@ -346,7 +347,124 @@ export const dprService = {
       include: detailInclude,
     });
     if (!row) throw new Error('DPR not found');
-    return row;
+    const materialReport = await this.listStoreInwardsForDpr(
+      row.projectId,
+      row.reportDate,
+      row.project?.name,
+    );
+    return { ...row, materialReport };
+  },
+
+  /**
+   * Store goods inward (challans) for the DPR project + report date.
+   * Used in Daily Report "MATERIAL REPORT" and TODAY RECEIVE columns.
+   */
+  async listStoreInwardsForDpr(
+    projectId: string,
+    reportDate: Date,
+    projectName?: string | null,
+  ) {
+    const day = new Date(
+      Date.UTC(reportDate.getUTCFullYear(), reportDate.getUTCMonth(), reportDate.getUTCDate()),
+    );
+    const next = new Date(day);
+    next.setUTCDate(next.getUTCDate() + 1);
+
+    const inwards = await prisma.erpStoreInward.findMany({
+      where: {
+        inwardDate: { gte: day, lt: next },
+        purchaseOrder: { projectId },
+      },
+      include: {
+        store: { select: { id: true, name: true } },
+        purchaseOrder: {
+          select: {
+            id: true,
+            poNumber: true,
+            vendorName: true,
+            projectId: true,
+          },
+        },
+        lines: {
+          orderBy: { sortOrder: 'asc' },
+          select: {
+            id: true,
+            itemName: true,
+            brand: true,
+            size: true,
+            unitCode: true,
+            quantityReceived: true,
+            quantityAccepted: true,
+            quantityRejected: true,
+            materialId: true,
+          },
+        },
+      },
+      orderBy: [{ inwardDate: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    const siteFallback = projectName || 'Site';
+    const rows: Array<{
+      srNo: number;
+      date: string;
+      site: string;
+      supplierName: string;
+      challanNumber: string | null;
+      material: string;
+      detailGrade: string;
+      vehicleNo: string | null;
+      time: string | null;
+      qtyReceived: number;
+      qtyAccepted: number;
+      unitCode: string | null;
+      poNumber: string | null;
+      qcStatus: string;
+      inwardId: string;
+    }> = [];
+
+    let sr = 0;
+    for (const inv of inwards) {
+      const site = siteFallback || inv.store?.name || 'Site';
+      const time =
+        inv.createdAt != null ? inv.createdAt.toISOString().slice(11, 16) : null;
+      for (const line of inv.lines) {
+        sr += 1;
+        const detail = [line.brand, line.size].filter(Boolean).join(' / ');
+        rows.push({
+          srNo: sr,
+          date: day.toISOString().slice(0, 10),
+          site,
+          supplierName: inv.purchaseOrder.vendorName || '—',
+          challanNumber: inv.challanNumber,
+          material: line.itemName,
+          detailGrade: detail,
+          vehicleNo: inv.truckNumber,
+          time,
+          qtyReceived: Number(line.quantityReceived),
+          qtyAccepted: Number(line.quantityAccepted),
+          unitCode: line.unitCode,
+          poNumber: inv.purchaseOrder.poNumber,
+          qcStatus: inv.qcStatus,
+          inwardId: inv.id,
+        });
+      }
+    }
+
+    const receiveByMaterial: Record<string, number> = {};
+    for (const r of rows) {
+      const key = r.material.trim().toLowerCase();
+      if (!key) continue;
+      receiveByMaterial[key] =
+        (receiveByMaterial[key] || 0) + (r.qtyAccepted || r.qtyReceived || 0);
+    }
+
+    return { rows, receiveByMaterial, inwardCount: inwards.length };
+  },
+
+  /** Excel Daily Report in the legacy NBLT DPR layout. */
+  async exportDailyReportXlsx(id: string) {
+    const row = await this.getById(id);
+    return buildDprDailyReportXlsx(row);
   },
 
   async create(body: Record<string, unknown>, userId?: string) {

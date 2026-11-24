@@ -267,6 +267,91 @@ class ErpDprLine {
       };
 }
 
+class ErpDprMaterialReportRow {
+  const ErpDprMaterialReportRow({
+    required this.srNo,
+    required this.date,
+    required this.site,
+    required this.supplierName,
+    this.challanNumber,
+    required this.material,
+    this.detailGrade,
+    this.vehicleNo,
+    this.time,
+    this.qtyReceived = 0,
+    this.qtyAccepted = 0,
+    this.unitCode,
+    this.poNumber,
+    this.qcStatus,
+  });
+
+  final int srNo;
+  final String date;
+  final String site;
+  final String supplierName;
+  final String? challanNumber;
+  final String material;
+  final String? detailGrade;
+  final String? vehicleNo;
+  final String? time;
+  final double qtyReceived;
+  final double qtyAccepted;
+  final String? unitCode;
+  final String? poNumber;
+  final String? qcStatus;
+
+  factory ErpDprMaterialReportRow.fromJson(Map<String, dynamic> json) =>
+      ErpDprMaterialReportRow(
+        srNo: int.tryParse('${json['srNo']}') ?? 0,
+        date: json['date']?.toString() ?? '',
+        site: json['site']?.toString() ?? '',
+        supplierName: json['supplierName']?.toString() ?? '',
+        challanNumber: json['challanNumber']?.toString(),
+        material: json['material']?.toString() ?? '',
+        detailGrade: json['detailGrade']?.toString(),
+        vehicleNo: json['vehicleNo']?.toString(),
+        time: json['time']?.toString(),
+        qtyReceived: _d(json['qtyReceived']),
+        qtyAccepted: _d(json['qtyAccepted']),
+        unitCode: json['unitCode']?.toString(),
+        poNumber: json['poNumber']?.toString(),
+        qcStatus: json['qcStatus']?.toString(),
+      );
+}
+
+class ErpDprMaterialReport {
+  const ErpDprMaterialReport({
+    this.rows = const [],
+    this.receiveByMaterial = const {},
+    this.inwardCount = 0,
+  });
+
+  final List<ErpDprMaterialReportRow> rows;
+  final Map<String, double> receiveByMaterial;
+  final int inwardCount;
+
+  factory ErpDprMaterialReport.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const ErpDprMaterialReport();
+    final rowsRaw = json['rows'];
+    final recv = json['receiveByMaterial'];
+    final map = <String, double>{};
+    if (recv is Map) {
+      for (final e in recv.entries) {
+        map[e.key.toString()] = _d(e.value);
+      }
+    }
+    return ErpDprMaterialReport(
+      rows: rowsRaw is List
+          ? rowsRaw
+              .map((e) => ErpDprMaterialReportRow.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      receiveByMaterial: map,
+      inwardCount: int.tryParse('${json['inwardCount']}') ?? 0,
+    );
+  }
+}
+
 class ErpDpr {
   const ErpDpr({
     required this.id,
@@ -278,6 +363,7 @@ class ErpDpr {
     this.project,
     this.lines = const [],
     this.lineCount,
+    this.materialReport = const ErpDprMaterialReport(),
   });
 
   final String id;
@@ -289,6 +375,7 @@ class ErpDpr {
   final ErpDprRef? project;
   final List<ErpDprLine> lines;
   final int? lineCount;
+  final ErpDprMaterialReport materialReport;
 
   factory ErpDpr.fromJson(Map<String, dynamic> json) {
     final linesRaw = json['lines'];
@@ -307,6 +394,11 @@ class ErpDpr {
           ? linesRaw.map((e) => ErpDprLine.fromJson(Map<String, dynamic>.from(e as Map))).toList()
           : const [],
       lineCount: count is Map ? int.tryParse('${count['lines']}') : null,
+      materialReport: ErpDprMaterialReport.fromJson(
+        json['materialReport'] is Map
+            ? Map<String, dynamic>.from(json['materialReport'] as Map)
+            : null,
+      ),
     );
   }
 }

@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+
 import '../../../core/network/dio_client.dart';
 import '../domain/dpr_models.dart';
 

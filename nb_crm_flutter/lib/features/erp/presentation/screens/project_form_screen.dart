@@ -5,10 +5,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/platform_file_picker.dart';
+import '../../../../core/widgets/dropdown_with_add.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../../org/data/org_repository.dart';
 import '../../../org/domain/org_models.dart';
+import '../../../org/presentation/widgets/quick_create_org_masters.dart';
 import '../../data/project_repository.dart';
 import '../../domain/project_models.dart';
 
@@ -668,40 +670,66 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                   decoration: _dec('Project Name', required: true),
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
                 ),
-                _stringDropdown(
-                  label: 'Organization',
-                  value: orgs.any((o) => o.id == _organizationId) ? _organizationId : null,
-                  hint: 'Select Organization',
-                  required: true,
-                  items: orgs
-                      .map(
-                        (o) => DropdownMenuItem(
-                          value: o.id,
-                          child: Text(o.name, overflow: TextOverflow.ellipsis),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) => setState(() {
-                    _organizationId = v;
-                    _instituteId = null;
-                  }),
+                dropdownWithAddButton(
+                  tooltip: 'Add organization',
+                  onAdd: () async {
+                    final created = await showQuickCreateOrganizationDialog(context);
+                    if (created == null || !mounted) return;
+                    setState(() {
+                      _orgs = [..._orgs, created];
+                      _organizationId = created.id;
+                      _instituteId = null;
+                    });
+                  },
+                  child: _stringDropdown(
+                    label: 'Organization',
+                    value: orgs.any((o) => o.id == _organizationId) ? _organizationId : null,
+                    hint: 'Select Organization',
+                    required: true,
+                    items: orgs
+                        .map(
+                          (o) => DropdownMenuItem(
+                            value: o.id,
+                            child: Text(o.name, overflow: TextOverflow.ellipsis),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setState(() {
+                      _organizationId = v;
+                      _instituteId = null;
+                    }),
+                  ),
                 ),
-                _stringDropdown(
-                  label: 'Sub Organization',
-                  value: filteredInstitutes.any((i) => i.id == _instituteId)
-                      ? _instituteId
-                      : null,
-                  hint: 'Select Sub Organization',
-                  required: true,
-                  items: filteredInstitutes
-                      .map(
-                        (i) => DropdownMenuItem(
-                          value: i.id,
-                          child: Text(i.name, overflow: TextOverflow.ellipsis),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) => setState(() => _instituteId = v),
+                dropdownWithAddButton(
+                  tooltip: 'Add institute',
+                  onAdd: () async {
+                    final created = await showQuickCreateInstituteDialog(context);
+                    if (created == null || !mounted) return;
+                    setState(() {
+                      _institutes = [..._institutes, created];
+                      _instituteId = created.id;
+                      if (created.parentOrganizationId != null) {
+                        _organizationId = created.parentOrganizationId;
+                      }
+                    });
+                  },
+                  child: _stringDropdown(
+                    label: 'Sub Organization',
+                    value: filteredInstitutes.any((i) => i.id == _instituteId)
+                        ? _instituteId
+                        : null,
+                    hint: 'Select Sub Organization',
+                    required: true,
+                    items: filteredInstitutes
+                        .map(
+                          (i) => DropdownMenuItem(
+                            value: i.id,
+                            child: Text(i.name, overflow: TextOverflow.ellipsis),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setState(() => _instituteId = v),
+                  ),
                 ),
                 lookupDropdown(
                   context: context,

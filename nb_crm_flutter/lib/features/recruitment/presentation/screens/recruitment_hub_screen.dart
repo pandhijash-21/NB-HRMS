@@ -11,8 +11,7 @@ import '../../../admin/presentation/admin_notifier.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
-import '../../../org/domain/org_models.dart';
-import '../../../org/presentation/org_providers.dart';
+import '../../../org/presentation/widgets/quick_create_org_masters.dart';
 import '../../domain/recruitment_models.dart';
 import '../recruitment_providers.dart';
 import '../recruitment_datetime.dart';
@@ -769,11 +768,6 @@ class _RequirementFormSheetState extends ConsumerState<_RequirementFormSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final institutes = ref.watch(activeInstitutesProvider).asData?.value ?? const <Institute>[];
-    final designations =
-        (ref.watch(jobDesignationsProvider).asData?.value ?? const <Designation>[])
-            .where((d) => d.isActive)
-            .toList();
     final names = ref.watch(employeeNamesProvider).asData?.value ?? const <EmployeeNameOption>[];
     final bottom = MediaQuery.of(context).viewInsets.bottom;
 
@@ -788,12 +782,14 @@ class _RequirementFormSheetState extends ConsumerState<_RequirementFormSheet> {
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _instituteId,
-              decoration: const InputDecoration(labelText: 'Institute', border: OutlineInputBorder()),
-              items: institutes
-                  .map((i) => DropdownMenuItem(value: i.id, child: Text(i.name)))
-                  .toList(),
+            InstituteDropdownWithCreate(
+              value: _instituteId,
+              required: true,
+              includeNullOption: false,
+              decoration: const InputDecoration(
+                labelText: 'Institute *',
+                border: OutlineInputBorder(),
+              ),
               onChanged: (v) => setState(() => _instituteId = v),
             ),
             const SizedBox(height: 10),
@@ -802,16 +798,14 @@ class _RequirementFormSheetState extends ConsumerState<_RequirementFormSheet> {
               decoration: const InputDecoration(labelText: 'Department', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              initialValue: _designationId,
+            DesignationIdDropdownWithCreate(
+              value: _designationId,
+              required: true,
               decoration: const InputDecoration(
-                labelText: 'Designation',
+                labelText: 'Designation *',
                 border: OutlineInputBorder(),
                 helperText: 'Must exist under Designations config',
               ),
-              items: designations
-                  .map((d) => DropdownMenuItem(value: d.id, child: Text(d.name)))
-                  .toList(),
               onChanged: (v) => setState(() => _designationId = v),
             ),
             const SizedBox(height: 10),

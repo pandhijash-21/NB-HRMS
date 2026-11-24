@@ -8,6 +8,7 @@ import '../../data/work_order_repository.dart';
 import '../../domain/resource_models.dart';
 import '../../domain/work_order_lookup_keys.dart';
 import '../../domain/work_order_models.dart';
+import '../widgets/quick_create_masters.dart';
 
 class MaterialsConfigScreen extends StatefulWidget {
   const MaterialsConfigScreen({super.key});
@@ -168,12 +169,22 @@ class _MaterialsConfigScreenState extends State<MaterialsConfigScreen> {
                   const SizedBox(height: 8),
                   TextField(controller: _qtyCtrl, decoration: const InputDecoration(labelText: 'Qty on hand', border: OutlineInputBorder()), keyboardType: TextInputType.number),
                   const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: _activityId,
-                    decoration: const InputDecoration(labelText: 'Activity (optional)', border: OutlineInputBorder()),
-                    items: _activities.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
+                  ActivityDropdownWithCreate(
+                    value: _activityId,
+                    activities: _activities,
+                    includeNullOption: true,
+                    nullLabel: 'Activity (optional)',
+                    decoration: const InputDecoration(
+                      labelText: 'Activity (optional)',
+                      border: OutlineInputBorder(),
+                    ),
                     onChanged: (v) => setState(() {
                       _activityId = v;
+                      _subtaskId = null;
+                    }),
+                    onActivityCreated: (created) => setState(() {
+                      _activities = [..._activities, created];
+                      _activityId = created.id;
                       _subtaskId = null;
                     }),
                   ),

@@ -17,6 +17,7 @@ import '../../../auth/presentation/auth_providers.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../org/presentation/org_providers.dart';
 import '../../../org/domain/org_models.dart';
+import '../../../org/presentation/widgets/quick_create_org_masters.dart';
 import '../../../salary/domain/salary_models.dart';
 import '../../../salary/presentation/salary_providers.dart';
 import '../../../salary/presentation/widgets/salary_rule_editor_sheet.dart';
@@ -448,21 +449,6 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     if (picked != null) {
       setState(() => _incrementMonth = DateTime(picked.year, picked.month));
     }
-  }
-
-  String _instituteLabel(List<Institute> institutes) {
-    final info = widget.profile.generalInfo;
-    if (info?.instituteName != null && info!.instituteName!.isNotEmpty) {
-      return info.instituteName!;
-    }
-    if (info?.instituteId != null) {
-      for (final inst in institutes) {
-        if (inst.id == info!.instituteId) return inst.name;
-      }
-    }
-    final subOrg = info?.subOrganization;
-    if (subOrg != null && subOrg.isNotEmpty) return subOrg;
-    return '—';
   }
 
   Future<void> _pickDate({required bool original}) async {
@@ -968,105 +954,33 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
   }
 
   Widget _designationDropdown(WidgetRef ref) {
-    final designations = (ref.watch(jobDesignationsProvider).asData?.value ??
-            const <Designation>[])
-        .where((d) => d.isActive && !d.isAlias)
-        .toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    final names = designations.map((d) => d.name).toList();
-    final current = _designationCtrl.text.trim();
-    if (current.isNotEmpty && !names.contains(current)) {
-      names.insert(0, current);
-    }
-    final value = names.contains(current) ? current : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: DropdownButtonFormField<String>(
-        key: ValueKey('designation-${value ?? 'none'}-${names.length}'),
-        isExpanded: true,
-        initialValue: value,
-        decoration: const InputDecoration(
-          labelText: 'Designation *',
-          border: OutlineInputBorder(),
-        ),
-        items: [
-          for (final name in names)
-            DropdownMenuItem(value: name, child: Text(name)),
-        ],
-        onChanged: (v) {
-          if (v == null) return;
-          setState(() => _designationCtrl.text = v);
-        },
-        validator: (v) =>
-            (v == null || v.trim().isEmpty) ? 'Designation is required' : null,
+      child: DesignationNameDropdownWithCreate(
+        value: _designationCtrl.text,
+        required: true,
+        onChanged: (v) => setState(() => _designationCtrl.text = v),
       ),
     );
   }
 
   Widget _instituteDropdown(List<Institute> institutes) {
-    final active = institutes.where((i) => i.isActive).toList();
-    final ids = active.map((i) => i.id).toSet();
-    final value = (_instituteId != null && ids.contains(_instituteId))
-        ? _instituteId
-        : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: DropdownButtonFormField<String?>(
-        key: ValueKey('institute-${value ?? 'none'}-${active.length}'),
-        isExpanded: true,
-        initialValue: value,
-        decoration: const InputDecoration(
-          labelText: 'Institute',
-          border: OutlineInputBorder(),
-          helperText: 'From Configurations → Institutes',
-        ),
-        items: [
-          const DropdownMenuItem<String?>(
-            value: null,
-            child: Text('Not assigned'),
-          ),
-          for (final inst in active)
-            DropdownMenuItem<String?>(
-              value: inst.id,
-              child: Text('${inst.name} (${inst.code})'),
-            ),
-        ],
+      child: InstituteDropdownWithCreate(
+        value: _instituteId,
         onChanged: (v) => setState(() => _instituteId = v),
       ),
     );
   }
 
   Widget _organizationDropdown() {
-    final orgs = ref.watch(activeOrganizationsProvider).asData?.value ?? const [];
-    final labels = orgs
-        .map((o) => o.name)
-        .where((n) => n.trim().isNotEmpty)
-        .toList();
-    if (_organization.isNotEmpty && !labels.contains(_organization)) {
-      labels.insert(0, _organization);
-    }
-    final value = labels.contains(_organization) ? _organization : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: DropdownButtonFormField<String>(
-        isExpanded: true,
-        initialValue: value,
-        decoration: InputDecoration(
-          labelText: 'Organization *',
-          border: const OutlineInputBorder(),
-          helperText: labels.isEmpty
-              ? 'Nothing in Configurations → Organizations. Add one there first.'
-              : null,
-        ),
-        items: [
-          for (final name in labels)
-            DropdownMenuItem(value: name, child: Text(name, overflow: TextOverflow.ellipsis)),
-        ],
-        onChanged: (v) {
-          if (v == null) return;
-          setState(() => _organization = v);
-        },
-        validator: (v) => (v == null || v.isEmpty) ? 'Organization is required' : null,
+      child: OrganizationNameDropdownWithCreate(
+        value: _organization,
+        required: true,
+        onChanged: (v) => setState(() => _organization = v),
       ),
     );
   }

@@ -9,6 +9,7 @@ class LookupRepository {
 
   List<LookupOption> getCached(String category) => _cache[category] ?? const [];
   void clearCache() => _cache.clear();
+  void invalidateCategory(String category) => _cache.remove(category);
 
   Future<List<LookupCategoryGroup>> listGrouped({bool includeInactive = false}) async {
     return _dio.getEnvelope<List<LookupCategoryGroup>>(

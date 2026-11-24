@@ -77,15 +77,23 @@ ParsedCountryPhone parseCountryPhone(String? phone, [String? countryCode]) {
     } else if (d.length == 12 && d.startsWith('91')) {
       cc = '91';
       nat = d.substring(2);
-    } else if (d.length == 12 && d.startsWith('971')) {
-      cc = '971';
-      nat = d.substring(3);
-    } else if (d.length == 11 && d.startsWith('1')) {
-      cc = '1';
-      nat = d.substring(1);
     } else {
-      cc = '91';
-      nat = d.length > 10 ? d.substring(d.length - 10) : d;
+      const prefixes = [
+        '971', '966', '974', '968', '965', '973', '852', '880', '977', '353',
+        '91', '44', '61', '65', '60', '62', '66', '63', '81', '82', '86', '49',
+        '33', '39', '34', '31', '32', '41', '20', '27', '64', '94', '92', '1', '7'
+      ];
+      for (final p in prefixes) {
+        if (d.startsWith(p) && d.length >= p.length + 7) {
+          cc = p;
+          nat = d.substring(p.length);
+          break;
+        }
+      }
+      if (cc.isEmpty) {
+        cc = '91';
+        nat = d.length > 10 ? d.substring(d.length - 10) : d;
+      }
     }
   }
 
@@ -162,7 +170,7 @@ String composeInternationalPhone({
   if (national.isEmpty) return '';
   // India: keep legacy 10-digit storage for CRM matching.
   if (ccDigits == '91' || ccDigits.isEmpty) return national.length > 10 ? national.substring(national.length - 10) : national;
-  return '$ccDigits$national';
+  return '+$ccDigits$national';
 }
 
 /// Mask phone for CRM display: keep last 4 digits, e.g. `9876543210` → `******3210`.

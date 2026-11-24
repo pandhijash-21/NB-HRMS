@@ -4435,7 +4435,21 @@ export const crmService = {
           dto.customFields['mobile']));
     const rawPhoneVal =
       rawPhoneCandidate && !String(rawPhoneCandidate).includes('*') ? rawPhoneCandidate : undefined;
-    const resolvedPhone = rawPhoneVal ? String(rawPhoneVal).replace(/\D/g, '').slice(-10) : undefined;
+    let resolvedPhone: string | undefined = undefined;
+    let resolvedCountryCode: string | undefined = undefined;
+    if (rawPhoneVal) {
+      const explicitCc = dto.customFields?.countryCode || dto.customFields?.isd;
+      const norm = normalizePhoneWithCountryCode(rawPhoneVal, explicitCc);
+      if (norm.isStandard) {
+        resolvedCountryCode = norm.countryCode;
+        resolvedPhone = norm.countryCode === '91' && !String(rawPhoneVal).startsWith('+')
+          ? norm.nationalNumber
+          : norm.e164;
+      } else {
+        const d = String(rawPhoneVal).replace(/\D/g, '');
+        resolvedPhone = d.length === 10 ? d : String(rawPhoneVal).trim();
+      }
+    }
 
     const rawNameVal = dto.name || (dto.customFields && (dto.customFields['Client_Name'] || dto.customFields['client_name'] || dto.customFields['name'] || dto.customFields['customer_name']));
     const resolvedName = rawNameVal ? String(rawNameVal).trim() : undefined;
@@ -4448,6 +4462,7 @@ export const crmService = {
         ...((existing.customFields as Record<string, any>) || {}),
         ...(dto.customFields || {}),
         ...(resolvedPhone ? { Phone: resolvedPhone, phone: resolvedPhone } : {}),
+        ...(resolvedCountryCode ? { countryCode: resolvedCountryCode } : {}),
         ...(resolvedName ? { Client_Name: resolvedName, client_name: resolvedName } : {}),
         ...(!isStatusValid && dto.status ? { status: dto.status } : {}),
       };

@@ -11501,6 +11501,19 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     final isLeadBooked = lead.status == CrmStatus.bookingConfirmed || lead.proposals.any((p) => p.isBooked);
     final effectiveReadOnly = isReadOnly || isLeadBooked;
 
+    final initialRawPhone = lead.phone.isNotEmpty
+        ? lead.phone
+        : (lead.customFields['Phone']?.toString() ??
+            lead.customFields['phone']?.toString() ??
+            '');
+    final initialCustomCc = lead.customFields['countryCode']?.toString() ??
+        lead.customFields['country_code']?.toString() ??
+        lead.customFields['isd']?.toString();
+    final parsedInitialPhone = parseCountryPhone(initialRawPhone, initialCustomCc);
+    final phoneCountryCodeController = TextEditingController(
+      text: '+${parsedInitialPhone.countryCode.isNotEmpty ? parsedInitialPhone.countryCode : "91"}',
+    );
+
     final controllers = <String, TextEditingController>{};
     for (final col in columns) {
       String initialVal = '';
@@ -11533,10 +11546,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 lead.customFields['Phone']?.toString() ??
                 lead.customFields['phone']?.toString() ??
                 '');
+        final parsed = parseCountryPhone(rawPhone, initialCustomCc);
         // Don't strip masked display values (e.g. ******3210) down to last-4 digits.
         initialVal = (!_showFullPhoneNumbers() || rawPhone.contains('*'))
             ? _displayPhone(rawPhone)
-            : cleanMobile10(rawPhone);
+            : parsed.nationalNumber;
       } else if (isFinserve &&
           (keyLower.contains('loan') ||
               keyLower.contains('project') ||
@@ -11787,19 +11801,47 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               col.columnKey.toLowerCase().contains('mobile') ||
                               col.label.toLowerCase().contains('phone') ||
                               col.label.toLowerCase().contains('mobile'))
-                            TextField(
-                              controller: controllers[col.columnKey],
-                              readOnly: effectiveReadOnly,
-                              keyboardType: TextInputType.phone,
-                              inputFormatters: mobileInputFormatters,
-                              decoration: InputDecoration(
-                                hintText: '10-digit number',
-                                prefixIcon: buildMobilePrefix(isDark: Theme.of(context).brightness == Brightness.dark),
-                                prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-                                border: const OutlineInputBorder(),
-                                filled: effectiveReadOnly,
-                                fillColor: effectiveReadOnly ? Colors.grey.withValues(alpha: 0.08) : null,
-                              ),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 90,
+                                  child: TextField(
+                                    controller: phoneCountryCodeController,
+                                    readOnly: effectiveReadOnly,
+                                    keyboardType: TextInputType.phone,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+                                      LengthLimitingTextInputFormatter(5),
+                                    ],
+                                    decoration: InputDecoration(
+                                      labelText: 'Code',
+                                      hintText: '+91',
+                                      border: const OutlineInputBorder(),
+                                      filled: effectiveReadOnly,
+                                      fillColor: effectiveReadOnly ? Colors.grey.withValues(alpha: 0.08) : null,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: controllers[col.columnKey],
+                                    readOnly: effectiveReadOnly,
+                                    keyboardType: TextInputType.phone,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(15),
+                                    ],
+                                    decoration: InputDecoration(
+                                      hintText: 'Phone number',
+                                      border: const OutlineInputBorder(),
+                                      filled: effectiveReadOnly,
+                                      fillColor: effectiveReadOnly ? Colors.grey.withValues(alpha: 0.08) : null,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             )
                           else
                             TextField(
@@ -11866,11 +11908,20 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         col.dataType == 'PHONE';
 
                     if (isPhoneCol) {
-                      final cleaned = cleanMobile10(val);
-                      if (cleaned.isNotEmpty) phone = cleaned;
-                      customFields[col.columnKey] = cleaned;
-                      customFields['Phone'] = cleaned;
-                      customFields['phone'] = cleaned;
+                      final cc = phoneCountryCodeController.text.trim();
+                      final nat = val.replaceAll(RegExp(r'\D'), '');
+                      final composed = composeInternationalPhone(
+                        countryCode: cc,
+                        nationalNumber: nat,
+                      );
+                      if (composed.isNotEmpty) phone = composed;
+                      customFields[col.columnKey] = composed;
+                      customFields['Phone'] = composed;
+                      customFields['phone'] = composed;
+                      final ccDigits = digitsOnlyPhone(cc);
+                      if (ccDigits.isNotEmpty) {
+                        customFields['countryCode'] = ccDigits;
+                      }
                     } else if (isNameCol) {
                       if (val.isNotEmpty) name = val;
                       customFields[col.columnKey] = val;
@@ -11909,9 +11960,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     customFields['loan_documents'] = uploadedDocs.values.toList();
                   }
 
-                  if (phone.isNotEmpty && phone.length != 10) {
+                  final phoneDigits = digitsOnlyPhone(phone);
+                  if (phoneDigits.isNotEmpty && phoneDigits.length < 7) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Phone number must be exactly 10 digits.')),
+                      const SnackBar(content: Text('Phone number must have at least 7 digits.')),
                     );
                     return;
                   }

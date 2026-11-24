@@ -18,6 +18,9 @@ export function requireAuditPermission(req: Request, res: Response, next: NextFu
 
 export const adminAuditRouter = Router();
 
+// Ingestion for client-side clicks and page views (accessible to all authenticated employees)
+adminAuditRouter.post('/track', requireAuth, auditController.trackClientActivity);
+
 adminAuditRouter.use(requireAuth, requireAuditPermission);
 
 // Tenant Admin employee-wise audit log endpoints

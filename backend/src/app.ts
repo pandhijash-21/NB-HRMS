@@ -49,6 +49,7 @@ import { maintenanceBypassRouter } from './modules/platform/maintenance-bypass.r
 import { earthRouter } from './modules/earth';
 import { opsRouter } from './modules/ops/ops.routes';
 import { opsRequestLogMiddleware } from './modules/ops/ops-request-log.middleware';
+import { userActivityTrackerMiddleware } from './modules/audit/activity.middleware';
 
 configureCloudinary();
 
@@ -85,6 +86,7 @@ app.use(cors({
 
 app.use(vpnBlockMiddleware);
 app.use(opsRequestLogMiddleware);
+app.use(userActivityTrackerMiddleware);
 // Allow cross-origin reads for Flutter web / CRM frontend (default helmet CORP is same-origin).
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },

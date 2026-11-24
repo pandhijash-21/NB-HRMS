@@ -23,6 +23,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/icon_font_bootstrap.dart';
 import 'core/theme/material_icon_keep_alive.dart';
 import 'core/theme/theme_cubit.dart';
+import 'core/tracking/app_activity_tracker.dart';
 import 'core/widgets/app_version_gate.dart';
 import 'core/widgets/maintenance_gate.dart';
 import 'core/widgets/splash_video_audio.dart';
@@ -191,10 +192,11 @@ class NbCrmApp extends StatelessWidget {
                           Positioned.fill(
                             child: Listener(
                               behavior: HitTestBehavior.translucent,
-                              onPointerDown: (_) {
+                              onPointerDown: (event) {
                                 LocationAlertSound.unlock();
                                 AppSounds.unlock();
                                 MrNbTourService.instance.unlock();
+                                AppActivityTracker.instance.trackPointerDown(event);
                               },
                               child: Stack(
                                 fit: StackFit.expand,

@@ -19,6 +19,7 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
 
   List<Map<String, dynamic>> _employees = [];
   int? _selectedEmployeeId;
+  String? _selectedCategory;
 
   List<Map<String, dynamic>> _logs = [];
   int _totalLogs = 0;
@@ -59,6 +60,7 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
       final queryParams = <String, dynamic>{
         'limit': 50,
         if (_selectedEmployeeId != null) 'employeeId': _selectedEmployeeId,
+        if (_selectedCategory != null) 'category': _selectedCategory,
         if (_searchQuery.trim().isNotEmpty) 'search': _searchQuery.trim(),
       };
 
@@ -97,6 +99,7 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
       final queryParams = <String, dynamic>{
         'limit': 50,
         if (_selectedEmployeeId != null) 'employeeId': _selectedEmployeeId,
+        if (_selectedCategory != null) 'category': _selectedCategory,
         if (_searchQuery.trim().isNotEmpty) 'search': _searchQuery.trim(),
       };
 
@@ -130,6 +133,15 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
   void _showLogDetails(Map<String, dynamic> log) {
     final target = log['targetEmployee'] as Map<String, dynamic>?;
     final theme = Theme.of(context);
+    final tableName = log['tableName']?.toString() ?? '';
+    final category = log['category']?.toString() ??
+        (tableName == 'USER_CLICK'
+            ? 'CLICK'
+            : tableName == 'PAGE_VIEW'
+                ? 'VIEW'
+                : tableName == 'SYSTEM_ACTION'
+                    ? 'ACTION'
+                    : 'DIFF');
 
     showModalBottomSheet(
       context: context,
@@ -161,10 +173,32 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
               ),
               Row(
                 children: [
-                  const Icon(Icons.shield_outlined, color: Colors.indigo, size: 22),
+                  Icon(
+                    category == 'CLICK'
+                        ? Icons.touch_app_outlined
+                        : category == 'VIEW'
+                            ? Icons.visibility_outlined
+                            : category == 'ACTION'
+                                ? Icons.bolt_outlined
+                                : Icons.shield_outlined,
+                    color: category == 'CLICK'
+                        ? Colors.cyan.shade700
+                        : category == 'VIEW'
+                            ? Colors.purple.shade700
+                            : category == 'ACTION'
+                                ? Colors.amber.shade800
+                                : Colors.indigo,
+                    size: 22,
+                  ),
                   const SizedBox(width: 8),
                   Text(
-                    'Audit Log Details',
+                    category == 'CLICK'
+                        ? 'User Click Event'
+                        : category == 'VIEW'
+                            ? 'Page Navigation Event'
+                            : category == 'ACTION'
+                                ? 'System Action Event'
+                                : 'Audit Log Details',
                     style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ],
@@ -186,67 +220,122 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
                 ),
                 const SizedBox(height: 16),
               ],
-              Text(
-                'FIELD MODIFIED',
-                style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey.shade600, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${log['fieldLabel'] ?? log['fieldName']} (${log['tableLabel'] ?? log['tableName']})',
-                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        border: Border.all(color: Colors.red.shade200),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Previous', style: TextStyle(color: Colors.red.shade700, fontSize: 11, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          Text(
-                            log['oldValue']?.toString() ?? '(empty)',
-                            style: TextStyle(color: Colors.red.shade900, fontSize: 12),
-                          ),
-                        ],
+              if (category == 'CLICK') ...[
+                Text(
+                  'CLICKED ELEMENT',
+                  style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey.shade600, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  log['fieldName'] ?? '',
+                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'SCREEN / ROUTE',
+                  style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey.shade600, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  log['recordId']?.toString() ?? '',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+              ] else if (category == 'VIEW') ...[
+                Text(
+                  'PAGE VISITED',
+                  style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey.shade600, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  log['recordId']?.toString() ?? '',
+                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 16),
+              ] else if (category == 'ACTION') ...[
+                Text(
+                  'ACTION EXECUTED',
+                  style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey.shade600, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  log['fieldName'] ?? '',
+                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'TARGET / SCOPE',
+                  style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey.shade600, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  log['recordId']?.toString() ?? '',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+              ] else ...[
+                Text(
+                  'FIELD MODIFIED',
+                  style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey.shade600, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${log['fieldLabel'] ?? log['fieldName']} (${log['tableLabel'] ?? log['tableName']})',
+                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          border: Border.all(color: Colors.red.shade200),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Previous', style: TextStyle(color: Colors.red.shade700, fontSize: 11, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text(
+                              log['oldValue']?.toString() ?? '(empty)',
+                              style: TextStyle(color: Colors.red.shade900, fontSize: 12),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        border: Border.all(color: Colors.green.shade200),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Updated', style: TextStyle(color: Colors.green.shade700, fontSize: 11, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          Text(
-                            log['newValue']?.toString() ?? '(cleared)',
-                            style: TextStyle(color: Colors.green.shade900, fontSize: 12, fontWeight: FontWeight.w600),
-                          ),
-                        ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          border: Border.all(color: Colors.green.shade200),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Updated', style: TextStyle(color: Colors.green.shade700, fontSize: 11, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text(
+                              log['newValue']?.toString() ?? '(cleared)',
+                              style: TextStyle(color: Colors.green.shade900, fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
               Text(
-                'CHANGED BY',
+                'PERFORMED BY',
                 style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey.shade600, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
@@ -264,10 +353,10 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
                 log['changedAt']?.toString() ?? '',
                 style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade700),
               ),
-              if (log['changeReason'] != null) ...[
+              if (log['changeReason'] != null && log['changeReason'].toString().isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'REASON',
+                  'REASON / DETAILS',
                   style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey.shade600, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
@@ -276,7 +365,7 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
                   style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
                 ),
               ],
-              if (log['ipAddress'] != null) ...[
+              if (log['ipAddress'] != null && log['ipAddress'].toString().isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
                   'IP ADDRESS',
@@ -384,6 +473,65 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
                       },
                     ),
                   ),
+                  const SizedBox(height: 8),
+
+                  // Category Filter Chips
+                  SizedBox(
+                    height: 32,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('All Logs', style: TextStyle(fontSize: 12)),
+                          selected: _selectedCategory == null,
+                          onSelected: (_) {
+                            setState(() => _selectedCategory = null);
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          avatar: const Icon(Icons.touch_app_outlined, size: 14),
+                          label: const Text('Clicks', style: TextStyle(fontSize: 12)),
+                          selected: _selectedCategory == 'CLICK',
+                          onSelected: (_) {
+                            setState(() => _selectedCategory = _selectedCategory == 'CLICK' ? null : 'CLICK');
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          avatar: const Icon(Icons.visibility_outlined, size: 14),
+                          label: const Text('Page Views', style: TextStyle(fontSize: 12)),
+                          selected: _selectedCategory == 'VIEW',
+                          onSelected: (_) {
+                            setState(() => _selectedCategory = _selectedCategory == 'VIEW' ? null : 'VIEW');
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          avatar: const Icon(Icons.bolt_outlined, size: 14),
+                          label: const Text('Actions', style: TextStyle(fontSize: 12)),
+                          selected: _selectedCategory == 'ACTION',
+                          onSelected: (_) {
+                            setState(() => _selectedCategory = _selectedCategory == 'ACTION' ? null : 'ACTION');
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          avatar: const Icon(Icons.edit_note_outlined, size: 14),
+                          label: const Text('Data Edits', style: TextStyle(fontSize: 12)),
+                          selected: _selectedCategory == 'DIFF',
+                          onSelected: (_) {
+                            setState(() => _selectedCategory = _selectedCategory == 'DIFF' ? null : 'DIFF');
+                            _fetchLogsOnly();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -443,6 +591,31 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
                                   final target = log['targetEmployee'] as Map<String, dynamic>?;
                                   final oldVal = log['oldValue']?.toString() ?? '';
                                   final newVal = log['newValue']?.toString() ?? '';
+                                  final tableName = log['tableName']?.toString() ?? '';
+                                  final category = log['category']?.toString() ??
+                                      (tableName == 'USER_CLICK'
+                                          ? 'CLICK'
+                                          : tableName == 'PAGE_VIEW'
+                                              ? 'VIEW'
+                                              : tableName == 'SYSTEM_ACTION'
+                                                  ? 'ACTION'
+                                                  : 'DIFF');
+
+                                  final badgeColor = category == 'CLICK'
+                                      ? Colors.cyan
+                                      : category == 'VIEW'
+                                          ? Colors.purple
+                                          : category == 'ACTION'
+                                              ? Colors.amber
+                                              : Colors.indigo;
+
+                                  final badgeLabel = category == 'CLICK'
+                                      ? 'Click'
+                                      : category == 'VIEW'
+                                          ? 'Page View'
+                                          : category == 'ACTION'
+                                              ? 'Action'
+                                              : (log['tableLabel'] ?? log['tableName'] ?? 'Diff');
 
                                   return Card(
                                     elevation: 0,
@@ -462,7 +635,7 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
                                               children: [
                                                 Expanded(
                                                   child: Text(
-                                                    target?['fullName'] ?? 'System / General',
+                                                    target?['fullName'] ?? (category == 'CLICK' || category == 'VIEW' ? (log['changedByName'] ?? log['changedBy'] ?? 'User') : 'System / General'),
                                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                                     maxLines: 1,
                                                     overflow: TextOverflow.ellipsis,
@@ -471,44 +644,118 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                   decoration: BoxDecoration(
-                                                    color: Colors.indigo.shade50,
+                                                    color: badgeColor.withAlpha(30),
                                                     borderRadius: BorderRadius.circular(4),
                                                   ),
-                                                  child: Text(
-                                                    log['tableLabel'] ?? log['tableName'] ?? '',
-                                                    style: TextStyle(color: Colors.indigo.shade700, fontSize: 10, fontWeight: FontWeight.bold),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        category == 'CLICK'
+                                                            ? Icons.touch_app_outlined
+                                                            : category == 'VIEW'
+                                                                ? Icons.visibility_outlined
+                                                                : category == 'ACTION'
+                                                                    ? Icons.bolt_outlined
+                                                                    : Icons.edit_note_outlined,
+                                                        size: 11,
+                                                        color: badgeColor.shade700,
+                                                      ),
+                                                      const SizedBox(width: 3),
+                                                      Text(
+                                                        badgeLabel,
+                                                        style: TextStyle(color: badgeColor.shade700, fontSize: 10, fontWeight: FontWeight.bold),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
                                               ],
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              log['fieldLabel'] ?? log['fieldName'] ?? '',
-                                              style: TextStyle(color: Colors.grey.shade800, fontSize: 12, fontWeight: FontWeight.w600),
                                             ),
                                             const SizedBox(height: 6),
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    oldVal.isEmpty ? '(none)' : oldVal,
-                                                    style: TextStyle(color: Colors.red.shade700, fontSize: 11, decoration: TextDecoration.lineThrough),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
+                                            if (category == 'CLICK') ...[
+                                              Row(
+                                                children: [
+                                                  const Icon(Icons.mouse_outlined, size: 14, color: Colors.cyan),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: Text(
+                                                      'Clicked "${log['fieldName']}"',
+                                                      style: TextStyle(color: Colors.grey.shade900, fontSize: 12, fontWeight: FontWeight.w600),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
                                                   ),
-                                                ),
-                                                const Icon(Icons.arrow_forward, size: 14, color: Colors.grey),
-                                                const SizedBox(width: 4),
-                                                Expanded(
-                                                  child: Text(
-                                                    newVal.isEmpty ? '(cleared)' : newVal,
-                                                    style: TextStyle(color: Colors.green.shade800, fontSize: 11, fontWeight: FontWeight.bold),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
+                                                ],
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                'Screen: ${log['recordId']}',
+                                                style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                                              ),
+                                            ] else if (category == 'VIEW') ...[
+                                              Row(
+                                                children: [
+                                                  const Icon(Icons.explore_outlined, size: 14, color: Colors.purple),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: Text(
+                                                      'Navigated to ${log['recordId']}',
+                                                      style: TextStyle(color: Colors.purple.shade900, fontSize: 12, fontWeight: FontWeight.w600),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
                                                   ),
-                                                ),
-                                              ],
-                                            ),
+                                                ],
+                                              ),
+                                            ] else if (category == 'ACTION') ...[
+                                              Row(
+                                                children: [
+                                                  const Icon(Icons.flash_on_outlined, size: 14, color: Colors.amber),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: Text(
+                                                      log['fieldName'] ?? 'Action Performed',
+                                                      style: TextStyle(color: Colors.grey.shade900, fontSize: 12, fontWeight: FontWeight.w600),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                'Target: ${log['recordId']} • Status: ${newVal.isEmpty ? 'Success' : newVal}',
+                                                style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                                              ),
+                                            ] else ...[
+                                              Text(
+                                                log['fieldLabel'] ?? log['fieldName'] ?? '',
+                                                style: TextStyle(color: Colors.grey.shade800, fontSize: 12, fontWeight: FontWeight.w600),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      oldVal.isEmpty ? '(none)' : oldVal,
+                                                      style: TextStyle(color: Colors.red.shade700, fontSize: 11, decoration: TextDecoration.lineThrough),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                  const Icon(Icons.arrow_forward, size: 14, color: Colors.grey),
+                                                  const SizedBox(width: 4),
+                                                  Expanded(
+                                                    child: Text(
+                                                      newVal.isEmpty ? '(cleared)' : newVal,
+                                                      style: TextStyle(color: Colors.green.shade800, fontSize: 11, fontWeight: FontWeight.bold),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
                                             const Divider(height: 16),
                                             Row(
                                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -518,7 +765,9 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
                                                   style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
                                                 ),
                                                 Text(
-                                                  log['changedAt']?.toString().substring(0, 10) ?? '',
+                                                  (log['changedAt']?.toString().length ?? 0) > 19
+                                                      ? log['changedAt']!.toString().substring(0, 19).replaceFirst('T', ' ')
+                                                      : (log['changedAt']?.toString() ?? ''),
                                                   style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontFamily: 'monospace'),
                                                 ),
                                               ],

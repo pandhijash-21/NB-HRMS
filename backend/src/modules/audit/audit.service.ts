@@ -11,6 +11,10 @@ import type {
 } from './audit.types';
 
 const TABLE_LABELS: Record<string, string> = {
+  USER_CLICK: 'User Click',
+  PAGE_VIEW: 'Page Navigation',
+  SYSTEM_ACTION: 'System Operation',
+  AUTH: 'Authentication Event',
   employee_personal_info: 'Personal Information',
   employee_general_info: 'General Employment',
   employee_addresses: 'Addresses',
@@ -21,6 +25,15 @@ const TABLE_LABELS: Record<string, string> = {
   leave_records: 'Leave Balances & Credits',
   leave_audit_log: 'Leave Records',
 };
+
+function resolveCategory(tableName: string): 'CLICK' | 'VIEW' | 'ACTION' | 'DIFF' {
+  if (tableName === 'USER_CLICK') return 'CLICK';
+  if (tableName === 'PAGE_VIEW') return 'VIEW';
+  if (tableName === 'SYSTEM_ACTION' || tableName === 'AUTH' || tableName === 'leave_records' || tableName === 'leave_audit_log') {
+    return 'ACTION';
+  }
+  return 'DIFF';
+}
 
 function formatFieldLabel(field: string): string {
   if (!field) return '';
@@ -198,6 +211,16 @@ export const auditService = {
     // Table name filter
     if (filters.tableName?.trim()) {
       where.tableName = filters.tableName.trim();
+    } else if (filters.category && filters.category !== 'ALL') {
+      if (filters.category === 'CLICKS') {
+        where.tableName = 'USER_CLICK';
+      } else if (filters.category === 'VIEWS') {
+        where.tableName = 'PAGE_VIEW';
+      } else if (filters.category === 'ACTIONS') {
+        where.tableName = { in: ['SYSTEM_ACTION', 'AUTH', 'leave_records', 'leave_audit_log'] };
+      } else if (filters.category === 'DIFFS') {
+        where.tableName = { notIn: ['USER_CLICK', 'PAGE_VIEW', 'SYSTEM_ACTION', 'AUTH'] };
+      }
     }
 
     // Date range filter
@@ -348,6 +371,7 @@ export const auditService = {
         id: r.id,
         tableName: r.tableName,
         tableLabel: TABLE_LABELS[r.tableName] || formatFieldLabel(r.tableName),
+        category: resolveCategory(r.tableName),
         recordId: r.recordId,
         employeeId: r.employeeId,
         targetEmployee: empData?.summary ?? null,

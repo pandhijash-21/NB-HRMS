@@ -33,11 +33,16 @@ import {
   ChevronRight,
   UserCheck,
   Globe,
+  MousePointerClick,
+  Compass,
+  Zap,
+  FileEdit,
 } from "lucide-react";
 
 export function SuperadminAuditView() {
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [orgSearch, setOrgSearch] = useState("");
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [logSearch, setLogSearch] = useState("");
@@ -59,6 +64,7 @@ export function SuperadminAuditView() {
   const { logs, pagination, loading: loadingLogs, refetch: refetchLogs } = useSuperadminAuditLogs({
     organizationId: selectedOrgId ?? undefined,
     employeeId: selectedEmployeeId ?? undefined,
+    category: selectedCategory !== "ALL" ? selectedCategory : undefined,
     tableName: selectedTable !== "all" ? selectedTable : undefined,
     search: logSearch || undefined,
     startDate: startDate || undefined,
@@ -617,11 +623,14 @@ export function SuperadminAuditView() {
             </div>
 
             {/* Reset */}
-            {(logSearch || selectedTable !== "all" || startDate || endDate) && (
+            {(logSearch || selectedTable !== "all" || startDate || endDate || selectedCategory !== "ALL") && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleResetFilters}
+                onClick={() => {
+                  setSelectedCategory("ALL");
+                  handleResetFilters();
+                }}
                 className="h-8 text-xs text-slate-500 hover:text-slate-800"
                 title="Reset filters"
               >
@@ -629,6 +638,85 @@ export function SuperadminAuditView() {
                 Reset
               </Button>
             )}
+          </div>
+
+          {/* Activity Category Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCategory("ALL");
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border shrink-0 ${
+                selectedCategory === "ALL"
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              All Activities
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCategory("CLICK");
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border shrink-0 ${
+                selectedCategory === "CLICK"
+                  ? "bg-cyan-600 text-white border-cyan-600 shadow-sm"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <MousePointerClick className="w-3.5 h-3.5 text-cyan-500" />
+              Clicks
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCategory("VIEW");
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border shrink-0 ${
+                selectedCategory === "VIEW"
+                  ? "bg-purple-600 text-white border-purple-600 shadow-sm"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <Compass className="w-3.5 h-3.5 text-purple-500" />
+              Page Navigation
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCategory("ACTION");
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border shrink-0 ${
+                selectedCategory === "ACTION"
+                  ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
+              System Actions
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCategory("DIFF");
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border shrink-0 ${
+                selectedCategory === "DIFF"
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <FileEdit className="w-3.5 h-3.5 text-indigo-500" />
+              Data Edits
+            </button>
           </div>
 
           {/* Audit Logs Table */}

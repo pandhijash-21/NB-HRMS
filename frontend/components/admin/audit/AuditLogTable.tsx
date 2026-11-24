@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Eye, Clock, ShieldAlert, ChevronLeft, ChevronRight, User } from "lucide-react";
+import { Eye, Clock, ShieldAlert, ChevronLeft, ChevronRight, User, MousePointerClick, Compass, Zap, FileEdit } from "lucide-react";
 import { AuditDiffBadge } from "./AuditDiffBadge";
 import { AuditDetailDialog } from "./AuditDetailDialog";
 import type { AuditLogEntry, PaginationMeta } from "@/lib/hooks/useAuditLogs";
@@ -142,24 +142,92 @@ export function AuditLogTable({
 
                       {/* Module & Field */}
                       <TableCell className="align-top py-3">
-                        <Badge
-                          variant="secondary"
-                          className="text-[10px] font-semibold py-0 px-1.5 bg-slate-100 text-slate-700 border border-slate-200 mb-1"
-                        >
-                          {log.tableLabel}
-                        </Badge>
-                        <div className="font-bold text-slate-800 truncate" title={log.fieldLabel}>
-                          {log.fieldLabel}
-                        </div>
+                        {log.category === "CLICK" || log.tableName === "USER_CLICK" ? (
+                          <>
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] font-semibold py-0 px-1.5 bg-cyan-50 text-cyan-700 border border-cyan-200 mb-1 flex items-center gap-1 w-fit"
+                            >
+                              <MousePointerClick className="w-3 h-3" />
+                              User Click
+                            </Badge>
+                            <div className="font-bold text-slate-800 truncate" title={log.fieldName}>
+                              {log.fieldName}
+                            </div>
+                          </>
+                        ) : log.category === "VIEW" || log.tableName === "PAGE_VIEW" ? (
+                          <>
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] font-semibold py-0 px-1.5 bg-purple-50 text-purple-700 border border-purple-200 mb-1 flex items-center gap-1 w-fit"
+                            >
+                              <Compass className="w-3 h-3" />
+                              Page View
+                            </Badge>
+                            <div className="font-bold text-slate-800 truncate" title={log.recordId}>
+                              {log.recordId}
+                            </div>
+                          </>
+                        ) : log.category === "ACTION" || log.tableName === "SYSTEM_ACTION" ? (
+                          <>
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] font-semibold py-0 px-1.5 bg-amber-50 text-amber-700 border border-amber-200 mb-1 flex items-center gap-1 w-fit"
+                            >
+                              <Zap className="w-3 h-3" />
+                              System Action
+                            </Badge>
+                            <div className="font-bold text-slate-800 truncate" title={log.fieldName}>
+                              {log.fieldName}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] font-semibold py-0 px-1.5 bg-slate-100 text-slate-700 border border-slate-200 mb-1"
+                            >
+                              {log.tableLabel}
+                            </Badge>
+                            <div className="font-bold text-slate-800 truncate" title={log.fieldLabel}>
+                              {log.fieldLabel}
+                            </div>
+                          </>
+                        )}
                       </TableCell>
 
-                      {/* Diff */}
+                      {/* Diff / Details */}
                       <TableCell className="align-top py-3">
-                        <AuditDiffBadge oldValue={log.oldValue} newValue={log.newValue} />
-                        {log.changeReason && (
-                          <div className="text-[10px] text-slate-400 italic mt-1 truncate" title={log.changeReason}>
-                            Reason: {log.changeReason}
+                        {log.category === "CLICK" || log.tableName === "USER_CLICK" ? (
+                          <div className="text-xs text-slate-600">
+                            <span className="font-medium text-slate-400">Screen: </span>
+                            <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 border border-slate-200">
+                              {log.recordId}
+                            </span>
                           </div>
+                        ) : log.category === "VIEW" || log.tableName === "PAGE_VIEW" ? (
+                          <div className="text-xs text-slate-500 italic">
+                            Navigation transition
+                          </div>
+                        ) : log.category === "ACTION" || log.tableName === "SYSTEM_ACTION" ? (
+                          <div className="text-xs text-slate-700">
+                            <span className="font-medium text-slate-400">Target: </span>
+                            <span className="font-mono">{log.recordId}</span>
+                            {log.newValue && (
+                              <Badge variant="outline" className="ml-2 text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                                {log.newValue}
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <AuditDiffBadge oldValue={log.oldValue} newValue={log.newValue} />
+                            {log.changeReason && (
+                              <div className="text-[10px] text-slate-400 italic mt-1 truncate" title={log.changeReason}>
+                                Reason: {log.changeReason}
+                              </div>
+                            )}
+                          </>
                         )}
                       </TableCell>
 

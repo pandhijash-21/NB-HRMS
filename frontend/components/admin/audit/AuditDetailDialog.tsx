@@ -82,7 +82,13 @@ export function AuditDetailDialog({ log, open, onOpenChange }: AuditDetailDialog
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-3">
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                Section / Module
+                {log.category === "CLICK" || log.tableName === "USER_CLICK"
+                  ? "Event Type"
+                  : log.category === "VIEW" || log.tableName === "PAGE_VIEW"
+                  ? "Navigation"
+                  : log.category === "ACTION" || log.tableName === "SYSTEM_ACTION"
+                  ? "System Operation"
+                  : "Section / Module"}
               </div>
               <div className="font-semibold text-slate-800">{log.tableLabel}</div>
               <div className="text-[11px] font-mono text-slate-400 mt-0.5">{log.tableName}</div>
@@ -90,42 +96,86 @@ export function AuditDetailDialog({ log, open, onOpenChange }: AuditDetailDialog
 
             <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-3">
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                Field Changed
+                {log.category === "CLICK" || log.tableName === "USER_CLICK"
+                  ? "Clicked Element"
+                  : log.category === "VIEW" || log.tableName === "PAGE_VIEW"
+                  ? "Visited Route"
+                  : log.category === "ACTION" || log.tableName === "SYSTEM_ACTION"
+                  ? "Action Triggered"
+                  : "Field Changed"}
               </div>
               <div className="font-semibold text-slate-800">{log.fieldLabel}</div>
               <div className="text-[11px] font-mono text-slate-400 mt-0.5">{log.fieldName}</div>
             </div>
           </div>
 
-          {/* Value Diff */}
-          <div className="border border-slate-200 rounded-lg overflow-hidden">
-            <div className="bg-slate-100/80 px-3 py-1.5 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
-              Change Diff Inspection
+          {/* Value Diff / Event Context */}
+          {log.category === "CLICK" || log.tableName === "USER_CLICK" ? (
+            <div className="border border-slate-200 rounded-lg p-3 bg-cyan-50/30">
+              <div className="text-xs font-semibold text-cyan-800 uppercase tracking-wider mb-1">
+                Target Screen / Route
+              </div>
+              <div className="font-mono text-xs text-slate-800 bg-white p-2 rounded border border-slate-200">
+                {log.recordId}
+              </div>
             </div>
-            <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <span className="text-xs font-bold text-rose-600 block mb-1">Previous Value:</span>
-                <div className="p-2.5 rounded bg-rose-50/50 border border-rose-200/60 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all min-h-[48px]">
-                  {log.oldValue !== null && log.oldValue !== undefined && log.oldValue !== "" ? (
-                    log.oldValue
-                  ) : (
-                    <span className="text-slate-400 italic">(none / empty)</span>
-                  )}
+          ) : log.category === "VIEW" || log.tableName === "PAGE_VIEW" ? (
+            <div className="border border-slate-200 rounded-lg p-3 bg-purple-50/30">
+              <div className="text-xs font-semibold text-purple-800 uppercase tracking-wider mb-1">
+                Route Transition
+              </div>
+              <div className="font-mono text-xs text-slate-800 bg-white p-2 rounded border border-slate-200">
+                {log.recordId}
+              </div>
+            </div>
+          ) : log.category === "ACTION" || log.tableName === "SYSTEM_ACTION" ? (
+            <div className="border border-slate-200 rounded-lg p-3 bg-amber-50/30">
+              <div className="text-xs font-semibold text-amber-800 uppercase tracking-wider mb-1">
+                Action Target & Outcome
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-slate-400 block mb-0.5">Target:</span>
+                  <div className="font-mono bg-white p-2 rounded border border-slate-200">{log.recordId}</div>
+                </div>
+                <div>
+                  <span className="text-slate-400 block mb-0.5">Status / Result:</span>
+                  <div className="font-mono bg-white p-2 rounded border border-slate-200 text-emerald-700 font-bold">
+                    {log.newValue || "Executed"}
+                  </div>
                 </div>
               </div>
+            </div>
+          ) : (
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className="bg-slate-100/80 px-3 py-1.5 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
+                Change Diff Inspection
+              </div>
+              <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <span className="text-xs font-bold text-rose-600 block mb-1">Previous Value:</span>
+                  <div className="p-2.5 rounded bg-rose-50/50 border border-rose-200/60 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all min-h-[48px]">
+                    {log.oldValue !== null && log.oldValue !== undefined && log.oldValue !== "" ? (
+                      log.oldValue
+                    ) : (
+                      <span className="text-slate-400 italic">(none / empty)</span>
+                    )}
+                  </div>
+                </div>
 
-              <div>
-                <span className="text-xs font-bold text-emerald-600 block mb-1">Updated Value:</span>
-                <div className="p-2.5 rounded bg-emerald-50/50 border border-emerald-200/60 font-mono text-xs text-slate-800 font-medium whitespace-pre-wrap break-all min-h-[48px]">
-                  {log.newValue !== null && log.newValue !== undefined && log.newValue !== "" ? (
-                    log.newValue
-                  ) : (
-                    <span className="text-slate-400 italic">(cleared / null)</span>
-                  )}
+                <div>
+                  <span className="text-xs font-bold text-emerald-600 block mb-1">Updated Value:</span>
+                  <div className="p-2.5 rounded bg-emerald-50/50 border border-emerald-200/60 font-mono text-xs text-slate-800 font-medium whitespace-pre-wrap break-all min-h-[48px]">
+                    {log.newValue !== null && log.newValue !== undefined && log.newValue !== "" ? (
+                      log.newValue
+                    ) : (
+                      <span className="text-slate-400 italic">(cleared / null)</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Changer Info & Context */}
           <div className="border border-slate-200 rounded-lg p-3 space-y-2.5">

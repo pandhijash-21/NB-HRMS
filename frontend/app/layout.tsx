@@ -21,6 +21,7 @@ export const metadata: Metadata = {
 };
 
 import { LocationGuard } from "@/components/auth/LocationGuard";
+import { ActivityTracker } from "@/components/shared/ActivityTracker";
 
 export default function RootLayout({
   children,
@@ -33,6 +34,7 @@ export default function RootLayout({
         className={`${roboto.variable} antialiased`}
       >
         <AppProviders>
+          <ActivityTracker />
           <LocationGuard>
             {children}
           </LocationGuard>

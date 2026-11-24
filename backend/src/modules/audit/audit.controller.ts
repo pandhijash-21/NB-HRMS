@@ -1,8 +1,51 @@
 import type { Request, Response } from 'express';
 import { auditService } from './audit.service';
+import { activityTracker } from './activity-tracker.service';
 import { ok, fail } from '../../utils/response';
 
 export const auditController = {
+  /**
+   * POST /api/admin/audit-logs/track
+   * Ingest client-side click and page view events.
+   */
+  async trackClientActivity(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user?.id) return res.status(401).json(fail('Unauthenticated'));
+
+      const rawEvents = Array.isArray(req.body?.events)
+        ? req.body.events
+        : req.body ? [req.body] : [];
+
+      if (!rawEvents.length) {
+        return res.json(ok({ tracked: 0 }));
+      }
+
+      const ip = req.ip;
+      const userAgent = req.headers['user-agent'] ? String(req.headers['user-agent']) : null;
+      const empId = typeof user.employeeId === 'number' ? user.employeeId : null;
+
+      activityTracker.enqueueBatch(
+        rawEvents.map((ev: any) => ({
+          tableName: ev.type === 'PAGE_VIEW' ? 'PAGE_VIEW' : 'USER_CLICK',
+          recordId: ev.screen ? String(ev.screen).slice(0, 255) : 'client',
+          employeeId: empId,
+          fieldName: ev.target ? String(ev.target).slice(0, 255) : 'User Click',
+          oldValue: ev.screen ? `Screen: ${ev.screen}` : null,
+          newValue: ev.metadata ? String(typeof ev.metadata === 'object' ? JSON.stringify(ev.metadata) : ev.metadata).slice(0, 500) : null,
+          changedBy: user.id,
+          changeReason: ev.reason ? String(ev.reason).slice(0, 500) : 'Client UI interaction',
+          ipAddress: ip,
+          userAgent,
+        })),
+      );
+
+      return res.json(ok({ tracked: rawEvents.length }));
+    } catch (err: unknown) {
+      console.error('[auditController.trackClientActivity error]:', err);
+      return res.status(500).json(fail(err instanceof Error ? err.message : 'Failed to track activity'));
+    }
+  },
   /**
    * GET /api/admin/audit-logs
    * Scoped to caller's tenant organization.
@@ -12,6 +55,7 @@ export const auditController = {
       const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
       const actorId = typeof req.query.actorId === 'string' ? req.query.actorId : undefined;
       const tableName = typeof req.query.tableName === 'string' ? req.query.tableName : undefined;
+      const category = typeof req.query.category === 'string' ? (req.query.category as any) : undefined;
       const search = typeof req.query.search === 'string' ? req.query.search : undefined;
       const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
       const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
@@ -22,6 +66,7 @@ export const auditController = {
         employeeId,
         actorId,
         tableName,
+        category,
         search,
         startDate,
         endDate,
@@ -112,6 +157,7 @@ export const auditController = {
       const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
       const actorId = typeof req.query.actorId === 'string' ? req.query.actorId : undefined;
       const tableName = typeof req.query.tableName === 'string' ? req.query.tableName : undefined;
+      const category = typeof req.query.category === 'string' ? (req.query.category as any) : undefined;
       const search = typeof req.query.search === 'string' ? req.query.search : undefined;
       const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
       const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
@@ -123,6 +169,7 @@ export const auditController = {
         employeeId,
         actorId,
         tableName,
+        category,
         search,
         startDate,
         endDate,

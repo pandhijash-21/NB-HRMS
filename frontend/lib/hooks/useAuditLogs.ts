@@ -16,6 +16,7 @@ export interface AuditLogEntry {
   id: string;
   tableName: string;
   tableLabel: string;
+  category: 'CLICK' | 'VIEW' | 'ACTION' | 'DIFF';
   recordId: string;
   employeeId: number | null;
   targetEmployee: TargetEmployeeSummary | null;
@@ -82,6 +83,7 @@ export interface AuditFilterParams {
   employeeId?: number;
   actorId?: string;
   tableName?: string;
+  category?: 'ALL' | 'CLICKS' | 'VIEWS' | 'ACTIONS' | 'DIFFS';
   search?: string;
   startDate?: string;
   endDate?: string;
@@ -112,6 +114,7 @@ export function useAuditLogs(filters: AuditFilterParams) {
       if (filters.employeeId) params.append("employeeId", String(filters.employeeId));
       if (filters.actorId) params.append("actorId", filters.actorId);
       if (filters.tableName) params.append("tableName", filters.tableName);
+      if (filters.category && filters.category !== "ALL") params.append("category", filters.category);
       if (filters.search) params.append("search", filters.search);
       if (filters.startDate) params.append("startDate", filters.startDate);
       if (filters.endDate) params.append("endDate", filters.endDate);
@@ -134,6 +137,7 @@ export function useAuditLogs(filters: AuditFilterParams) {
     filters.employeeId,
     filters.actorId,
     filters.tableName,
+    filters.category,
     filters.search,
     filters.startDate,
     filters.endDate,
@@ -297,6 +301,7 @@ export function useSuperadminAuditLogs(filters: AuditFilterParams) {
       if (filters.employeeId) params.append("employeeId", String(filters.employeeId));
       if (filters.actorId) params.append("actorId", filters.actorId);
       if (filters.tableName) params.append("tableName", filters.tableName);
+      if (filters.category && filters.category !== "ALL") params.append("category", filters.category);
       if (filters.search) params.append("search", filters.search);
       if (filters.startDate) params.append("startDate", filters.startDate);
       if (filters.endDate) params.append("endDate", filters.endDate);
@@ -320,6 +325,7 @@ export function useSuperadminAuditLogs(filters: AuditFilterParams) {
     filters.employeeId,
     filters.actorId,
     filters.tableName,
+    filters.category,
     filters.search,
     filters.startDate,
     filters.endDate,

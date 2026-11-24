@@ -2,6 +2,7 @@ export interface AuditLogFilterInput {
   employeeId?: number;
   actorId?: string;
   tableName?: string;
+  category?: 'ALL' | 'CLICKS' | 'VIEWS' | 'ACTIONS' | 'DIFFS';
   search?: string;
   startDate?: string;
   endDate?: string;
@@ -31,6 +32,7 @@ export interface AuditLogEntryDTO {
   id: string;
   tableName: string;
   tableLabel: string;
+  category: 'CLICK' | 'VIEW' | 'ACTION' | 'DIFF';
   recordId: string;
   employeeId: number | null;
   targetEmployee: TargetEmployeeSummary | null;

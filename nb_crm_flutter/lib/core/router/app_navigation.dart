@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../logging/app_logger.dart';
+import '../tracking/app_activity_tracker.dart';
 
 /// Logs all GoRouter navigations (push / pop / replace).
 class AppGoRouterObserver extends NavigatorObserver {
@@ -14,6 +15,7 @@ class AppGoRouterObserver extends NavigatorObserver {
     _log.i(
       'push → ${_routeName(route)} (from ${_routeName(previousRoute)})',
     );
+    AppActivityTracker.instance.setCurrentRoute(_routeName(route));
   }
 
   @override
@@ -21,6 +23,9 @@ class AppGoRouterObserver extends NavigatorObserver {
     _log.i(
       'pop ← ${_routeName(route)} (to ${_routeName(previousRoute)})',
     );
+    if (previousRoute != null) {
+      AppActivityTracker.instance.setCurrentRoute(_routeName(previousRoute));
+    }
   }
 
   @override
@@ -28,6 +33,9 @@ class AppGoRouterObserver extends NavigatorObserver {
     _log.i(
       'replace ${_routeName(oldRoute)} → ${_routeName(newRoute)}',
     );
+    if (newRoute != null) {
+      AppActivityTracker.instance.setCurrentRoute(_routeName(newRoute));
+    }
   }
 
   @override

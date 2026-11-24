@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/router/app_back_button.dart';
@@ -48,8 +48,12 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
     final dio = context.read<DioClient>();
     try {
       // Load employee list
-      final empRes = await dio.getEnvelope<List<dynamic>>('admin/audit-logs/employees');
-      final empList = (empRes ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final empList = await dio.getEnvelope<List<Map<String, dynamic>>>(
+        'admin/audit-logs/employees',
+        parse: (raw) => (raw as List<dynamic>? ?? [])
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList(),
+      );
 
       // Load logs
       final queryParams = <String, dynamic>{
@@ -58,11 +62,15 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
         if (_searchQuery.trim().isNotEmpty) 'search': _searchQuery.trim(),
       };
 
-      final logsRes = await dio.getEnvelope<Map<String, dynamic>>('admin/audit-logs', queryParameters: queryParams);
-      final logRows = (logsRes?['logs'] as List<dynamic>? ?? [])
+      final logsRes = await dio.getEnvelope<Map<String, dynamic>>(
+        'admin/audit-logs',
+        queryParameters: queryParams,
+        parse: (raw) => Map<String, dynamic>.from(raw as Map),
+      );
+      final logRows = (logsRes['logs'] as List<dynamic>? ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
-      final pagination = logsRes?['pagination'] as Map<String, dynamic>?;
+      final pagination = logsRes['pagination'] as Map<String, dynamic>?;
 
       if (mounted) {
         setState(() {
@@ -92,11 +100,15 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
         if (_searchQuery.trim().isNotEmpty) 'search': _searchQuery.trim(),
       };
 
-      final logsRes = await dio.getEnvelope<Map<String, dynamic>>('admin/audit-logs', queryParameters: queryParams);
-      final logRows = (logsRes?['logs'] as List<dynamic>? ?? [])
+      final logsRes = await dio.getEnvelope<Map<String, dynamic>>(
+        'admin/audit-logs',
+        queryParameters: queryParams,
+        parse: (raw) => Map<String, dynamic>.from(raw as Map),
+      );
+      final logRows = (logsRes['logs'] as List<dynamic>? ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
-      final pagination = logsRes?['pagination'] as Map<String, dynamic>?;
+      final pagination = logsRes['pagination'] as Map<String, dynamic>?;
 
       if (mounted) {
         setState(() {
@@ -140,7 +152,7 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
                 child: Container(
                   width: 40,
                   height: 4,
-                  margin: const EdgeInsets.bottom(16),
+                  margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade400,
                     borderRadius: BorderRadius.circular(2),

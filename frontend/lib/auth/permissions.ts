@@ -128,13 +128,18 @@ export function filterAdminNav(
   groups: NavGroupDef[],
   perms: PermissionMap | undefined | null,
   employeeViewScope?: string | null,
+  role?: string | null,
 ): NavGroupDef[] {
+  const r = (role ?? '').toUpperCase().replace(/[\s_-]+/g, '');
+  const isElevatedAdmin = ['ADMIN', 'SUPERADMIN', 'SYSTEMADMIN', 'SYSTEMADMINISTRATOR'].includes(r);
+
   return groups
     .map((g) => ({
       ...g,
       items: g.items.filter((item) => {
+        if (isElevatedAdmin) return true;
         if (item.href === '/admin/employees') {
-          return canViewWorkforce(perms, employeeViewScope);
+          return canViewWorkforce(perms, employeeViewScope, role);
         }
         if (item.href === '/admin/audit') {
           return hasPermission(perms, 'AUDIT', 'READ') || hasPermission(perms, 'REPORTS', 'READ');

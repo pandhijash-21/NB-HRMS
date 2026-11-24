@@ -259,8 +259,8 @@ const adminNav: NavGroupDef[] = [
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
-  const { permissions: perms, employeeViewScope: viewScope } = useLivePermissions();
-  const navGroups = filterAdminNav(adminNav, perms, viewScope);
+  const { permissions: perms, employeeViewScope: viewScope, role } = useLivePermissions();
+  const navGroups = filterAdminNav(adminNav, perms, viewScope, role);
 
   return (
     <div className="app-shell">

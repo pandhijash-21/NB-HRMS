@@ -90,6 +90,9 @@ export function ActivityTracker() {
         // Clean and truncate label
         label = label.replace(/\s+/g, " ").slice(0, 80);
 
+        // DO NOT TRACK HEARTBEATS
+        if (label.toLowerCase().includes("heartbeat") || label.toLowerCase().includes("ping")) return;
+
         queueRef.current.push({
           type: "USER_CLICK",
           target: `Clicked "${label}"`,
@@ -105,7 +108,47 @@ export function ActivityTracker() {
       }
     };
 
+    // Track Form Field Changes & Select Toggles
+    const handleChange = (e: Event) => {
+      try {
+        const target = e.target as HTMLInputElement | HTMLSelectElement | null;
+        if (!target) return;
+        if (target.closest(".app-audit-logs, [data-no-track]")) return;
+
+        // Skip password inputs for privacy
+        if (target.type === "password") return;
+
+        const fieldName = target.getAttribute("name") || target.getAttribute("aria-label") || target.id || target.tagName.toLowerCase();
+        if (!fieldName || fieldName.toLowerCase().includes("heartbeat") || fieldName.toLowerCase().includes("token")) return;
+
+        let displayVal = "";
+        if (target.type === "checkbox") {
+          displayVal = (target as HTMLInputElement).checked ? "Checked" : "Unchecked";
+        } else if (target.type === "radio") {
+          displayVal = (target as HTMLInputElement).checked ? `Selected (${target.value})` : "Unselected";
+        } else if (target.tagName.toLowerCase() === "select") {
+          displayVal = `Selected option "${(target as HTMLSelectElement).value}"`;
+        } else {
+          displayVal = `Input modified (${target.value?.length || 0} chars)`;
+        }
+
+        queueRef.current.push({
+          type: "USER_CLICK",
+          target: `Changed ${fieldName}: ${displayVal}`,
+          screen: pathname || window.location.pathname,
+          metadata: `input type: ${target.type || "text"}`,
+        });
+
+        if (queueRef.current.length >= 10) {
+          void flushQueue();
+        }
+      } catch {
+        /* silent */
+      }
+    };
+
     document.addEventListener("click", handleClick, { capture: true, passive: true });
+    document.addEventListener("change", handleChange, { capture: true, passive: true });
 
     // Periodic flush timer every 2.5 seconds
     const timer = setInterval(() => {
@@ -114,6 +157,7 @@ export function ActivityTracker() {
 
     return () => {
       document.removeEventListener("click", handleClick, { capture: true });
+      document.removeEventListener("change", handleChange, { capture: true });
       clearInterval(timer);
       void flushQueue();
     };

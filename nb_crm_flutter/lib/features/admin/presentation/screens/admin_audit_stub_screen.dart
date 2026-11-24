@@ -20,11 +20,58 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
   List<Map<String, dynamic>> _employees = [];
   int? _selectedEmployeeId;
   String? _selectedCategory;
+  String _selectedDatePreset = 'all'; // 'all', 'today', 'yesterday', '7days', '30days', 'custom'
+  DateTimeRange? _customDateRange;
+  String _selectedModule = 'all';
 
   List<Map<String, dynamic>> _logs = [];
   int _totalLogs = 0;
   String _searchQuery = '';
   final TextEditingController _searchCtrl = TextEditingController();
+
+  Map<String, String>? _resolveDateRange() {
+    final now = DateTime.now();
+    if (_selectedDatePreset == 'today') {
+      final start = DateTime(now.year, now.month, now.day);
+      return {'startDate': start.toIso8601String(), 'endDate': now.toIso8601String()};
+    } else if (_selectedDatePreset == 'yesterday') {
+      final start = DateTime(now.year, now.month, now.day - 1);
+      final end = DateTime(now.year, now.month, now.day - 1, 23, 59, 59);
+      return {'startDate': start.toIso8601String(), 'endDate': end.toIso8601String()};
+    } else if (_selectedDatePreset == '7days') {
+      final start = now.subtract(const Duration(days: 7));
+      return {'startDate': start.toIso8601String(), 'endDate': now.toIso8601String()};
+    } else if (_selectedDatePreset == '30days') {
+      final start = now.subtract(const Duration(days: 30));
+      return {'startDate': start.toIso8601String(), 'endDate': now.toIso8601String()};
+    } else if (_selectedDatePreset == 'custom' && _customDateRange != null) {
+      return {
+        'startDate': _customDateRange!.start.toIso8601String(),
+        'endDate': _customDateRange!.end.add(const Duration(days: 1)).toIso8601String(),
+      };
+    }
+    return null;
+  }
+
+  bool get _hasActiveFilters =>
+      _selectedEmployeeId != null ||
+      _selectedCategory != null ||
+      _selectedDatePreset != 'all' ||
+      _selectedModule != 'all' ||
+      _searchQuery.isNotEmpty;
+
+  void _resetAllFilters() {
+    _searchCtrl.clear();
+    setState(() {
+      _selectedEmployeeId = null;
+      _selectedCategory = null;
+      _selectedDatePreset = 'all';
+      _customDateRange = null;
+      _selectedModule = 'all';
+      _searchQuery = '';
+    });
+    _fetchLogsOnly();
+  }
 
   @override
   void initState() {
@@ -56,12 +103,14 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
             .toList(),
       );
 
-      // Load logs
+      final dateRange = _resolveDateRange();
       final queryParams = <String, dynamic>{
         'limit': 50,
         if (_selectedEmployeeId != null) 'employeeId': _selectedEmployeeId,
         if (_selectedCategory != null) 'category': _selectedCategory,
+        if (_selectedModule != 'all') 'tableName': _selectedModule,
         if (_searchQuery.trim().isNotEmpty) 'search': _searchQuery.trim(),
+        if (dateRange != null) ...dateRange,
       };
 
       final logsRes = await dio.getEnvelope<Map<String, dynamic>>(
@@ -96,11 +145,14 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
     setState(() => _loading = true);
     final dio = context.read<DioClient>();
     try {
+      final dateRange = _resolveDateRange();
       final queryParams = <String, dynamic>{
         'limit': 50,
         if (_selectedEmployeeId != null) 'employeeId': _selectedEmployeeId,
         if (_selectedCategory != null) 'category': _selectedCategory,
+        if (_selectedModule != 'all') 'tableName': _selectedModule,
         if (_searchQuery.trim().isNotEmpty) 'search': _searchQuery.trim(),
+        if (dateRange != null) ...dateRange,
       };
 
       final logsRes = await dio.getEnvelope<Map<String, dynamic>>(
@@ -532,6 +584,216 @@ class _AdminAuditStubScreenState extends State<AdminAuditStubScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 8),
+
+                  // Date Presets & Custom Range Bar
+                  SizedBox(
+                    height: 30,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        const Icon(Icons.calendar_today_outlined, size: 13, color: Colors.grey),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: const Text('All Time', style: TextStyle(fontSize: 11)),
+                          selected: _selectedDatePreset == 'all',
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedDatePreset = 'all';
+                              _customDateRange = null;
+                            });
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: const Text('Today', style: TextStyle(fontSize: 11)),
+                          selected: _selectedDatePreset == 'today',
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedDatePreset = 'today';
+                              _customDateRange = null;
+                            });
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: const Text('Yesterday', style: TextStyle(fontSize: 11)),
+                          selected: _selectedDatePreset == 'yesterday',
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedDatePreset = 'yesterday';
+                              _customDateRange = null;
+                            });
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: const Text('Last 7 Days', style: TextStyle(fontSize: 11)),
+                          selected: _selectedDatePreset == '7days',
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedDatePreset = '7days';
+                              _customDateRange = null;
+                            });
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: const Text('Last 30 Days', style: TextStyle(fontSize: 11)),
+                          selected: _selectedDatePreset == '30days',
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedDatePreset = '30days';
+                              _customDateRange = null;
+                            });
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ActionChip(
+                          avatar: const Icon(Icons.date_range, size: 13),
+                          label: Text(
+                            _selectedDatePreset == 'custom' && _customDateRange != null
+                                ? '${_customDateRange!.start.toString().substring(0, 10)} - ${_customDateRange!.end.toString().substring(0, 10)}'
+                                : 'Custom Date',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          onPressed: () async {
+                            final picked = await showDateRangePicker(
+                              context: context,
+                              firstDate: DateTime(2023),
+                              lastDate: DateTime.now().add(const Duration(days: 1)),
+                              initialDateRange: _customDateRange ??
+                                  DateTimeRange(
+                                    start: DateTime.now().subtract(const Duration(days: 7)),
+                                    end: DateTime.now(),
+                                  ),
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                _selectedDatePreset = 'custom';
+                                _customDateRange = picked;
+                              });
+                              _fetchLogsOnly();
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Module / Domain Filter Bar
+                  SizedBox(
+                    height: 28,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        const Icon(Icons.apps_outlined, size: 13, color: Colors.grey),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: const Text('All Modules', style: TextStyle(fontSize: 11)),
+                          selected: _selectedModule == 'all',
+                          onSelected: (_) {
+                            setState(() => _selectedModule = 'all');
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: const Text('Attendance', style: TextStyle(fontSize: 11)),
+                          selected: _selectedModule == 'attendance',
+                          onSelected: (_) {
+                            setState(() => _selectedModule = _selectedModule == 'attendance' ? 'all' : 'attendance');
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: const Text('Leave', style: TextStyle(fontSize: 11)),
+                          selected: _selectedModule == 'leave_records',
+                          onSelected: (_) {
+                            setState(() => _selectedModule = _selectedModule == 'leave_records' ? 'all' : 'leave_records');
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: const Text('CRM', style: TextStyle(fontSize: 11)),
+                          selected: _selectedModule == 'crm_leads',
+                          onSelected: (_) {
+                            setState(() => _selectedModule = _selectedModule == 'crm_leads' ? 'all' : 'crm_leads');
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: const Text('Tasks', style: TextStyle(fontSize: 11)),
+                          selected: _selectedModule == 'tasks',
+                          onSelected: (_) {
+                            setState(() => _selectedModule = _selectedModule == 'tasks' ? 'all' : 'tasks');
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: const Text('ERP', style: TextStyle(fontSize: 11)),
+                          selected: _selectedModule == 'dpr_records',
+                          onSelected: (_) {
+                            setState(() => _selectedModule = _selectedModule == 'dpr_records' ? 'all' : 'dpr_records');
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: const Text('Profile', style: TextStyle(fontSize: 11)),
+                          selected: _selectedModule == 'employee_personal_info',
+                          onSelected: (_) {
+                            setState(() => _selectedModule = _selectedModule == 'employee_personal_info' ? 'all' : 'employee_personal_info');
+                            _fetchLogsOnly();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: const Text('RBAC', style: TextStyle(fontSize: 11)),
+                          selected: _selectedModule == 'admin_roles',
+                          onSelected: (_) {
+                            setState(() => _selectedModule = _selectedModule == 'admin_roles' ? 'all' : 'admin_roles');
+                            _fetchLogsOnly();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Active Filters Bar with Reset
+                  if (_hasActiveFilters) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Filtered view: $_totalLogs movement(s) found',
+                          style: TextStyle(color: Colors.indigo.shade700, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        InkWell(
+                          onTap: _resetAllFilters,
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.restart_alt, size: 14, color: Colors.red),
+                              SizedBox(width: 2),
+                              Text('Reset All Filters', style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

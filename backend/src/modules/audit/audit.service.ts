@@ -208,20 +208,29 @@ export const auditService = {
       where.changedBy = filters.actorId.trim();
     }
 
-    // Table name filter
+    // Table name / Module filter
     if (filters.tableName?.trim()) {
       where.tableName = filters.tableName.trim();
     } else if (filters.category && filters.category !== 'ALL') {
-      if (filters.category === 'CLICKS') {
+      const cat = String(filters.category).toUpperCase();
+      if (cat === 'CLICK' || cat === 'CLICKS') {
         where.tableName = 'USER_CLICK';
-      } else if (filters.category === 'VIEWS') {
+      } else if (cat === 'VIEW' || cat === 'VIEWS') {
         where.tableName = 'PAGE_VIEW';
-      } else if (filters.category === 'ACTIONS') {
+      } else if (cat === 'ACTION' || cat === 'ACTIONS') {
         where.tableName = { in: ['SYSTEM_ACTION', 'AUTH', 'leave_records', 'leave_audit_log'] };
-      } else if (filters.category === 'DIFFS') {
+      } else if (cat === 'DIFF' || cat === 'DIFFS') {
         where.tableName = { notIn: ['USER_CLICK', 'PAGE_VIEW', 'SYSTEM_ACTION', 'AUTH'] };
       }
     }
+
+    // Exclude heartbeats and background telemetry pings unconditionally
+    where.NOT = [
+      ...(Array.isArray(where.NOT) ? where.NOT : where.NOT ? [where.NOT] : []),
+      { fieldName: { contains: 'heartbeat', mode: 'insensitive' } },
+      { recordId: { contains: 'heartbeat', mode: 'insensitive' } },
+      { fieldName: { contains: 'ping', mode: 'insensitive' } },
+    ];
 
     // Date range filter
     if (filters.startDate || filters.endDate) {
@@ -234,14 +243,16 @@ export const auditService = {
       }
     }
 
-    // Search filter across field name, values, reason
+    // Search filter across field name, values, reason, recordId, and IP address
     if (filters.search?.trim()) {
       const q = filters.search.trim();
       const searchConditions: Prisma.AuditLogWhereInput[] = [
         { fieldName: { contains: q, mode: 'insensitive' } },
+        { recordId: { contains: q, mode: 'insensitive' } },
         { oldValue: { contains: q, mode: 'insensitive' } },
         { newValue: { contains: q, mode: 'insensitive' } },
         { changeReason: { contains: q, mode: 'insensitive' } },
+        { ipAddress: { contains: q, mode: 'insensitive' } },
       ];
 
       // Also allow searching by target employee name or changer username

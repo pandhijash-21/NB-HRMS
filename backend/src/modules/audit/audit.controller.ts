@@ -25,22 +25,57 @@ export const auditController = {
       const userAgent = req.headers['user-agent'] ? String(req.headers['user-agent']) : null;
       const empId = typeof user.employeeId === 'number' ? user.employeeId : null;
 
-      activityTracker.enqueueBatch(
-        rawEvents.map((ev: any) => ({
-          tableName: ev.type === 'PAGE_VIEW' ? 'PAGE_VIEW' : 'USER_CLICK',
-          recordId: ev.screen ? String(ev.screen).slice(0, 255) : 'client',
-          employeeId: empId,
-          fieldName: ev.target ? String(ev.target).slice(0, 255) : 'User Click',
-          oldValue: ev.screen ? `Screen: ${ev.screen}` : null,
-          newValue: ev.metadata ? String(typeof ev.metadata === 'object' ? JSON.stringify(ev.metadata) : ev.metadata).slice(0, 500) : null,
-          changedBy: user.id,
-          changeReason: ev.reason ? String(ev.reason).slice(0, 500) : 'Client UI interaction',
-          ipAddress: ip,
-          userAgent,
-        })),
-      );
+      // DO NOT TRACK HEARTBEATS & Map all movement properties cleanly
+      const sanitizedEvents = rawEvents
+        .filter((ev: any) => {
+          if (!ev) return false;
+          const combined = `${ev.type || ''} ${ev.target || ''} ${ev.fieldName || ''} ${ev.screen || ''} ${ev.recordId || ''}`.toLowerCase();
+          if (combined.includes('heartbeat') || combined.includes('ping') || combined.includes('keep-alive')) {
+            return false;
+          }
+          return true;
+        })
+        .map((ev: any) => {
+          const rawType = String(ev.type || '').toUpperCase();
+          const tableName = (
+            ev.tableName ||
+            (rawType === 'PAGE_VIEW' || rawType === 'VIEW'
+              ? 'PAGE_VIEW'
+              : rawType === 'ACTION' || rawType === 'SYSTEM_ACTION'
+              ? 'SYSTEM_ACTION'
+              : 'USER_CLICK')
+          );
+          const recordId = String(ev.recordId || ev.screen || ev.path || 'client').slice(0, 255);
+          const fieldName = String(ev.fieldName || ev.target || ev.label || 'User Interaction').slice(0, 255);
+          const oldValue = ev.oldValue != null ? String(ev.oldValue).slice(0, 500) : (ev.screen ? `Screen: ${ev.screen}` : null);
+          const newValue = ev.newValue != null
+            ? String(ev.newValue).slice(0, 500)
+            : ev.metadata != null
+            ? String(typeof ev.metadata === 'object' ? JSON.stringify(ev.metadata) : ev.metadata).slice(0, 500)
+            : 'Triggered';
+          const changeReason = ev.reason || ev.changeReason
+            ? String(ev.reason || ev.changeReason).slice(0, 500)
+            : `Client movement: ${rawType || 'CLICK'}`;
 
-      return res.json(ok({ tracked: rawEvents.length }));
+          return {
+            tableName,
+            recordId,
+            employeeId: empId,
+            fieldName,
+            oldValue,
+            newValue,
+            changedBy: user.id,
+            changeReason,
+            ipAddress: ip,
+            userAgent,
+          };
+        });
+
+      if (sanitizedEvents.length > 0) {
+        activityTracker.enqueueBatch(sanitizedEvents);
+      }
+
+      return res.json(ok({ tracked: sanitizedEvents.length }));
     } catch (err: unknown) {
       console.error('[auditController.trackClientActivity error]:', err);
       return res.status(500).json(fail(err instanceof Error ? err.message : 'Failed to track activity'));

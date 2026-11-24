@@ -74,6 +74,36 @@ export function AdminAuditView() {
     setSelectedTable("all");
     setStartDate("");
     setEndDate("");
+    setSelectedCategory("ALL");
+    setPage(1);
+  };
+
+  const setDatePreset = (preset: "today" | "yesterday" | "7days" | "30days") => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    if (preset === "today") {
+      const todayStr = fmt(now);
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+    } else if (preset === "yesterday") {
+      const y = new Date(now);
+      y.setDate(y.getDate() - 1);
+      const yStr = fmt(y);
+      setStartDate(yStr);
+      setEndDate(yStr);
+    } else if (preset === "7days") {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 7);
+      setStartDate(fmt(start));
+      setEndDate(fmt(now));
+    } else if (preset === "30days") {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 30);
+      setStartDate(fmt(start));
+      setEndDate(fmt(now));
+    }
     setPage(1);
   };
 
@@ -412,17 +442,23 @@ export function AdminAuditView() {
                 }}
               >
                 <SelectTrigger className="h-8 text-xs bg-slate-50/50">
-                  <SelectValue placeholder="All Sections" />
+                  <SelectValue placeholder="All Modules / Sections" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Sections</SelectItem>
-                  <SelectItem value="employee_personal_info">Personal Info</SelectItem>
-                  <SelectItem value="employee_general_info">General Employment</SelectItem>
-                  <SelectItem value="employee_addresses">Addresses</SelectItem>
-                  <SelectItem value="employee_bank_info">Bank Details</SelectItem>
-                  <SelectItem value="employee_other_info">Other Details</SelectItem>
-                  <SelectItem value="family_members">Family Members</SelectItem>
-                  <SelectItem value="employees">Employee Documents</SelectItem>
+                  <SelectItem value="all">All Modules & Sections</SelectItem>
+                  <SelectItem value="attendance">Attendance & Punches</SelectItem>
+                  <SelectItem value="leave_records">Leave & Approvals</SelectItem>
+                  <SelectItem value="crm_leads">CRM & Sales Leads</SelectItem>
+                  <SelectItem value="tasks">Tasks & Work Orders</SelectItem>
+                  <SelectItem value="dpr_records">ERP, BOQ & DPR</SelectItem>
+                  <SelectItem value="admin_roles">Roles & RBAC</SelectItem>
+                  <SelectItem value="salary_records">Salary & Payroll</SelectItem>
+                  <SelectItem value="employee_personal_info">Profile: Personal Info</SelectItem>
+                  <SelectItem value="employee_general_info">Profile: Employment</SelectItem>
+                  <SelectItem value="employee_addresses">Profile: Addresses</SelectItem>
+                  <SelectItem value="employee_bank_info">Profile: Bank Details</SelectItem>
+                  <SelectItem value="family_members">Profile: Family Members</SelectItem>
+                  <SelectItem value="employees">Profile: Documents</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -453,6 +489,42 @@ export function AdminAuditView() {
                 className="h-8 text-xs bg-slate-50/50 px-2"
                 title="To Date"
               />
+            </div>
+
+            {/* Quick Date Presets */}
+            <div className="flex items-center gap-1 border-l pl-2 border-slate-200">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDatePreset("today")}
+                className="h-7 px-2 text-[11px] text-slate-600 hover:text-slate-900"
+              >
+                Today
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDatePreset("yesterday")}
+                className="h-7 px-2 text-[11px] text-slate-600 hover:text-slate-900"
+              >
+                Yesterday
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDatePreset("7days")}
+                className="h-7 px-2 text-[11px] text-slate-600 hover:text-slate-900"
+              >
+                7 Days
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDatePreset("30days")}
+                className="h-7 px-2 text-[11px] text-slate-600 hover:text-slate-900"
+              >
+                30 Days
+              </Button>
             </div>
 
             {/* Reset */}

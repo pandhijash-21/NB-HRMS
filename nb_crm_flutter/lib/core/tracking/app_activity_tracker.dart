@@ -83,6 +83,12 @@ class AppActivityTracker {
 
       final label = extractedLabel ?? 'Tap (${event.position.dx.toInt()}, ${event.position.dy.toInt()})';
 
+      // DO NOT TRACK HEARTBEATS
+      final lower = label.toLowerCase();
+      if (lower.contains('heartbeat') || lower.contains('ping') || lower.contains('keep-alive')) {
+        return;
+      }
+
       // Debounce duplicate clicks on identical label within 350ms
       if (_lastClickText == label &&
           _lastClickTime != null &&
@@ -113,15 +119,25 @@ class AppActivityTracker {
     }
   }
 
-  /// Records an explicit business or user action (e.g. Punch In, Filter Changed).
-  void trackAction(String actionName, {String? target, Map<String, dynamic>? details}) {
+  /// Records an explicit business or user movement (e.g. Punch In, Filter Changed, Modal Opened).
+  void trackMovement(String movementName, {String? target, String? value, Map<String, dynamic>? details}) {
+    final lower = movementName.toLowerCase();
+    if (lower.contains('heartbeat') || lower.contains('ping') || lower.contains('keep-alive')) {
+      return;
+    }
+
     _enqueue({
       'type': 'ACTION',
       'recordId': target ?? _currentRoute,
-      'fieldName': actionName,
-      'newValue': 'Triggered',
+      'fieldName': movementName,
+      'newValue': value ?? 'Triggered',
       'details': details ?? {},
     });
+  }
+
+  /// Records an explicit business or user action.
+  void trackAction(String actionName, {String? target, Map<String, dynamic>? details}) {
+    trackMovement(actionName, target: target, details: details);
   }
 
   void _enqueue(Map<String, dynamic> item) {

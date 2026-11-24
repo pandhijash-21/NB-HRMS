@@ -38,6 +38,8 @@ class ErpPurchaseOrderItem {
     this.unitCode,
     this.size,
     required this.orderedQty,
+    this.rate,
+    this.amount,
     this.receivedQty = 0,
     this.remainingQty = 0,
     this.sortOrder = 0,
@@ -50,6 +52,8 @@ class ErpPurchaseOrderItem {
   final String? unitCode;
   final String? size;
   final double orderedQty;
+  final double? rate;
+  final double? amount;
   final double receivedQty;
   final double remainingQty;
   final int sortOrder;
@@ -63,6 +67,8 @@ class ErpPurchaseOrderItem {
         unitCode: json['unitCode']?.toString(),
         size: json['size']?.toString(),
         orderedQty: _d(json['orderedQty']),
+        rate: json['rate'] == null ? null : _d(json['rate']),
+        amount: json['amount'] == null ? null : _d(json['amount']),
         receivedQty: _d(json['receivedQty']),
         remainingQty: _d(json['remainingQty']),
         sortOrder: int.tryParse('${json['sortOrder']}') ?? 0,
@@ -108,8 +114,11 @@ class ErpPurchaseOrder {
     this.vendorId,
     this.vendor,
     this.projectId,
+    this.purchaseRequestId,
+    this.quotationId,
     required this.orderDate,
     required this.status,
+    this.totalAmount,
     this.remarks,
     this.items = const [],
     this.totalOrdered = 0,
@@ -122,8 +131,11 @@ class ErpPurchaseOrder {
   final String? vendorId;
   final ErpPurchaseOrderVendor? vendor;
   final String? projectId;
+  final String? purchaseRequestId;
+  final String? quotationId;
   final DateTime orderDate;
   final String status;
+  final double? totalAmount;
   final String? remarks;
   final List<ErpPurchaseOrderItem> items;
   final double totalOrdered;
@@ -141,8 +153,11 @@ class ErpPurchaseOrder {
           ? ErpPurchaseOrderVendor.fromJson(Map<String, dynamic>.from(vendorRaw))
           : null,
       projectId: json['projectId']?.toString(),
+      purchaseRequestId: json['purchaseRequestId']?.toString(),
+      quotationId: json['quotationId']?.toString(),
       orderDate: DateTime.tryParse(json['orderDate']?.toString() ?? '') ?? DateTime.now(),
       status: json['status']?.toString() ?? 'OPEN',
+      totalAmount: json['totalAmount'] == null ? null : _d(json['totalAmount']),
       remarks: json['remarks']?.toString(),
       items: itemsRaw is List
           ? itemsRaw

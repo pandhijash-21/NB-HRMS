@@ -4,6 +4,7 @@ import { requirePermission } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
 import { prisma } from '../../config/prisma';
 import { purchaseService } from './purchase.service';
+import { quotationService } from './quotation.service';
 
 export const purchaseRouter = Router();
 const p = (v: string | string[]) => (Array.isArray(v) ? v[0] : v);
@@ -127,3 +128,115 @@ purchaseRouter.delete('/requests/:id', requireAuth, requirePermission('STORE', '
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
   }
 });
+
+// ── Quotations / Comparison Sheet (against approved PR) ─────────────────────
+
+purchaseRouter.get(
+  '/requests/:id/quotations',
+  requireAuth,
+  requirePermission('PURCHASE', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      return res.json(ok(await quotationService.listByPurchaseRequest(p(req.params.id))));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+purchaseRouter.get(
+  '/requests/:id/comparison',
+  requireAuth,
+  requirePermission('PURCHASE', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      return res.json(ok(await quotationService.getComparisonSheet(p(req.params.id))));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+purchaseRouter.post(
+  '/requests/:id/quotations',
+  requireAuth,
+  requirePermission('PURCHASE', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      return res.status(201).json(
+        ok(
+          await quotationService.create(p(req.params.id), req.body ?? {}, {
+            userId: req.user?.id,
+          }),
+        ),
+      );
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+purchaseRouter.get(
+  '/quotations/:id',
+  requireAuth,
+  requirePermission('PURCHASE', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      return res.json(ok(await quotationService.getById(p(req.params.id))));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+purchaseRouter.patch(
+  '/quotations/:id',
+  requireAuth,
+  requirePermission('PURCHASE', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      return res.json(ok(await quotationService.update(p(req.params.id), req.body ?? {})));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+purchaseRouter.post(
+  '/quotations/:id/submit',
+  requireAuth,
+  requirePermission('PURCHASE', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      return res.json(ok(await quotationService.submit(p(req.params.id))));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+purchaseRouter.post(
+  '/quotations/:id/select',
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const employeeId = await resolveEmployeeId(req.user?.id);
+      return res.json(ok(await quotationService.selectAndCreatePo(p(req.params.id), employeeId)));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+purchaseRouter.delete(
+  '/quotations/:id',
+  requireAuth,
+  requirePermission('PURCHASE', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      return res.json(ok(await quotationService.remove(p(req.params.id))));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);

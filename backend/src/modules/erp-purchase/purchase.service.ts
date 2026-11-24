@@ -78,28 +78,28 @@ function serializePr(
 
 export const purchaseService = {
   async getSettings() {
-    let row = await prisma.erpPurchaseSettings.findUnique({
-      where: { key: SETTINGS_KEY },
-      include: {
-        defaultApprover: {
-          select: {
-            id: true,
-            generalInfo: { select: { fullName: true, employeeCode: true } },
-          },
+    const settingsInclude = {
+      defaultApprover: {
+        select: {
+          id: true,
+          generalInfo: { select: { fullName: true, employeeCode: true } },
         },
       },
+      csApprover: {
+        select: {
+          id: true,
+          generalInfo: { select: { fullName: true, employeeCode: true } },
+        },
+      },
+    } as const;
+    let row = await prisma.erpPurchaseSettings.findUnique({
+      where: { key: SETTINGS_KEY },
+      include: settingsInclude,
     });
     if (!row) {
       row = await prisma.erpPurchaseSettings.create({
         data: { id: randomUUID(), key: SETTINGS_KEY },
-        include: {
-          defaultApprover: {
-            select: {
-              id: true,
-              generalInfo: { select: { fullName: true, employeeCode: true } },
-            },
-          },
-        },
+        include: settingsInclude,
       });
     }
     return {
@@ -107,20 +107,40 @@ export const purchaseService = {
       key: row.key,
       defaultApproverEmployeeId: row.defaultApproverEmployeeId,
       defaultApprover: mapEmployeeName(row.defaultApprover),
+      csApproverEmployeeId: row.csApproverEmployeeId,
+      csApprover: mapEmployeeName(row.csApprover),
     };
   },
 
   async updateSettings(body: Record<string, unknown>) {
-    const approverId = num(body.defaultApproverEmployeeId);
-    if (approverId != null) {
-      await prisma.employee.findUniqueOrThrow({ where: { id: approverId } });
+    const data: Prisma.ErpPurchaseSettingsUpdateInput = {};
+    if ('defaultApproverEmployeeId' in body) {
+      const approverId = num(body.defaultApproverEmployeeId);
+      if (approverId != null) {
+        await prisma.employee.findUniqueOrThrow({ where: { id: approverId } });
+      }
+      data.defaultApprover =
+        approverId == null ? { disconnect: true } : { connect: { id: approverId } };
+    }
+    if ('csApproverEmployeeId' in body) {
+      const csId = num(body.csApproverEmployeeId);
+      if (csId != null) {
+        await prisma.employee.findUniqueOrThrow({ where: { id: csId } });
+      }
+      data.csApprover = csId == null ? { disconnect: true } : { connect: { id: csId } };
     }
     await this.getSettings();
     const row = await prisma.erpPurchaseSettings.update({
       where: { key: SETTINGS_KEY },
-      data: { defaultApproverEmployeeId: approverId },
+      data,
       include: {
         defaultApprover: {
+          select: {
+            id: true,
+            generalInfo: { select: { fullName: true, employeeCode: true } },
+          },
+        },
+        csApprover: {
           select: {
             id: true,
             generalInfo: { select: { fullName: true, employeeCode: true } },
@@ -133,6 +153,8 @@ export const purchaseService = {
       key: row.key,
       defaultApproverEmployeeId: row.defaultApproverEmployeeId,
       defaultApprover: mapEmployeeName(row.defaultApprover),
+      csApproverEmployeeId: row.csApproverEmployeeId,
+      csApprover: mapEmployeeName(row.csApprover),
     };
   },
 

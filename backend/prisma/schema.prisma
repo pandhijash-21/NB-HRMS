@@ -246,6 +246,8 @@ model Employee {
   purchaseRequestsRequested ErpPurchaseRequest[] @relation("PrRequestedBy")
   purchaseRequestsToApprove ErpPurchaseRequest[] @relation("PrApprover")
   purchaseDefaultApproverFor ErpPurchaseSettings[] @relation("PurchaseDefaultApprover")
+  purchaseCsApproverFor ErpPurchaseSettings[] @relation("PurchaseCsApprover")
+  purchaseQuotationsSelected ErpPurchaseQuotation[] @relation("QuotationSelectedBy")
 
   crmAssignedLeads    CrmLead[]     @relation("CrmAssignedSales")
   crmTelecallerLeads  CrmLead[]     @relation("CrmTelecaller")
@@ -2454,6 +2456,7 @@ model ErpContractor {
   machineReturnLogs  ErpMachineReturnLog[]
   purchaseOrders     ErpPurchaseOrder[]
   purchaseRequests   ErpPurchaseRequest[]
+  purchaseQuotations ErpPurchaseQuotation[]
 
   @@index([isActive, name])
   @@map("erp_contractors")
@@ -2765,9 +2768,10 @@ model ErpMaterial {
   subtask     ErpActivitySubtask?     @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
   stockLogs   ErpMaterialStockLog[]
   projectUses ErpMaterialProjectUse[]
-  poItems     ErpPurchaseOrderItem[]
-  inwardLines ErpStoreInwardLine[]
-  prLines     ErpPurchaseRequestLine[]
+  poItems         ErpPurchaseOrderItem[]
+  inwardLines     ErpStoreInwardLine[]
+  prLines         ErpPurchaseRequestLine[]
+  quotationLines  ErpPurchaseQuotationLine[]
 
   @@index([isActive, name])
   @@index([categoryCode])
@@ -2956,16 +2960,27 @@ enum ErpPurchaseRequestStatus {
 }
 
 model ErpPurchaseSettings {
-  id                       String   @id @default(uuid())
+  id                        String   @id @default(uuid())
   /// Singleton row — use a fixed id or always take first.
-  key                      String   @unique @default("DEFAULT")
-  defaultApproverEmployeeId Int?    @map("default_approver_employee_id")
-  updatedAt                DateTime @updatedAt @map("updated_at")
-  createdAt                DateTime @default(now()) @map("created_at")
+  key                       String   @unique @default("DEFAULT")
+  /// Approver for Purchase Request submit → approve.
+  defaultApproverEmployeeId Int?     @map("default_approver_employee_id")
+  /// Approver for Comparison Sheet (select winning quotation → final PO).
+  csApproverEmployeeId      Int?     @map("cs_approver_employee_id")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+  createdAt                 DateTime @default(now()) @map("created_at")
 
   defaultApprover Employee? @relation("PurchaseDefaultApprover", fields: [defaultApproverEmployeeId], references: [id], onDelete: SetNull)
+  csApprover      Employee? @relation("PurchaseCsApprover", fields: [csApproverEmployeeId], references: [id], onDelete: SetNull)
 
   @@map("erp_purchase_settings")
+}
+
+enum ErpPurchaseQuotationStatus {
+  DRAFT
+  SUBMITTED
+  SELECTED
+  REJECTED
 }
 
 model ErpPurchaseRequest {
@@ -2998,6 +3013,8 @@ model ErpPurchaseRequest {
   requestedBy Employee?             @relation("PrRequestedBy", fields: [requestedByEmployeeId], references: [id], onDelete: SetNull)
   approver    Employee?             @relation("PrApprover", fields: [approverEmployeeId], references: [id], onDelete: SetNull)
   lines       ErpPurchaseRequestLine[]
+  quotations  ErpPurchaseQuotation[]
+  purchaseOrders ErpPurchaseOrder[]
 
   @@index([status, prDate])
   @@index([approverEmployeeId, status])
@@ -3024,47 +3041,112 @@ model ErpPurchaseRequestLine {
 
   purchaseRequest ErpPurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
   material        ErpMaterial?       @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  quotationLines  ErpPurchaseQuotationLine[]
 
   @@index([purchaseRequestId, sortOrder])
   @@index([materialId])
   @@map("erp_purchase_request_lines")
 }
 
-model ErpPurchaseOrder {
-  id         String                @id @default(uuid())
-  poNumber   String                @unique @map("po_number")
-  vendorName String                @map("vendor_name")
-  vendorId   String?               @map("vendor_id")
-  projectId  String?               @map("project_id")
-  orderDate  DateTime              @default(now()) @map("order_date") @db.Date
-  status     ErpPurchaseOrderStatus @default(OPEN)
-  remarks    String?               @db.Text
-  createdBy  String?               @map("created_by")
-  createdAt  DateTime              @default(now()) @map("created_at")
-  updatedAt  DateTime              @updatedAt @map("updated_at")
+model ErpPurchaseQuotation {
+  id                    String                     @id @default(uuid())
+  purchaseRequestId     String                     @map("purchase_request_id")
+  quotationNo           String                     @unique @map("quotation_no")
+  quotationDate         DateTime                   @map("quotation_date") @db.Date
+  vendorId              String?                    @map("vendor_id")
+  vendorName            String                     @map("vendor_name")
+  address               String?                    @db.Text
+  gstNo                 String?                    @map("gst_no")
+  panNo                 String?                    @map("pan_no")
+  status                ErpPurchaseQuotationStatus @default(DRAFT)
+  totalAmount           Decimal                    @default(0) @map("total_amount") @db.Decimal(16, 2)
+  remarks               String?                    @db.Text
+  submittedAt           DateTime?                  @map("submitted_at")
+  selectedAt            DateTime?                  @map("selected_at")
+  selectedByEmployeeId  Int?                       @map("selected_by_employee_id")
+  createdBy             String?                    @map("created_by")
+  createdAt             DateTime                   @default(now()) @map("created_at")
+  updatedAt             DateTime                   @updatedAt @map("updated_at")
 
-  vendor  ErpContractor?         @relation(fields: [vendorId], references: [id], onDelete: SetNull)
-  items   ErpPurchaseOrderItem[]
-  inwards ErpStoreInward[]
+  purchaseRequest ErpPurchaseRequest        @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  vendor          ErpContractor?            @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  selectedBy      Employee?                 @relation("QuotationSelectedBy", fields: [selectedByEmployeeId], references: [id], onDelete: SetNull)
+  lines           ErpPurchaseQuotationLine[]
+  purchaseOrder   ErpPurchaseOrder?
+
+  @@index([purchaseRequestId, status])
+  @@index([vendorId])
+  @@map("erp_purchase_quotations")
+}
+
+model ErpPurchaseQuotationLine {
+  id                    String  @id @default(uuid())
+  quotationId           String  @map("quotation_id")
+  purchaseRequestLineId String? @map("purchase_request_line_id")
+  materialId            String? @map("material_id")
+  itemCode              String? @map("item_code")
+  brand                 String?
+  itemName              String  @map("item_name")
+  unitCode              String? @map("unit_code")
+  size                  String?
+  qty                   Decimal @db.Decimal(14, 4)
+  rate                  Decimal @default(0) @db.Decimal(14, 4)
+  amount                Decimal @default(0) @db.Decimal(16, 2)
+  sortOrder             Int     @default(0) @map("sort_order")
+
+  quotation           ErpPurchaseQuotation    @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  purchaseRequestLine ErpPurchaseRequestLine? @relation(fields: [purchaseRequestLineId], references: [id], onDelete: SetNull)
+  material            ErpMaterial?            @relation(fields: [materialId], references: [id], onDelete: SetNull)
+
+  @@index([quotationId, sortOrder])
+  @@index([purchaseRequestLineId])
+  @@index([materialId])
+  @@map("erp_purchase_quotation_lines")
+}
+
+model ErpPurchaseOrder {
+  id                String                 @id @default(uuid())
+  poNumber          String                 @unique @map("po_number")
+  vendorName        String                 @map("vendor_name")
+  vendorId          String?                @map("vendor_id")
+  projectId         String?                @map("project_id")
+  purchaseRequestId String?                @map("purchase_request_id")
+  quotationId       String?                @unique @map("quotation_id")
+  orderDate         DateTime               @default(now()) @map("order_date") @db.Date
+  status            ErpPurchaseOrderStatus @default(OPEN)
+  totalAmount       Decimal?               @map("total_amount") @db.Decimal(16, 2)
+  remarks           String?                @db.Text
+  createdBy         String?                @map("created_by")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+
+  vendor          ErpContractor?         @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  purchaseRequest ErpPurchaseRequest?    @relation(fields: [purchaseRequestId], references: [id], onDelete: SetNull)
+  quotation       ErpPurchaseQuotation?  @relation(fields: [quotationId], references: [id], onDelete: SetNull)
+  items           ErpPurchaseOrderItem[]
+  inwards         ErpStoreInward[]
 
   @@index([status, orderDate])
   @@index([vendorId])
+  @@index([purchaseRequestId])
   @@map("erp_purchase_orders")
 }
 
 model ErpPurchaseOrderItem {
-  id              String  @id @default(uuid())
-  purchaseOrderId String  @map("purchase_order_id")
-  materialId      String? @map("material_id")
-  itemName        String  @map("item_name")
+  id              String   @id @default(uuid())
+  purchaseOrderId String   @map("purchase_order_id")
+  materialId      String?  @map("material_id")
+  itemName        String   @map("item_name")
   brand           String?
-  unitCode        String? @map("unit_code")
+  unitCode        String?  @map("unit_code")
   size            String?
-  orderedQty      Decimal @map("ordered_qty") @db.Decimal(14, 4)
-  sortOrder       Int     @default(0) @map("sort_order")
+  orderedQty      Decimal  @map("ordered_qty") @db.Decimal(14, 4)
+  rate            Decimal? @db.Decimal(14, 4)
+  amount          Decimal? @db.Decimal(16, 2)
+  sortOrder       Int      @default(0) @map("sort_order")
 
-  purchaseOrder ErpPurchaseOrder   @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  material      ErpMaterial?       @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  purchaseOrder ErpPurchaseOrder     @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  material      ErpMaterial?         @relation(fields: [materialId], references: [id], onDelete: SetNull)
   inwardLines   ErpStoreInwardLine[]
 
   @@index([purchaseOrderId, sortOrder])

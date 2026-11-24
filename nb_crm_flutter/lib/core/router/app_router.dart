@@ -109,6 +109,7 @@ import '../../features/erp/presentation/screens/store_config_screen.dart';
 import '../../features/erp/presentation/screens/store_masters_config_screen.dart';
 import '../../features/erp/presentation/screens/inventory_config_screen.dart';
 import '../../features/erp/presentation/screens/purchase_home_screen.dart';
+import '../../features/erp/presentation/screens/purchase_quotation_screen.dart';
 import '../../features/erp/presentation/screens/purchase_request_form_screen.dart';
 import '../../features/erp/presentation/screens/labour_config_screen.dart';
 import '../../features/erp/presentation/screens/tender_list_screen.dart';
@@ -867,6 +868,13 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           GoRoute(
             path: '/erp/purchase',
             builder: (context, state) => const PurchaseHomeScreen(),
+          ),
+          GoRoute(
+            path: '/erp/purchase/requests/:id/quotations',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return PurchaseQuotationScreen(purchaseRequestId: id);
+            },
           ),
           GoRoute(
             path: '/erp/configurations/inventory',

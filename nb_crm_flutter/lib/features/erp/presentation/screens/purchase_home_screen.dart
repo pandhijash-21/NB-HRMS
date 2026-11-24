@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
@@ -8,7 +9,7 @@ import '../../../admin/presentation/admin_notifier.dart';
 import '../../data/purchase_repository.dart';
 import '../../domain/purchase_models.dart';
 
-/// Purchase module hub: default approver, pending approvals, approved PRs.
+/// Purchase module hub: PR/CS approvers, pending approvals, approved PRs → quotations.
 class PurchaseHomeScreen extends StatefulWidget {
   const PurchaseHomeScreen({super.key});
 
@@ -64,15 +65,33 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
     }
   }
 
-  Future<void> _saveApprover(int? employeeId) async {
+  Future<void> _savePrApprover(int? employeeId) async {
     try {
       final settings = await context.read<PurchaseRepository>().updateSettings(
             defaultApproverEmployeeId: employeeId,
+            updatePrApprover: true,
           );
       if (!mounted) return;
       setState(() => _settings = settings);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Default PR approver saved')),
+        const SnackBar(content: Text('PR approver saved')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _saveCsApprover(int? employeeId) async {
+    try {
+      final settings = await context.read<PurchaseRepository>().updateSettings(
+            csApproverEmployeeId: employeeId,
+            updateCsApprover: true,
+          );
+      if (!mounted) return;
+      setState(() => _settings = settings);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Comparison Sheet (PO) approver saved')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -106,7 +125,7 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
         ],
       ),
     );
-    if (reason == null) return;
+    if (reason == null || !mounted) return;
     try {
       await context.read<PurchaseRepository>().rejectRequest(pr.id, reason: reason.isEmpty ? null : reason);
       await _load();
@@ -129,8 +148,8 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
           controller: _tabs,
           tabs: const [
             Tab(text: 'Settings'),
-            Tab(text: 'Approvals'),
-            Tab(text: 'Approved PRs'),
+            Tab(text: 'PR Approvals'),
+            Tab(text: 'Quotations / CS'),
           ],
         ),
       ),
@@ -143,7 +162,8 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
                   children: [
                     _SettingsTab(
                       settings: _settings,
-                      onSave: _saveApprover,
+                      onSavePrApprover: _savePrApprover,
+                      onSaveCsApprover: _saveCsApprover,
                     ),
                     _RequestList(
                       items: _pending,
@@ -159,6 +179,8 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
                     _RequestList(
                       items: _approved,
                       emptyLabel: 'No approved purchase requests yet.',
+                      onTap: (pr) => context.push('/erp/purchase/requests/${pr.id}/quotations'),
+                      trailingBuilder: (pr) => const Icon(Icons.chevron_right),
                     ),
                   ],
                 ),
@@ -167,10 +189,15 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
 }
 
 class _SettingsTab extends ConsumerWidget {
-  const _SettingsTab({required this.settings, required this.onSave});
+  const _SettingsTab({
+    required this.settings,
+    required this.onSavePrApprover,
+    required this.onSaveCsApprover,
+  });
 
   final ErpPurchaseSettings? settings;
-  final ValueChanged<int?> onSave;
+  final ValueChanged<int?> onSavePrApprover;
+  final ValueChanged<int?> onSaveCsApprover;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -179,43 +206,83 @@ class _SettingsTab extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       children: [
         const Text(
-          'Default Purchase Request Approver',
+          'Purchase Request Approver',
           style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
         ),
         const SizedBox(height: 8),
         const Text(
-          'Selected once here and reused for every new purchase request submission.',
+          'Approves Store purchase requests (PR submit → approve).',
           style: TextStyle(fontSize: 13),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         asyncNames.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Text('Failed to load employees: $e'),
           data: (names) {
-            final employees = names.where((n) => n.type == 'EMPLOYEE' && n.employeeId != null).toList();
-            return DropdownButtonFormField<int>(
-              value: settings?.defaultApproverEmployeeId,
-              decoration: const InputDecoration(
-                labelText: 'Approver (search by name)',
-                border: OutlineInputBorder(),
-              ),
-              items: [
-                const DropdownMenuItem<int>(value: null, child: Text('Select employee')),
-                ...employees.map(
-                  (e) => DropdownMenuItem<int>(
-                    value: e.employeeId,
-                    child: Text(e.displayLabel),
+            final employees =
+                names.where((n) => n.type == 'EMPLOYEE' && n.employeeId != null).toList();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue: settings?.defaultApproverEmployeeId,
+                  decoration: const InputDecoration(
+                    labelText: 'PR Approver',
+                    border: OutlineInputBorder(),
                   ),
+                  items: [
+                    const DropdownMenuItem<int>(value: null, child: Text('Select employee')),
+                    ...employees.map(
+                      (e) => DropdownMenuItem<int>(
+                        value: e.employeeId,
+                        child: Text(e.displayLabel),
+                      ),
+                    ),
+                  ],
+                  onChanged: onSavePrApprover,
                 ),
+                if (settings?.defaultApproverName != null) ...[
+                  const SizedBox(height: 8),
+                  Text('Current: ${settings!.defaultApproverName}',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                ],
+                const SizedBox(height: 28),
+                const Text(
+                  'Comparison Sheet / Final PO Approver',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Selects the winning vendor quotation on the Comparison Sheet and creates the final Purchase Order. Can be a different person from the PR approver.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  initialValue: settings?.csApproverEmployeeId,
+                  decoration: const InputDecoration(
+                    labelText: 'CS / PO Approver',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem<int>(value: null, child: Text('Select employee')),
+                    ...employees.map(
+                      (e) => DropdownMenuItem<int>(
+                        value: e.employeeId,
+                        child: Text(e.displayLabel),
+                      ),
+                    ),
+                  ],
+                  onChanged: onSaveCsApprover,
+                ),
+                if (settings?.csApproverName != null) ...[
+                  const SizedBox(height: 8),
+                  Text('Current: ${settings!.csApproverName}',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                ],
               ],
-              onChanged: onSave,
             );
           },
         ),
-        if (settings?.defaultApproverName != null) ...[
-          const SizedBox(height: 12),
-          Text('Current: ${settings!.defaultApproverName}', style: const TextStyle(fontWeight: FontWeight.w600)),
-        ],
       ],
     );
   }
@@ -226,11 +293,13 @@ class _RequestList extends StatelessWidget {
     required this.items,
     required this.emptyLabel,
     this.trailingBuilder,
+    this.onTap,
   });
 
   final List<ErpPurchaseRequest> items;
   final String emptyLabel;
   final Widget Function(ErpPurchaseRequest pr)? trailingBuilder;
+  final ValueChanged<ErpPurchaseRequest>? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -243,6 +312,7 @@ class _RequestList extends StatelessWidget {
         final pr = items[i];
         return Card(
           child: ListTile(
+            onTap: onTap == null ? null : () => onTap!(pr),
             title: Text('${pr.prNumber} · ${pr.status}', style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Text(
               [

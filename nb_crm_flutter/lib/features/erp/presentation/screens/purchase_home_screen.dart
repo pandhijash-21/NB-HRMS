@@ -99,6 +99,64 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
     }
   }
 
+  Future<void> _editDefaultPoTerms() async {
+    final current = _settings?.defaultPoTerms ?? const <String>[];
+    final ctrl = TextEditingController(text: current.join('\n'));
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Default PO Terms & Conditions'),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Copied onto new Purchase Orders when a Comparison Sheet is approved. One term per line.',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                maxLines: 14,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                  labelText: 'Default Terms & Conditions',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (saved != true || !mounted) return;
+    try {
+      final terms = ctrl.text
+          .split('\n')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      final settings = await context.read<PurchaseRepository>().updateSettings(
+            defaultPoTerms: terms,
+            updateDefaultPoTerms: true,
+          );
+      if (!mounted) return;
+      setState(() => _settings = settings);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Default PO Terms & Conditions saved')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
   Future<void> _approve(ErpPurchaseRequest pr) async {
     try {
       await context.read<PurchaseRepository>().approveRequest(pr.id);
@@ -164,6 +222,7 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
                       settings: _settings,
                       onSavePrApprover: _savePrApprover,
                       onSaveCsApprover: _saveCsApprover,
+                      onEditDefaultPoTerms: _editDefaultPoTerms,
                     ),
                     _RequestList(
                       items: _pending,
@@ -193,11 +252,13 @@ class _SettingsTab extends ConsumerWidget {
     required this.settings,
     required this.onSavePrApprover,
     required this.onSaveCsApprover,
+    required this.onEditDefaultPoTerms,
   });
 
   final ErpPurchaseSettings? settings;
   final ValueChanged<int?> onSavePrApprover;
   final ValueChanged<int?> onSaveCsApprover;
+  final VoidCallback onEditDefaultPoTerms;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -279,6 +340,26 @@ class _SettingsTab extends ConsumerWidget {
                   Text('Current: ${settings!.csApproverName}',
                       style: const TextStyle(fontWeight: FontWeight.w600)),
                 ],
+                const SizedBox(height: 28),
+                const Text(
+                  'Default PO Terms & Conditions',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Applied to new Purchase Orders created from Comparison Sheet approval. You can still edit TnC on each PO before printing.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: onEditDefaultPoTerms,
+                  icon: const Icon(Icons.article_outlined),
+                  label: Text(
+                    settings?.defaultPoTerms.isNotEmpty == true
+                        ? 'Edit default TnC (${settings!.defaultPoTerms.length} lines)'
+                        : 'Set default TnC',
+                  ),
+                ),
               ],
             );
           },

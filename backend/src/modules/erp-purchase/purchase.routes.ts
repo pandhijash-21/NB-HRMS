@@ -240,3 +240,69 @@ purchaseRouter.delete(
     }
   },
 );
+
+// ── Comparison Sheet / PO print ─────────────────────────────────────────────
+
+purchaseRouter.get(
+  '/requests/:id/comparison/export.xlsx',
+  requireAuth,
+  requirePermission('PURCHASE', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      const { buffer, fileName } = await purchaseService.exportComparisonSheet(p(req.params.id));
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to export CS'));
+    }
+  },
+);
+
+purchaseRouter.get(
+  '/orders/:id',
+  requireAuth,
+  requirePermission('PURCHASE', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      return res.json(ok(await purchaseService.getPurchaseOrder(p(req.params.id))));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+purchaseRouter.patch(
+  '/orders/:id',
+  requireAuth,
+  requirePermission('PURCHASE', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      return res.json(ok(await purchaseService.updatePurchaseOrder(p(req.params.id), req.body ?? {})));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+purchaseRouter.get(
+  '/orders/:id/export.xlsx',
+  requireAuth,
+  requirePermission('PURCHASE', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      const { buffer, fileName } = await purchaseService.exportPurchaseOrderXlsx(p(req.params.id));
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to export PO'));
+    }
+  },
+);

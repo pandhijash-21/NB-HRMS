@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+
 import '../../../core/network/dio_client.dart';
 import '../domain/purchase_models.dart';
 
@@ -16,14 +20,17 @@ class PurchaseRepository {
   Future<ErpPurchaseSettings> updateSettings({
     int? defaultApproverEmployeeId,
     int? csApproverEmployeeId,
+    List<String>? defaultPoTerms,
     bool updatePrApprover = false,
     bool updateCsApprover = false,
+    bool updateDefaultPoTerms = false,
   }) {
     return _dio.patchEnvelope(
       'erp/purchase/settings',
       data: {
         if (updatePrApprover) 'defaultApproverEmployeeId': defaultApproverEmployeeId,
         if (updateCsApprover) 'csApproverEmployeeId': csApproverEmployeeId,
+        if (updateDefaultPoTerms) 'defaultPoTerms': defaultPoTerms ?? const <String>[],
       },
       parse: (raw) => ErpPurchaseSettings.fromJson(Map<String, dynamic>.from(raw as Map)),
     );
@@ -154,5 +161,45 @@ class PurchaseRepository {
 
   Future<void> deleteQuotation(String id) {
     return _dio.deleteEnvelope('erp/purchase/quotations/$id', parse: (_) => true);
+  }
+
+  Future<Uint8List> exportComparisonExcel(String purchaseRequestId) async {
+    final response = await _dio.dio.get<List<int>>(
+      'erp/purchase/requests/$purchaseRequestId/comparison/export.xlsx',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? const []);
+  }
+
+  Future<ErpPurchaseOrderDetail> getPurchaseOrder(String id) {
+    return _dio.getEnvelope(
+      'erp/purchase/orders/$id',
+      parse: (raw) => ErpPurchaseOrderDetail.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<ErpPurchaseOrderDetail> updatePurchaseOrder(
+    String id, {
+    List<String>? termsAndConditions,
+    double? cgstRate,
+    double? sgstRate,
+  }) {
+    return _dio.patchEnvelope(
+      'erp/purchase/orders/$id',
+      data: {
+        if (termsAndConditions != null) 'termsAndConditions': termsAndConditions,
+        if (cgstRate != null) 'cgstRate': cgstRate,
+        if (sgstRate != null) 'sgstRate': sgstRate,
+      },
+      parse: (raw) => ErpPurchaseOrderDetail.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<Uint8List> exportPurchaseOrderExcel(String purchaseOrderId) async {
+    final response = await _dio.dio.get<List<int>>(
+      'erp/purchase/orders/$purchaseOrderId/export.xlsx',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? const []);
   }
 }

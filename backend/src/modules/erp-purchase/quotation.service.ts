@@ -1,6 +1,7 @@
 import { Prisma, ErpPurchaseQuotationStatus, ErpPurchaseRequestStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { prisma } from '../../config/prisma';
+import { DEFAULT_PO_TERMS, parseTerms } from './purchase.export';
 
 const str = (v: unknown) => {
   if (v == null) return null;
@@ -354,6 +355,11 @@ export const quotationService = {
 
     const poNumber = `PO-${quote.purchaseRequest.prNumber}-${Date.now().toString().slice(-4)}`;
     const totalAmount = Number(quote.totalAmount);
+    const terms = parseTerms(
+      Array.isArray(settings.defaultPoTerms) && settings.defaultPoTerms.length > 0
+        ? settings.defaultPoTerms
+        : DEFAULT_PO_TERMS,
+    );
 
     const result = await prisma.$transaction(async (tx) => {
       await tx.erpPurchaseQuotation.update({
@@ -387,6 +393,9 @@ export const quotationService = {
           orderDate: new Date(),
           status: 'OPEN',
           totalAmount: dec(totalAmount),
+          termsAndConditions: terms,
+          cgstRate: 9,
+          sgstRate: 9,
           remarks: `Created from quotation ${quote.quotationNo} (CS approved)`,
           createdBy: null,
           items: {

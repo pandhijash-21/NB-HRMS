@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/utils/open_url.dart';
 import '../../data/purchase_repository.dart';
 import '../../data/work_order_repository.dart';
 import '../../domain/purchase_models.dart';
@@ -132,10 +133,18 @@ class _PurchaseQuotationScreenState extends State<PurchaseQuotationScreen>
       if (!mounted) return;
       final po = result['purchaseOrder'];
       final poNo = po is Map ? po['poNumber']?.toString() : null;
+      final poId = po is Map ? po['id']?.toString() : null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(poNo != null ? 'Final PO created: $poNo' : 'Quotation selected'),
           backgroundColor: Colors.green.shade700,
+          action: poId == null
+              ? null
+              : SnackBarAction(
+                  label: 'Print PO',
+                  textColor: Colors.white,
+                  onPressed: () => _printPo(poId),
+                ),
         ),
       );
     } catch (e) {
@@ -146,12 +155,122 @@ class _PurchaseQuotationScreenState extends State<PurchaseQuotationScreen>
     }
   }
 
+  Future<void> _printCs() async {
+    try {
+      final bytes =
+          await context.read<PurchaseRepository>().exportComparisonExcel(widget.purchaseRequestId);
+      final prNo = _sheet?.purchaseRequest.prNumber ?? 'PR';
+      await downloadBytes(
+        bytes,
+        'CS_${prNo.replaceAll(RegExp(r'[^\w.-]+'), '_')}.xlsx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Comparison Sheet downloaded')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _printPo(String purchaseOrderId) async {
+    try {
+      final bytes =
+          await context.read<PurchaseRepository>().exportPurchaseOrderExcel(purchaseOrderId);
+      ErpPurchaseQuotation? matched;
+      for (final x in _sheet?.quotations ?? const <ErpPurchaseQuotation>[]) {
+        if (x.purchaseOrderId == purchaseOrderId) {
+          matched = x;
+          break;
+        }
+      }
+      final poNo = matched?.purchaseOrderNo ?? purchaseOrderId;
+      await downloadBytes(
+        bytes,
+        'PO_${poNo.replaceAll(RegExp(r'[^\w.-]+'), '_')}.xlsx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Purchase Order downloaded')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _editPoTerms(String purchaseOrderId) async {
+    final repo = context.read<PurchaseRepository>();
+    try {
+      final po = await repo.getPurchaseOrder(purchaseOrderId);
+      if (!mounted) return;
+      final ctrl = TextEditingController(text: po.termsAndConditions.join('\n'));
+      final saved = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('Terms & Conditions · ${po.poNumber}'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'One term per line. These print on the Purchase Order.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ctrl,
+                  maxLines: 14,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                    labelText: 'Terms & Conditions',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+          ],
+        ),
+      );
+      if (saved != true || !mounted) return;
+      final terms = ctrl.text
+          .split('\n')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      await repo.updatePurchaseOrder(purchaseOrderId, termsAndConditions: terms);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Terms & Conditions saved')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final pr = _sheet?.purchaseRequest;
     final quotes = _sheet?.quotations ?? const <ErpPurchaseQuotation>[];
     final hasSelected = quotes.any((q) => q.status == 'SELECTED');
+    ErpPurchaseQuotation? selected;
+    for (final q in quotes) {
+      if (q.status == 'SELECTED') {
+        selected = q;
+        break;
+      }
+    }
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
@@ -159,6 +278,24 @@ class _PurchaseQuotationScreenState extends State<PurchaseQuotationScreen>
         title: Text(pr != null ? 'Quotations · ${pr.prNumber}' : 'Quotations'),
         leading: const AppBackButton(fallbackLocation: '/erp/purchase'),
         actions: [
+          if (quotes.isNotEmpty)
+            IconButton(
+              tooltip: 'Print Comparison Sheet',
+              icon: const Icon(Icons.print_outlined),
+              onPressed: _printCs,
+            ),
+          if (selected?.purchaseOrderId != null) ...[
+            IconButton(
+              tooltip: 'Edit PO Terms & Conditions',
+              icon: const Icon(Icons.article_outlined),
+              onPressed: () => _editPoTerms(selected!.purchaseOrderId!),
+            ),
+            IconButton(
+              tooltip: 'Print Purchase Order',
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              onPressed: () => _printPo(selected!.purchaseOrderId!),
+            ),
+          ],
           IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
           if (pr != null && !hasSelected)
             IconButton(
@@ -190,11 +327,24 @@ class _PurchaseQuotationScreenState extends State<PurchaseQuotationScreen>
                       onSubmit: _submit,
                       onDelete: _delete,
                       onSelect: hasSelected || _selecting ? null : _selectWinner,
+                      onPrintPo: (q) {
+                        if (q.purchaseOrderId != null) _printPo(q.purchaseOrderId!);
+                      },
+                      onEditTerms: (q) {
+                        if (q.purchaseOrderId != null) _editPoTerms(q.purchaseOrderId!);
+                      },
                     ),
                     _ComparisonTab(
                       sheet: _sheet!,
                       selecting: _selecting,
                       onSelect: hasSelected || _selecting ? null : _selectWinner,
+                      onPrintCs: _printCs,
+                      onPrintPo: selected?.purchaseOrderId == null
+                          ? null
+                          : () => _printPo(selected!.purchaseOrderId!),
+                      onEditTerms: selected?.purchaseOrderId == null
+                          ? null
+                          : () => _editPoTerms(selected!.purchaseOrderId!),
                     ),
                   ],
                 ),
@@ -211,6 +361,8 @@ class _QuotationsTab extends StatelessWidget {
     required this.onSubmit,
     required this.onDelete,
     required this.onSelect,
+    this.onPrintPo,
+    this.onEditTerms,
   });
 
   final List<ErpPurchaseQuotation> quotes;
@@ -220,6 +372,8 @@ class _QuotationsTab extends StatelessWidget {
   final ValueChanged<ErpPurchaseQuotation> onSubmit;
   final ValueChanged<ErpPurchaseQuotation> onDelete;
   final ValueChanged<ErpPurchaseQuotation>? onSelect;
+  final ValueChanged<ErpPurchaseQuotation>? onPrintPo;
+  final ValueChanged<ErpPurchaseQuotation>? onEditTerms;
 
   @override
   Widget build(BuildContext context) {
@@ -248,6 +402,7 @@ class _QuotationsTab extends StatelessWidget {
       itemBuilder: (context, i) {
         final q = quotes[i];
         final editable = q.status == 'DRAFT';
+        final hasPo = q.purchaseOrderId != null;
         return Card(
           child: ListTile(
             title: Text(
@@ -279,6 +434,18 @@ class _QuotationsTab extends StatelessWidget {
                     onPressed: () => onDelete(q),
                   ),
                 ],
+                if (hasPo) ...[
+                  IconButton(
+                    tooltip: 'Edit TnC',
+                    icon: const Icon(Icons.article_outlined),
+                    onPressed: onEditTerms == null ? null : () => onEditTerms!(q),
+                  ),
+                  IconButton(
+                    tooltip: 'Print PO',
+                    icon: const Icon(Icons.print_outlined),
+                    onPressed: onPrintPo == null ? null : () => onPrintPo!(q),
+                  ),
+                ],
                 if (!hasSelected && (q.status == 'DRAFT' || q.status == 'SUBMITTED'))
                   FilledButton(
                     onPressed: onSelect == null ? null : () => onSelect!(q),
@@ -298,11 +465,17 @@ class _ComparisonTab extends StatelessWidget {
     required this.sheet,
     required this.selecting,
     required this.onSelect,
+    this.onPrintCs,
+    this.onPrintPo,
+    this.onEditTerms,
   });
 
   final ErpPurchaseComparisonSheet sheet;
   final bool selecting;
   final ValueChanged<ErpPurchaseQuotation>? onSelect;
+  final VoidCallback? onPrintCs;
+  final VoidCallback? onPrintPo;
+  final VoidCallback? onEditTerms;
 
   @override
   Widget build(BuildContext context) {
@@ -326,11 +499,41 @@ class _ComparisonTab extends StatelessWidget {
       }
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      scrollDirection: Axis.horizontal,
-      child: SingleChildScrollView(
-        child: DataTable(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: onPrintCs,
+                icon: const Icon(Icons.print_outlined, size: 18),
+                label: const Text('Print CS'),
+              ),
+              if (onPrintPo != null)
+                FilledButton.icon(
+                  onPressed: onPrintPo,
+                  icon: const Icon(Icons.description_outlined, size: 18),
+                  label: const Text('Print PO'),
+                ),
+              if (onEditTerms != null)
+                OutlinedButton.icon(
+                  onPressed: onEditTerms,
+                  icon: const Icon(Icons.article_outlined, size: 18),
+                  label: const Text('Edit TnC'),
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            scrollDirection: Axis.horizontal,
+            child: SingleChildScrollView(
+              child: DataTable(
           headingRowHeight: 56,
           columns: [
             const DataColumn(label: Text('Item / Qty', style: TextStyle(fontWeight: FontWeight.w800))),
@@ -389,8 +592,11 @@ class _ComparisonTab extends StatelessWidget {
               ],
             ),
           ],
+              ),
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }

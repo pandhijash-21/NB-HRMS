@@ -1,6 +1,13 @@
 import { Prisma, ErpPurchaseRequestStatus } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { randomUUID } from 'crypto';
+import {
+  DEFAULT_PO_TERMS,
+  parseTerms,
+  buildComparisonSheetXlsx,
+  buildPurchaseOrderXlsx,
+} from './purchase.export';
+import { quotationService } from './quotation.service';
 
 const str = (v: unknown) => {
   if (v == null) return null;
@@ -109,6 +116,7 @@ export const purchaseService = {
       defaultApprover: mapEmployeeName(row.defaultApprover),
       csApproverEmployeeId: row.csApproverEmployeeId,
       csApprover: mapEmployeeName(row.csApprover),
+      defaultPoTerms: parseTerms(row.defaultPoTerms),
     };
   },
 
@@ -128,6 +136,10 @@ export const purchaseService = {
         await prisma.employee.findUniqueOrThrow({ where: { id: csId } });
       }
       data.csApprover = csId == null ? { disconnect: true } : { connect: { id: csId } };
+    }
+    if ('defaultPoTerms' in body) {
+      const terms = parseTerms(body.defaultPoTerms);
+      data.defaultPoTerms = terms.length ? terms : DEFAULT_PO_TERMS;
     }
     await this.getSettings();
     const row = await prisma.erpPurchaseSettings.update({
@@ -155,7 +167,179 @@ export const purchaseService = {
       defaultApprover: mapEmployeeName(row.defaultApprover),
       csApproverEmployeeId: row.csApproverEmployeeId,
       csApprover: mapEmployeeName(row.csApprover),
+      defaultPoTerms: parseTerms(row.defaultPoTerms),
     };
+  },
+
+  async getPurchaseOrder(id: string) {
+    const po = await prisma.erpPurchaseOrder.findUnique({
+      where: { id },
+      include: {
+        items: { orderBy: { sortOrder: 'asc' } },
+        vendor: {
+          select: {
+            id: true,
+            name: true,
+            contactPerson: true,
+            phone: true,
+            mobileNo: true,
+            locations: {
+              orderBy: { sortOrder: 'asc' },
+              take: 1,
+              select: {
+                address1: true,
+                address2: true,
+                cityCode: true,
+                stateCode: true,
+                postCode: true,
+                gstNo: true,
+              },
+            },
+          },
+        },
+        quotation: true,
+        purchaseRequest: {
+          select: {
+            id: true,
+            prNumber: true,
+            prDate: true,
+            project: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+    if (!po) throw new Error('Purchase order not found');
+    const loc = po.vendor?.locations?.[0];
+    const vendorAddress = loc
+      ? [loc.address1, loc.address2, loc.cityCode, loc.stateCode, loc.postCode]
+          .filter(Boolean)
+          .join(', ')
+      : null;
+    return {
+      ...po,
+      totalAmount: po.totalAmount != null ? Number(po.totalAmount) : null,
+      cgstRate: po.cgstRate != null ? Number(po.cgstRate) : 9,
+      sgstRate: po.sgstRate != null ? Number(po.sgstRate) : 9,
+      termsAndConditions: parseTerms(po.termsAndConditions),
+      vendor: po.vendor
+        ? {
+            id: po.vendor.id,
+            name: po.vendor.name,
+            contactPerson: po.vendor.contactPerson,
+            phone: po.vendor.phone,
+            mobileNo: po.vendor.mobileNo,
+            address: vendorAddress,
+            gstNo: loc?.gstNo ?? null,
+          }
+        : null,
+      project: po.purchaseRequest?.project
+        ? { id: po.purchaseRequest.project.id, name: po.purchaseRequest.project.name }
+        : null,
+      items: po.items.map((i) => ({
+        ...i,
+        orderedQty: Number(i.orderedQty),
+        rate: i.rate != null ? Number(i.rate) : null,
+        amount: i.amount != null ? Number(i.amount) : null,
+      })),
+    };
+  },
+
+  async updatePurchaseOrder(id: string, body: Record<string, unknown>) {
+    const existing = await prisma.erpPurchaseOrder.findUnique({ where: { id } });
+    if (!existing) throw new Error('Purchase order not found');
+
+    const data: Prisma.ErpPurchaseOrderUpdateInput = {};
+    if ('termsAndConditions' in body) {
+      data.termsAndConditions = parseTerms(body.termsAndConditions);
+    }
+    if ('cgstRate' in body) {
+      const r = num(body.cgstRate);
+      if (r == null || r < 0) throw new Error('Invalid CGST rate');
+      data.cgstRate = r;
+    }
+    if ('sgstRate' in body) {
+      const r = num(body.sgstRate);
+      if (r == null || r < 0) throw new Error('Invalid SGST rate');
+      data.sgstRate = r;
+    }
+    if ('remarks' in body) data.remarks = str(body.remarks);
+
+    await prisma.erpPurchaseOrder.update({ where: { id }, data });
+    return this.getPurchaseOrder(id);
+  },
+
+  async exportComparisonSheet(purchaseRequestId: string) {
+    const sheet = await quotationService.getComparisonSheet(purchaseRequestId);
+    return buildComparisonSheetXlsx({
+      purchaseRequest: {
+        prNumber: sheet.purchaseRequest.prNumber,
+        status: sheet.purchaseRequest.status,
+        projectName: sheet.purchaseRequest.projectName,
+        lines: sheet.purchaseRequest.lines,
+      },
+      quotations: sheet.quotations.map((q) => ({
+        quotationNo: q.quotationNo,
+        vendorName: q.vendorName,
+        status: q.status,
+        totalAmount: Number(q.totalAmount),
+        gstNo: q.gstNo,
+        lines: q.lines.map((l) => ({
+          purchaseRequestLineId: l.purchaseRequestLineId,
+          itemName: l.itemName,
+          materialId: l.materialId,
+          qty: Number(l.qty),
+          rate: Number(l.rate),
+          amount: Number(l.amount),
+          unitCode: l.unitCode,
+        })),
+      })),
+    });
+  },
+
+  async exportPurchaseOrderXlsx(id: string) {
+    const po = await this.getPurchaseOrder(id);
+    const org = await prisma.organization.findFirst({
+      where: { isActive: true, deletedAt: null },
+      orderBy: { sortOrder: 'asc' },
+    });
+    return buildPurchaseOrderXlsx({
+      po: {
+        poNumber: po.poNumber,
+        orderDate: po.orderDate,
+        vendorName: po.vendorName,
+        totalAmount: po.totalAmount,
+        remarks: po.remarks,
+        cgstRate: po.cgstRate,
+        sgstRate: po.sgstRate,
+        termsAndConditions: po.termsAndConditions,
+      },
+      quotation: po.quotation
+        ? {
+            quotationNo: po.quotation.quotationNo,
+            quotationDate: po.quotation.quotationDate,
+            address: po.quotation.address,
+            gstNo: po.quotation.gstNo,
+            vendorName: po.quotation.vendorName,
+          }
+        : null,
+      vendor: po.vendor,
+      project: po.project,
+      purchaseRequest: po.purchaseRequest
+        ? { prNumber: po.purchaseRequest.prNumber, prDate: po.purchaseRequest.prDate }
+        : null,
+      organization: org
+        ? {
+            name: org.name,
+            address1: org.address1,
+            address2: org.address2,
+            city: org.city,
+            state: org.state,
+            pinCode: org.pinCode,
+            gstNo: org.gstNo,
+          }
+        : null,
+      items: po.items,
+    });
   },
 
   async list(params: {

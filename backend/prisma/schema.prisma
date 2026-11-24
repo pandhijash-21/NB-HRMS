@@ -2967,6 +2967,8 @@ model ErpPurchaseSettings {
   defaultApproverEmployeeId Int?     @map("default_approver_employee_id")
   /// Approver for Comparison Sheet (select winning quotation → final PO).
   csApproverEmployeeId      Int?     @map("cs_approver_employee_id")
+  /// Default PO Terms & Conditions (JSON string array). Copied onto new POs; editable per PO.
+  defaultPoTerms            Json?    @map("default_po_terms")
   updatedAt                 DateTime @updatedAt @map("updated_at")
   createdAt                 DateTime @default(now()) @map("created_at")
 
@@ -3105,20 +3107,24 @@ model ErpPurchaseQuotationLine {
 }
 
 model ErpPurchaseOrder {
-  id                String                 @id @default(uuid())
-  poNumber          String                 @unique @map("po_number")
-  vendorName        String                 @map("vendor_name")
-  vendorId          String?                @map("vendor_id")
-  projectId         String?                @map("project_id")
-  purchaseRequestId String?                @map("purchase_request_id")
-  quotationId       String?                @unique @map("quotation_id")
-  orderDate         DateTime               @default(now()) @map("order_date") @db.Date
-  status            ErpPurchaseOrderStatus @default(OPEN)
-  totalAmount       Decimal?               @map("total_amount") @db.Decimal(16, 2)
-  remarks           String?                @db.Text
-  createdBy         String?                @map("created_by")
-  createdAt         DateTime               @default(now()) @map("created_at")
-  updatedAt         DateTime               @updatedAt @map("updated_at")
+  id                  String                 @id @default(uuid())
+  poNumber            String                 @unique @map("po_number")
+  vendorName          String                 @map("vendor_name")
+  vendorId            String?                @map("vendor_id")
+  projectId           String?                @map("project_id")
+  purchaseRequestId   String?                @map("purchase_request_id")
+  quotationId         String?                @unique @map("quotation_id")
+  orderDate           DateTime               @default(now()) @map("order_date") @db.Date
+  status              ErpPurchaseOrderStatus @default(OPEN)
+  totalAmount         Decimal?               @map("total_amount") @db.Decimal(16, 2)
+  /// Terms & Conditions lines (JSON string array) — editable before print.
+  termsAndConditions  Json?                  @map("terms_and_conditions")
+  cgstRate            Decimal?               @default(9) @map("cgst_rate") @db.Decimal(6, 2)
+  sgstRate            Decimal?               @default(9) @map("sgst_rate") @db.Decimal(6, 2)
+  remarks             String?                @db.Text
+  createdBy           String?                @map("created_by")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
 
   vendor          ErpContractor?         @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   purchaseRequest ErpPurchaseRequest?    @relation(fields: [purchaseRequestId], references: [id], onDelete: SetNull)
@@ -3140,6 +3146,7 @@ model ErpPurchaseOrderItem {
   brand           String?
   unitCode        String?  @map("unit_code")
   size            String?
+  hsnCode         String?  @map("hsn_code")
   orderedQty      Decimal  @map("ordered_qty") @db.Decimal(14, 4)
   rate            Decimal? @db.Decimal(14, 4)
   amount          Decimal? @db.Decimal(16, 2)

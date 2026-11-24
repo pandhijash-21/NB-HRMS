@@ -610,7 +610,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             return !l.isManual &&
                 (l.leadSource == 'WEBHOOK' || l.leadSource == 'META' || l.leadSource == 'GOOGLE');
           }
-          return true;
+        return true;
         }
       }
       if (effectiveFlow == 'EXCEL') {
@@ -658,7 +658,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           ),
           const SizedBox(height: 12),
           if (isAdmin && _bulkTransferSelectedIds.isNotEmpty) ...[
-            Container(
+          Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
@@ -828,14 +828,14 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     final selectedCampaignId = state.selectedCampaignId;
 
     return Container(
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor),
-      ),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: borderColor),
+            ),
       clipBehavior: Clip.antiAlias,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
+            child: LayoutBuilder(
+              builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 980;
           final waitingCount = leads.where((l) => l.isWaitingList).length;
           final fieldFill = isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC);
@@ -869,91 +869,91 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             );
           }
 
-          Widget buildProjectSelector() {
-            final effectiveSelectedId = (selectedProjectId != null && projects.any((p) => p.id == selectedProjectId))
-                ? selectedProjectId
-                : 'ALL';
+                Widget buildProjectSelector() {
+                  final effectiveSelectedId = (selectedProjectId != null && projects.any((p) => p.id == selectedProjectId))
+                      ? selectedProjectId
+                      : 'ALL';
 
-            return DropdownButtonFormField<String>(
+                  return DropdownButtonFormField<String>(
               key: ValueKey('project-$effectiveSelectedId-${projects.length}'),
-              isExpanded: true,
-              initialValue: effectiveSelectedId,
+                    isExpanded: true,
+                    initialValue: effectiveSelectedId,
               decoration: filterDecoration(
-                prefixIcon: Icon(Icons.apartment_rounded, size: 18, color: primaryColor),
+                      prefixIcon: Icon(Icons.apartment_rounded, size: 18, color: primaryColor),
                 hint: 'Project',
-              ),
-              items: [
-                const DropdownMenuItem(
-                  value: 'ALL',
-                  child: Text('All Projects', overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                ),
-                ...projects.map((p) => DropdownMenuItem(
-                      value: p.id,
-                      child: Text(
-                        p.name,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: 'ALL',
+                        child: Text('All Projects', overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                       ),
-                    )),
-              ],
-              onChanged: (val) {
-                if (val != null) {
-                  final newProjId = val == 'ALL' ? null : val;
-                  context.read<CrmLeadsBloc>().add(CrmLeadsProjectSelected(newProjId));
+                      ...projects.map((p) => DropdownMenuItem(
+                            value: p.id,
+                            child: Text(
+                              p.name,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            ),
+                          )),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        final newProjId = val == 'ALL' ? null : val;
+                        context.read<CrmLeadsBloc>().add(CrmLeadsProjectSelected(newProjId));
+                      }
+                    },
+                  );
                 }
-              },
-            );
-          }
 
-          Widget buildCampaignSelector() {
-            const allValue = 'ALL';
-            final hasValidSelection = selectedCampaignId != null &&
-                campaigns.any((c) => c.id == selectedCampaignId);
-            final effectiveSelectedId =
-                hasValidSelection ? selectedCampaignId : allValue;
+                Widget buildCampaignSelector() {
+                  const allValue = 'ALL';
+                  final hasValidSelection = selectedCampaignId != null &&
+                      campaigns.any((c) => c.id == selectedCampaignId);
+                  final effectiveSelectedId =
+                      hasValidSelection ? selectedCampaignId : allValue;
 
-            return DropdownButtonFormField<String>(
+                  return DropdownButtonFormField<String>(
               key: ValueKey('campaign-$effectiveSelectedId-${campaigns.length}'),
-              isExpanded: true,
-              initialValue: effectiveSelectedId,
+                    isExpanded: true,
+                    initialValue: effectiveSelectedId,
               decoration: filterDecoration(
-                prefixIcon: Icon(Icons.campaign_rounded, size: 18, color: primaryColor),
+                      prefixIcon: Icon(Icons.campaign_rounded, size: 18, color: primaryColor),
                 hint: 'Campaign',
-              ),
-              items: [
-                DropdownMenuItem(
-                  value: allValue,
-                  child: Text(
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: allValue,
+                        child: Text(
                     campaigns.isEmpty ? '0 Campaigns' : 'All Campaigns (${campaigns.length})',
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                  ),
-                ),
-                ...campaigns.map((c) => DropdownMenuItem(
-                      value: c.id,
-                      child: Text(
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                      ),
+                      ...campaigns.map((c) => DropdownMenuItem(
+                            value: c.id,
+                            child: Text(
                         c.binLeadsCount > 0
                             ? '${c.name} (${c.activeLeadsCount} active · ${c.totalLeadsCount} tot)'
                             : '${c.name} (${c.leadsCount})',
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
-                    )),
-              ],
-              onChanged: (val) {
-                if (val == null) return;
-                final newCampId = val == allValue ? null : val;
-                context.read<CrmLeadsBloc>().add(CrmLeadsCampaignSelected(newCampId));
-              },
-            );
-          }
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            ),
+                          )),
+                    ],
+                    onChanged: (val) {
+                      if (val == null) return;
+                      final newCampId = val == allValue ? null : val;
+                      context.read<CrmLeadsBloc>().add(CrmLeadsCampaignSelected(newCampId));
+                    },
+                  );
+                }
 
-          Widget buildSearchField() {
-            return TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
+                Widget buildSearchField() {
+                  return TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
                 prefixIcon: Icon(Icons.search_rounded, size: 18, color: textMuted),
-                hintText: 'Search name or phone...',
+                      hintText: 'Search name or phone...',
                 hintStyle: TextStyle(fontSize: 13, color: textMuted),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
@@ -965,7 +965,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         },
                       )
                     : null,
-                isDense: true,
+                      isDense: true,
                 filled: true,
                 fillColor: fieldFill,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
@@ -975,230 +975,230 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   borderRadius: fieldRadius,
                   borderSide: BorderSide(color: primaryColor, width: 1.4),
                 ),
-              ),
-              onChanged: (val) {
-                context.read<CrmLeadsBloc>().add(CrmLeadsSearchChanged(val.trim()));
+                    ),
+                    onChanged: (val) {
+                      context.read<CrmLeadsBloc>().add(CrmLeadsSearchChanged(val.trim()));
                 setState(() {});
-              },
-            );
-          }
+                    },
+                  );
+                }
 
-          Widget buildStatusFilter() {
+                Widget buildStatusFilter() {
             final statusValue =
                 (!isAdmin && state.statusFilter == 'WL') ? 'ALL' : state.statusFilter;
-            return DropdownButtonFormField<String>(
-              isExpanded: true,
+                  return DropdownButtonFormField<String>(
+                    isExpanded: true,
               initialValue: statusValue,
-              dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                    dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
               decoration: filterDecoration(
                 prefixIcon: Icon(Icons.filter_list_rounded, size: 18, color: primaryColor),
                 hint: 'Status',
-              ),
-              items: [
-                DropdownMenuItem(
-                  value: 'ALL',
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'ALL',
                   child: Text('All Statuses', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                ),
+                      ),
                 if (isAdmin)
-                  DropdownMenuItem(
-                    value: 'WL',
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFD97706), shape: BoxShape.circle)),
+                      DropdownMenuItem(
+                        value: 'WL',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFD97706), shape: BoxShape.circle)),
                         const SizedBox(width: 6),
                         Text('Waiting List (WL)', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309))),
-                      ],
-                    ),
-                  ),
-                DropdownMenuItem(
-                  value: 'NOT_STARTED',
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), shape: BoxShape.circle)),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'NOT_STARTED',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), shape: BoxShape.circle)),
                       const SizedBox(width: 6),
                       Text('Not started', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                    ],
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'CNR',
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFF59E0B), shape: BoxShape.circle)),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'CNR',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFF59E0B), shape: BoxShape.circle)),
                       const SizedBox(width: 6),
                       Text('CNR', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                    ],
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'ASSIGNED',
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF6366F1), shape: BoxShape.circle)),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'ASSIGNED',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF6366F1), shape: BoxShape.circle)),
                       const SizedBox(width: 6),
                       Text('Assigned', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                    ],
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'SCHEDULED_VISIT',
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF2563EB), shape: BoxShape.circle)),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'SCHEDULED_VISIT',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF2563EB), shape: BoxShape.circle)),
                       const SizedBox(width: 6),
                       Text('Scheduled Visit', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                    ],
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'SITE_VISIT_DONE',
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'SITE_VISIT_DONE',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
                       const SizedBox(width: 6),
                       Text('Site Done', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                    ],
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'NOT_INTERESTED',
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFEF4444), shape: BoxShape.circle)),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'NOT_INTERESTED',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFEF4444), shape: BoxShape.circle)),
                       const SizedBox(width: 6),
                       Text('Not interested', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                    ],
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'FOLLOW_UP',
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C), shape: BoxShape.circle)),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'FOLLOW_UP',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C), shape: BoxShape.circle)),
                       const SizedBox(width: 6),
                       Text('Follow up', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                    ],
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'INTERESTED',
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A), shape: BoxShape.circle)),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'INTERESTED',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A), shape: BoxShape.circle)),
                       const SizedBox(width: 6),
                       Text('Interested', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                    ],
-                  ),
-                ),
-              ],
-              onChanged: (val) {
-                if (val != null) {
-                  context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val));
-                }
-              },
-            );
-          }
-
-          Widget buildDateFilterBar() {
-            final hasDateFilter = state.fromDate != null || state.toDate != null;
-            final dateFormat = DateFormat('dd MMM yyyy');
-
-            String dateRangeLabel;
-            if (state.fromDate != null && state.toDate != null) {
-              if (DateUtils.isSameDay(state.fromDate!, state.toDate!)) {
-                dateRangeLabel = dateFormat.format(state.fromDate!);
-              } else {
-                dateRangeLabel = '${dateFormat.format(state.fromDate!)} - ${dateFormat.format(state.toDate!)}';
-              }
-            } else if (state.fromDate != null) {
-              dateRangeLabel = 'From ${dateFormat.format(state.fromDate!)}';
-            } else if (state.toDate != null) {
-              dateRangeLabel = 'Until ${dateFormat.format(state.toDate!)}';
-            } else {
-              dateRangeLabel = 'Custom Dates';
-            }
-
-            void setPreset(String preset) {
-              final now = DateTime.now();
-              DateTime? from;
-              DateTime? to;
-              if (preset == 'today') {
-                from = DateTime(now.year, now.month, now.day);
-                to = DateTime(now.year, now.month, now.day);
-              } else if (preset == 'yesterday') {
-                final y = now.subtract(const Duration(days: 1));
-                from = DateTime(y.year, y.month, y.day);
-                to = DateTime(y.year, y.month, y.day);
-              } else if (preset == 'this_week') {
-                final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-                from = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
-                to = DateTime(now.year, now.month, now.day);
-              } else if (preset == 'this_month') {
-                from = DateTime(now.year, now.month, 1);
-                to = DateTime(now.year, now.month, now.day);
-              } else if (preset == 'all') {
-                from = null;
-                to = null;
-              }
-              context.read<CrmLeadsBloc>().add(CrmLeadsDateFilterChanged(
-                fromDate: from,
-                toDate: to,
-                datePreset: preset,
-              ));
-            }
-
-            Future<void> pickCustomRange() async {
-              final bloc = context.read<CrmLeadsBloc>();
-              final initialRange = (state.fromDate != null && state.toDate != null)
-                  ? DateTimeRange(start: state.fromDate!, end: state.toDate!)
-                  : DateTimeRange(
-                      start: DateTime.now().subtract(const Duration(days: 7)),
-                      end: DateTime.now(),
-                    );
-              final picked = await showDateRangePicker(
-                context: context,
-                firstDate: DateTime(2020),
-                lastDate: DateTime.now().add(const Duration(days: 365)),
-                initialDateRange: initialRange,
-                builder: (ctx, child) {
-                  return Theme(
-                    data: Theme.of(ctx).copyWith(
-                      colorScheme: Theme.of(ctx).colorScheme.copyWith(
-                        primary: primaryColor,
-                        onPrimary: Colors.white,
+                          ],
+                        ),
                       ),
-                    ),
-                    child: child!,
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val));
+                      }
+                    },
                   );
-                },
-              );
-              if (picked != null) {
-                bloc.add(CrmLeadsDateFilterChanged(
-                  fromDate: picked.start,
-                  toDate: picked.end,
-                  datePreset: 'custom',
-                ));
-              }
-            }
+                }
 
-            Widget presetChip(String label, bool isSelected, VoidCallback onTap) {
-              return InkWell(
-                onTap: onTap,
+                Widget buildDateFilterBar() {
+                  final hasDateFilter = state.fromDate != null || state.toDate != null;
+                  final dateFormat = DateFormat('dd MMM yyyy');
+
+                  String dateRangeLabel;
+                  if (state.fromDate != null && state.toDate != null) {
+                    if (DateUtils.isSameDay(state.fromDate!, state.toDate!)) {
+                      dateRangeLabel = dateFormat.format(state.fromDate!);
+                    } else {
+                      dateRangeLabel = '${dateFormat.format(state.fromDate!)} - ${dateFormat.format(state.toDate!)}';
+                    }
+                  } else if (state.fromDate != null) {
+                    dateRangeLabel = 'From ${dateFormat.format(state.fromDate!)}';
+                  } else if (state.toDate != null) {
+                    dateRangeLabel = 'Until ${dateFormat.format(state.toDate!)}';
+                  } else {
+                    dateRangeLabel = 'Custom Dates';
+                  }
+
+                  void setPreset(String preset) {
+                    final now = DateTime.now();
+                    DateTime? from;
+                    DateTime? to;
+                    if (preset == 'today') {
+                      from = DateTime(now.year, now.month, now.day);
+                      to = DateTime(now.year, now.month, now.day);
+                    } else if (preset == 'yesterday') {
+                      final y = now.subtract(const Duration(days: 1));
+                      from = DateTime(y.year, y.month, y.day);
+                      to = DateTime(y.year, y.month, y.day);
+                    } else if (preset == 'this_week') {
+                      final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+                      from = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+                      to = DateTime(now.year, now.month, now.day);
+                    } else if (preset == 'this_month') {
+                      from = DateTime(now.year, now.month, 1);
+                      to = DateTime(now.year, now.month, now.day);
+                    } else if (preset == 'all') {
+                      from = null;
+                      to = null;
+                    }
+                    context.read<CrmLeadsBloc>().add(CrmLeadsDateFilterChanged(
+                      fromDate: from,
+                      toDate: to,
+                      datePreset: preset,
+                    ));
+                  }
+
+                  Future<void> pickCustomRange() async {
+                    final bloc = context.read<CrmLeadsBloc>();
+                    final initialRange = (state.fromDate != null && state.toDate != null)
+                        ? DateTimeRange(start: state.fromDate!, end: state.toDate!)
+                        : DateTimeRange(
+                            start: DateTime.now().subtract(const Duration(days: 7)),
+                            end: DateTime.now(),
+                          );
+                    final picked = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                      initialDateRange: initialRange,
+                      builder: (ctx, child) {
+                        return Theme(
+                          data: Theme.of(ctx).copyWith(
+                            colorScheme: Theme.of(ctx).colorScheme.copyWith(
+                              primary: primaryColor,
+                              onPrimary: Colors.white,
+                            ),
+                          ),
+                          child: child!,
+                        );
+                      },
+                    );
+                    if (picked != null) {
+                      bloc.add(CrmLeadsDateFilterChanged(
+                        fromDate: picked.start,
+                        toDate: picked.end,
+                        datePreset: 'custom',
+                      ));
+                    }
+                  }
+
+                  Widget presetChip(String label, bool isSelected, VoidCallback onTap) {
+                    return InkWell(
+                      onTap: onTap,
                 borderRadius: BorderRadius.circular(20),
-                child: Container(
+                      child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? primaryColor
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? primaryColor
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
@@ -1206,117 +1206,117 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           ? primaryColor
                           : (isDark ? Colors.white24 : const Color(0xFFCBD5E1)),
                     ),
-                  ),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 11,
+                        ),
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 11,
                       fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                      color: isSelected
-                          ? Colors.white
-                          : (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
-                    ),
-                  ),
-                ),
-              );
-            }
+                            color: isSelected
+                                ? Colors.white
+                                : (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
 
             return Wrap(
               spacing: 6,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                     Icon(Icons.calendar_month_rounded, size: 14, color: hasDateFilter ? primaryColor : textMuted),
                     const SizedBox(width: 4),
-                    Text(
+                            Text(
                       'Date',
-                      style: TextStyle(
+                              style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: hasDateFilter ? primaryColor : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                      ),
-                    ),
-                  ],
-                ),
-                presetChip('All', state.datePreset == 'all' && !hasDateFilter, () => setPreset('all')),
-                presetChip('Today', state.datePreset == 'today', () => setPreset('today')),
-                presetChip('Yesterday', state.datePreset == 'yesterday', () => setPreset('yesterday')),
-                presetChip('This Week', state.datePreset == 'this_week', () => setPreset('this_week')),
-                presetChip('This Month', state.datePreset == 'this_month', () => setPreset('this_month')),
-                InkWell(
-                  onTap: pickCustomRange,
+                                color: hasDateFilter ? primaryColor : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        presetChip('All', state.datePreset == 'all' && !hasDateFilter, () => setPreset('all')),
+                        presetChip('Today', state.datePreset == 'today', () => setPreset('today')),
+                        presetChip('Yesterday', state.datePreset == 'yesterday', () => setPreset('yesterday')),
+                        presetChip('This Week', state.datePreset == 'this_week', () => setPreset('this_week')),
+                        presetChip('This Month', state.datePreset == 'this_month', () => setPreset('this_month')),
+                        InkWell(
+                          onTap: pickCustomRange,
                   borderRadius: BorderRadius.circular(20),
-                  child: Container(
+                          child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: state.datePreset == 'custom' || hasDateFilter
+                            decoration: BoxDecoration(
+                              color: state.datePreset == 'custom' || hasDateFilter
                           ? primaryColor.withValues(alpha: 0.12)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: state.datePreset == 'custom' || hasDateFilter
-                            ? primaryColor
+                              border: Border.all(
+                                color: state.datePreset == 'custom' || hasDateFilter
+                                    ? primaryColor
                             : (isDark ? Colors.white24 : const Color(0xFFCBD5E1)),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
                         Icon(Icons.date_range_rounded, size: 12, color: hasDateFilter ? primaryColor : textMuted),
                         const SizedBox(width: 4),
-                        Text(
-                          dateRangeLabel,
-                          style: TextStyle(
+                                Text(
+                                  dateRangeLabel,
+                                  style: TextStyle(
                             fontSize: 11,
                             fontWeight: hasDateFilter ? FontWeight.w700 : FontWeight.w500,
-                            color: hasDateFilter ? primaryColor : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                                    color: hasDateFilter ? primaryColor : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (hasDateFilter)
+                          IconButton(
+                    tooltip: 'Clear date filter',
+                    icon: const Icon(Icons.close_rounded, size: 15),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                            onPressed: () => setPreset('all'),
+                          ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                    color: (hasDateFilter ? primaryColor : const Color(0xFF64748B)).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                    '${filteredLeads.length} leads',
+                            style: TextStyle(
+                              fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                              color: hasDateFilter ? primaryColor : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
+                            ),
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                ),
-                if (hasDateFilter)
-                  IconButton(
-                    tooltip: 'Clear date filter',
-                    icon: const Icon(Icons.close_rounded, size: 15),
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                    onPressed: () => setPreset('all'),
-                  ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: (hasDateFilter ? primaryColor : const Color(0xFF64748B)).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${filteredLeads.length} leads',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: hasDateFilter ? primaryColor : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          }
+                  );
+                }
 
           Widget buildActionsRow() {
-            if (!canWrite) return const SizedBox.shrink();
+                  if (!canWrite) return const SizedBox.shrink();
             return Wrap(
               spacing: 6,
               runSpacing: 6,
               crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
+                      children: [
                 if (isAdmin && !isOnlyWebhook)
                   OutlinedButton.icon(
-                    onPressed: () => _handleExcelImport(context),
+                                  onPressed: () => _handleExcelImport(context),
                     icon: const Icon(Icons.upload_file_rounded, size: 15),
                     label: const Text('Import', style: TextStyle(fontSize: 12)),
                     style: secondaryOutlineStyle(),
@@ -1387,9 +1387,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           contentPadding: EdgeInsets.zero,
                           leading: Icon(Icons.delete_sweep_rounded, size: 20, color: Color(0xFFDC2626)),
                           title: Text('Clean CRM Data', style: TextStyle(color: Color(0xFFDC2626))),
-                        ),
-                      ),
-                  ],
+                              ),
+                            ),
+                          ],
                   child: Container(
                     height: 36,
                     width: 36,
@@ -1407,15 +1407,15 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   label: const Text('Add Lead', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   style: FilledButton.styleFrom(
                     backgroundColor: primaryColor,
-                    foregroundColor: Colors.white,
+                                foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     visualDensity: VisualDensity.compact,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-              ],
-            );
-          }
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                      ],
+                    );
+                  }
 
           Widget buildLeadFlowChips() {
             return Wrap(
@@ -1424,8 +1424,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                     Icon(Icons.alt_route_rounded, size: 15, color: primaryColor),
                     const SizedBox(width: 4),
                     Text(
@@ -1597,9 +1597,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val ? 'WL' : 'ALL'));
                     },
                   ),
-              ],
-            );
-          }
+                    ],
+                  );
+                }
 
           Widget buildViewModeToggle() {
             final isMobileScreen = MediaQuery.sizeOf(context).width < 700;
@@ -1640,16 +1640,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             );
           }
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
                 child: isNarrow
                     ? Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
+                      children: [
                           Row(
                             children: [
                               Expanded(child: buildSearchField()),
@@ -1661,7 +1661,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           ),
                           const SizedBox(height: 8),
                           Row(
-                            children: [
+                children: [
                               Expanded(child: buildProjectSelector()),
                               const SizedBox(width: 8),
                               Expanded(child: buildCampaignSelector()),
@@ -1674,7 +1674,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         ],
                       )
                     : Row(
-                        children: [
+                children: [
                           Expanded(flex: 3, child: buildSearchField()),
                           const SizedBox(width: 8),
                           Expanded(flex: 2, child: buildProjectSelector()),
@@ -1692,12 +1692,12 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               Divider(height: 1, thickness: 1, color: borderColor.withValues(alpha: 0.6)),
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                   alignment: WrapAlignment.spaceBetween,
-                  children: [
+                children: [
                     buildLeadFlowChips(),
                     SizedBox(
                       width: 155,
@@ -1738,10 +1738,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     final state = context.read<CrmLeadsBloc>().state;
     if (state.status.isLoading && filteredLeads.isEmpty) {
       return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(40),
-          child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
-        ),
+              child: Padding(
+                padding: EdgeInsets.all(40),
+                child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
+              ),
       );
     }
     if (state.status.isFailure && filteredLeads.isEmpty) {
@@ -1751,18 +1751,18 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     }
     if (filteredLeads.isEmpty) {
       return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(40),
-        decoration: BoxDecoration(
-          color: cardBg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: borderColor),
-        ),
-        child: Center(
-          child: Column(
-            children: [
-              Icon(Icons.assignment_late_outlined, size: 48, color: textMuted),
-              const SizedBox(height: 12),
+              width: double.infinity,
+              padding: const EdgeInsets.all(40),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.assignment_late_outlined, size: 48, color: textMuted),
+                    const SizedBox(height: 12),
               Text(
                 'No Pre-Sales Leads Found in this Flow',
                 style: TextStyle(
@@ -1771,14 +1771,14 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   color: isDark ? Colors.white : const Color(0xFF1E293B),
                 ),
               ),
-              const SizedBox(height: 6),
+                    const SizedBox(height: 6),
               Text(
                 'Try clearing filters or adding new leads.',
                 style: TextStyle(fontSize: 13, color: textMuted),
               ),
-            ],
-          ),
-        ),
+                  ],
+                ),
+              ),
       );
     }
 
@@ -1831,7 +1831,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        RepaintBoundary(
+            RepaintBoundary(
               child: Container(
                 decoration: BoxDecoration(
                   color: cardBg,
@@ -2014,7 +2014,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                             borderRadius: BorderRadius.circular(6),
                                           ),
                                           child: const Text('🔍 Google', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFEA4335))),
-                                        )
+                                    )
                                   : (!lead.isManual && lead.leadSource == 'WEBHOOK')
                                       ? Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -2030,11 +2030,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                                   ? 'Excel import by ${lead.createdByName}'
                                                   : 'Imported from Excel',
                                               child: Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFF16A34A).withValues(alpha: 0.12),
-                                                  borderRadius: BorderRadius.circular(6),
-                                                ),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
                                                 child: Column(
                                                   mainAxisSize: MainAxisSize.min,
                                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2259,75 +2259,75 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       ),
                                     ),
                                   ),
-                                  (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
-                                      ? InkWell(
+                              (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
+                                  ? InkWell(
+                                      borderRadius: BorderRadius.circular(6),
+                                      onTap: (isAdmin || (canAlterLead && canTransfer && userEmployeeId != null && userEmployeeId == lead.telecallerId))
+                                          ? () => _showTransferLeadModal(context, lead, salesUsers)
+                                          : null,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF16A34A).withValues(alpha: 0.12),
                                           borderRadius: BorderRadius.circular(6),
-                                          onTap: (isAdmin || (canAlterLead && canTransfer && userEmployeeId != null && userEmployeeId == lead.telecallerId))
-                                              ? () => _showTransferLeadModal(context, lead, salesUsers)
-                                              : null,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF16A34A).withValues(alpha: 0.12),
-                                              borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.3)),
+                                          border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.3)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.headset_mic_rounded, size: 12, color: Color(0xFF16A34A)),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              lead.telecallerName!,
+                                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
                                             ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(Icons.headset_mic_rounded, size: 12, color: Color(0xFF16A34A)),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  lead.telecallerName!,
-                                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
-                                                ),
-                                                if (isAdmin || (canTransfer && userEmployeeId != null && userEmployeeId == lead.telecallerId)) ...[
-                                                  const SizedBox(width: 6),
-                                                  Tooltip(
-                                                    message: 'Transfer this lead to another telecaller',
-                                                    child: Container(
-                                                      padding: const EdgeInsets.all(2),
-                                                      decoration: BoxDecoration(
-                                                        color: const Color(0xFF16A34A).withValues(alpha: 0.2),
-                                                        borderRadius: BorderRadius.circular(4),
-                                                      ),
-                                                      child: const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFF16A34A)),
-                                                    ),
+                                            if (isAdmin || (canTransfer && userEmployeeId != null && userEmployeeId == lead.telecallerId)) ...[
+                                              const SizedBox(width: 6),
+                                              Tooltip(
+                                                message: 'Transfer this lead to another telecaller',
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(2),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF16A34A).withValues(alpha: 0.2),
+                                                    borderRadius: BorderRadius.circular(4),
                                                   ),
-                                                ],
-                                              ],
-                                            ),
-                                          ),
-                                        )
-                                      : InkWell(
-                                          borderRadius: BorderRadius.circular(6),
-                                          onTap: isAdmin ? () => _showTransferLeadModal(context, lead, salesUsers) : null,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFD97706).withValues(alpha: 0.12),
-                                              borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.3)),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(Icons.hourglass_top_rounded, size: 12, color: Color(0xFFD97706)),
-                                                const SizedBox(width: 4),
-                                                const Text(
-                                                  'Waiting List (WL)',
-                                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
+                                                  child: const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFF16A34A)),
                                                 ),
-                                                if (isAdmin) ...[
-                                                  const SizedBox(width: 4),
-                                                  const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFFD97706)),
-                                                ],
-                                              ],
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                  : InkWell(
+                                      borderRadius: BorderRadius.circular(6),
+                                      onTap: isAdmin ? () => _showTransferLeadModal(context, lead, salesUsers) : null,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.3)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.hourglass_top_rounded, size: 12, color: Color(0xFFD97706)),
+                                            const SizedBox(width: 4),
+                                            const Text(
+                                              'Waiting List (WL)',
+                                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
                                             ),
-                                          ),
+                                            if (isAdmin) ...[
+                                              const SizedBox(width: 4),
+                                              const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFFD97706)),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
                                         ),
                                 ],
-                              ),
+                                    ),
                             ),
 
                             // Assigned To Column (Sales Representative / Finserve Manager)
@@ -2475,19 +2475,19 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                               ),
                                             ),
                                           ),
-                                          Text(
+                                Text(
                                             cellValue.isEmpty ? '-' : cellValue,
                                             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                                           ),
                                         ],
                                       )
                                     : Text(
-                                        cellValue.isEmpty ? '-' : cellValue,
-                                        style: TextStyle(
-                                          fontSize: 13,
+                                  cellValue.isEmpty ? '-' : cellValue,
+                                  style: TextStyle(
+                                    fontSize: 13,
                                           fontWeight: FontWeight.normal,
-                                        ),
-                                      ),
+                                  ),
+                                ),
                               );
                             }),
 
@@ -2678,7 +2678,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 icon: const Icon(Icons.chevron_right_rounded),
               ),
             ],
-          ),
+            ),
         ],
       ),
     );
@@ -3851,10 +3851,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       side: BorderSide(color: primaryColor),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
-                  ),
-                  IconButton.filledTonal(
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                    tooltip: 'Reload Call Logs',
+              ),
+              IconButton.filledTonal(
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                tooltip: 'Reload Call Logs',
                     onPressed: () =>
                         context.read<CrmLeadsBloc>().add(const CrmLeadsCallLogsFilterChanged()),
                   ),
@@ -5861,34 +5861,34 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               height: dialogHeight,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+              children: [
                   // Header
-                  Container(
+                Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    decoration: BoxDecoration(
+                  decoration: BoxDecoration(
                       border: Border(bottom: BorderSide(color: borderColor)),
                       color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.5) : const Color(0xFFF8FAFC),
                     ),
                     child: Row(
                       children: [
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                               const Text(
                                 'Lead Import Studio',
                                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                               ),
                               const SizedBox(height: 2),
-                              Text(
+                      Text(
                                 '${file.name} • ${(file.size / 1024).toStringAsFixed(1)} KB',
                                 style: TextStyle(fontSize: 12, color: textMuted),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
+                      ),
+                    ],
+                  ),
+                ),
                         IconButton(
                           icon: Icon(
                             isFullScreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
@@ -5916,7 +5916,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     decoration: BoxDecoration(
                       border: Border(bottom: BorderSide(color: borderColor)),
                     ),
-                    child: SingleChildScrollView(
+              child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
@@ -5974,9 +5974,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   Expanded(
                     child: isLoadingPreview
                         ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                                 SizedBox(
                                   width: 28,
                                   height: 28,
@@ -6082,14 +6082,14 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ),
 
                   // Bottom Action Footer
-                  Container(
+                    Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    decoration: BoxDecoration(
+                      decoration: BoxDecoration(
                       border: Border(top: BorderSide(color: borderColor)),
                       color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.3) : const Color(0xFFF8FAFC),
-                    ),
-                    child: Row(
-                      children: [
+                      ),
+                      child: Row(
+                        children: [
                         if (currentStep > 1)
                           OutlinedButton(
                             style: OutlinedButton.styleFrom(
@@ -6170,7 +6170,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               context.read<CrmLeadsBloc>().add(
                                     CrmLeadsExcelImported(
                                       file.bytes!,
-                                      file.name,
+                              file.name,
                                       campaignId: selectedCampaignId,
                                       sheetName: selectedSheet,
                                       selectedHeaders: selectedHeaders.toList(),
@@ -6248,16 +6248,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               ),
             ),
             const SizedBox(width: 8),
-            Text(
+                          Text(
               title,
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                 color: textColor,
               ),
-            ),
-          ],
-        ),
+                          ),
+                        ],
+                      ),
       ),
     );
   }
@@ -6322,8 +6322,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             Text(
               'Verify which campaign and worksheet these leads will be placed into.',
               style: TextStyle(fontSize: 12, color: textMuted),
-            ),
-            const SizedBox(height: 16),
+                    ),
+                    const SizedBox(height: 16),
 
             // Sheet selector
             if (sheetNames.length > 1) ...[
@@ -6350,24 +6350,24 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
             // Campaign selector
             const Text('Target Campaign *', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 6),
-            DropdownButtonFormField<String?>(
-              isExpanded: true,
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String?>(
+                      isExpanded: true,
               value: selectedCampaignId,
               decoration: InputDecoration(
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                isDense: true,
-              ),
-              items: campaigns.map((c) {
-                return DropdownMenuItem<String?>(
-                  value: c.id,
-                  child: Text('${c.name} (${c.code})', overflow: TextOverflow.ellipsis),
-                );
-              }).toList(),
+                        isDense: true,
+                      ),
+                      items: campaigns.map((c) {
+                        return DropdownMenuItem<String?>(
+                          value: c.id,
+                          child: Text('${c.name} (${c.code})', overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
               onChanged: onCampaignChanged,
-            ),
-            const SizedBox(height: 20),
+                    ),
+                    const SizedBox(height: 20),
 
             // Destination Summary Box
             Container(
@@ -6380,10 +6380,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                    const Text(
                     'Target Scope Summary',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                  ),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -6659,7 +6659,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+                    const Text(
             'Telecaller Allocation Rule',
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
           ),
@@ -6671,122 +6671,122 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           const SizedBox(height: 12),
 
           // Allocation Radio 1: Round-Robin
-          RadioListTile<String>(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            value: 'ROUND_ROBIN',
-            groupValue: assignmentMode,
+                    RadioListTile<String>(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: 'ROUND_ROBIN',
+                      groupValue: assignmentMode,
             title: const Text('Round-Robin distribution across selected telecallers',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             subtitle: Text('Evenly distribute leads among selected agents',
                 style: TextStyle(fontSize: 11, color: textMuted)),
             onChanged: (val) => onAssignmentModeChanged(val ?? 'ROUND_ROBIN'),
-          ),
-
-          if (assignmentMode == 'ROUND_ROBIN') ...[
-            Padding(
-              padding: const EdgeInsets.only(left: 32, bottom: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  InkWell(
-                    onTap: () => _showTelecallerMultiSelectDialog(
-                      context: context,
-                      salesUsers: salesUsers,
-                      initialSelected: multiSelectedTelecallerIds,
-                      onConfirm: (updated) => onMultiSelectedTelecallerIdsChanged(updated),
                     ),
-                    child: Container(
+
+                    if (assignmentMode == 'ROUND_ROBIN') ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 32, bottom: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            InkWell(
+                              onTap: () => _showTelecallerMultiSelectDialog(
+                                context: context,
+                                salesUsers: salesUsers,
+                                initialSelected: multiSelectedTelecallerIds,
+                      onConfirm: (updated) => onMultiSelectedTelecallerIdsChanged(updated),
+                              ),
+                              child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                      decoration: BoxDecoration(
+                                decoration: BoxDecoration(
                         border: Border.all(color: borderColor),
                         borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              multiSelectedTelecallerIds.isEmpty
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        multiSelectedTelecallerIds.isEmpty
                                   ? 'Select telecallers for round-robin...'
-                                  : '${multiSelectedTelecallerIds.length} telecaller(s) selected (Click to modify)',
-                              style: TextStyle(
-                                fontSize: 12.5,
+                                            : '${multiSelectedTelecallerIds.length} telecaller(s) selected (Click to modify)',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
                                 fontWeight: multiSelectedTelecallerIds.isEmpty
                                     ? FontWeight.normal
                                     : FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                          const Text('Change', style: TextStyle(fontSize: 12, color: Color(0xFF2563EB))),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                          const Text('Change', style: TextStyle(fontSize: 12, color: Color(0xFF2563EB))),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (selectedEmployees.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: selectedEmployees.map((emp) {
-                        return Chip(
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                          label: Text(emp.fullName, style: const TextStyle(fontSize: 11)),
-                          deleteIcon: const Icon(Icons.close, size: 14),
+                            if (selectedEmployees.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: selectedEmployees.map((emp) {
+                                  return Chip(
+                                    labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                                    label: Text(emp.fullName, style: const TextStyle(fontSize: 11)),
+                                    deleteIcon: const Icon(Icons.close, size: 14),
                           onDeleted: () {
                             final updated = List<int>.from(multiSelectedTelecallerIds)..remove(emp.employeeId);
                             onMultiSelectedTelecallerIdsChanged(updated);
                           },
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
 
           // Allocation Radio 2: Specific Telecaller
-          RadioListTile<String>(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            value: 'SPECIFIC',
-            groupValue: assignmentMode,
+                    RadioListTile<String>(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: 'SPECIFIC',
+                      groupValue: assignmentMode,
             title: const Text('Allocate all leads to one specific telecaller',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             subtitle: Text('Directly assign every row in this batch to a chosen telecaller',
                 style: TextStyle(fontSize: 11, color: textMuted)),
             onChanged: (val) => onAssignmentModeChanged(val ?? 'SPECIFIC'),
-          ),
+                    ),
 
-          if (assignmentMode == 'SPECIFIC') ...[
-            Padding(
-              padding: const EdgeInsets.only(left: 32, bottom: 8),
-              child: DropdownButtonFormField<int?>(
-                isExpanded: true,
+                    if (assignmentMode == 'SPECIFIC') ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 32, bottom: 8),
+                        child: DropdownButtonFormField<int?>(
+                          isExpanded: true,
                 value: specificTelecallerId,
                 decoration: InputDecoration(
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  isDense: true,
-                  hintText: 'Choose specific telecaller...',
-                ),
-                items: salesUsers.map((u) {
-                  return DropdownMenuItem<int?>(
-                    value: u.employeeId,
-                    child: Text('${u.fullName} (#${u.employeeId})', overflow: TextOverflow.ellipsis),
-                  );
-                }).toList(),
+                            isDense: true,
+                            hintText: 'Choose specific telecaller...',
+                          ),
+                          items: salesUsers.map((u) {
+                            return DropdownMenuItem<int?>(
+                              value: u.employeeId,
+                              child: Text('${u.fullName} (#${u.employeeId})', overflow: TextOverflow.ellipsis),
+                            );
+                          }).toList(),
                 onChanged: (val) => onSpecificTelecallerChanged(val),
-              ),
-            ),
-          ],
+                        ),
+                      ),
+                    ],
 
           // Allocation Radio 3: Unassigned / Waiting List
-          RadioListTile<String>(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            value: 'UNASSIGNED',
-            groupValue: assignmentMode,
+                    RadioListTile<String>(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: 'UNASSIGNED',
+                      groupValue: assignmentMode,
             title: const Text('Leave in Waiting List (WL) / Auto-dispatch',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             subtitle: Text('Leads will enter unallocated pool or be dispatched when callers are available',
@@ -6794,8 +6794,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             onChanged: (val) => onAssignmentModeChanged(val ?? 'UNASSIGNED'),
           ),
 
-          const SizedBox(height: 12),
-          const Divider(),
+                    const SizedBox(height: 12),
+                    const Divider(),
           const SizedBox(height: 12),
 
           // Final Review Box
@@ -6956,10 +6956,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               final isSelected = selectedHeaders.contains(headerName);
 
               return CheckboxListTile(
-                dense: true,
+                      dense: true,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                 value: isSelected,
-                activeColor: const Color(0xFF16A34A),
+                      activeColor: const Color(0xFF16A34A),
                 onChanged: (val) {
                   setModalState(() {
                     if (val == true) {
@@ -8865,9 +8865,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       ElevatedButton(
-                        style: ElevatedButton.styleFrom(
+                style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF6366F1),
-                          foregroundColor: Colors.white,
+                  foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
@@ -11008,8 +11008,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               const SizedBox(width: 8),
                               Expanded(
                                 child: TextField(
-                                  controller: cpPhoneController,
-                                  keyboardType: TextInputType.phone,
+                            controller: cpPhoneController,
+                            keyboardType: TextInputType.phone,
                                   inputFormatters: [
                                     FilteringTextInputFormatter.digitsOnly,
                                     LengthLimitingTextInputFormatter(15),
@@ -11169,48 +11169,48 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: TextField(
-                                    controller: controllers[col.columnKey],
-                                    keyboardType: TextInputType.phone,
+                              controller: controllers[col.columnKey],
+                              keyboardType: TextInputType.phone,
                                     inputFormatters: [
                                       FilteringTextInputFormatter.digitsOnly,
                                       LengthLimitingTextInputFormatter(15),
                                     ],
-                                    onChanged: (val) async {
+                              onChanged: (val) async {
                                       final composed = composeInternationalPhone(
                                         countryCode: phoneCountryCodeController.text,
                                         nationalNumber: val,
                                       );
                                       final clean = composed.length >= 10 ? composed.substring(composed.length - 10) : composed;
                                       if (clean.length >= 7) {
-                                        setDialogState(() => isCheckingPhone = true);
-                                        final res = await context.read<CrmRepository>().checkPhone(clean);
-                                        setDialogState(() {
-                                          isCheckingPhone = false;
-                                          existingLeadInfo = res['exists'] == true ? (res['lead'] as Map<String, dynamic>?) : null;
-                                          if (existingLeadInfo == null) allowDuplicate = false;
-                                        });
-                                      } else if (existingLeadInfo != null) {
-                                        setDialogState(() {
-                                          existingLeadInfo = null;
-                                          allowDuplicate = false;
-                                        });
-                                      }
-                                    },
-                                    decoration: InputDecoration(
+                                  setDialogState(() => isCheckingPhone = true);
+                                  final res = await context.read<CrmRepository>().checkPhone(clean);
+                                  setDialogState(() {
+                                    isCheckingPhone = false;
+                                    existingLeadInfo = res['exists'] == true ? (res['lead'] as Map<String, dynamic>?) : null;
+                                    if (existingLeadInfo == null) allowDuplicate = false;
+                                  });
+                                } else if (existingLeadInfo != null) {
+                                  setDialogState(() {
+                                    existingLeadInfo = null;
+                                    allowDuplicate = false;
+                                  });
+                                }
+                              },
+                              decoration: InputDecoration(
                                       hintText: 'Mobile number',
-                                      border: const OutlineInputBorder(),
-                                      suffixIcon: isCheckingPhone
-                                          ? const Padding(
-                                              padding: EdgeInsets.all(12),
-                                              child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-                                            )
-                                          : (existingLeadInfo != null
-                                              ? const Tooltip(
-                                                  message: 'Phone number already exists in CRM',
-                                                  child: Icon(Icons.warning_amber_rounded, color: Colors.amber),
-                                                )
-                                              : null),
-                                    ),
+                                border: const OutlineInputBorder(),
+                                suffixIcon: isCheckingPhone
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(12),
+                                        child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                                      )
+                                    : (existingLeadInfo != null
+                                        ? const Tooltip(
+                                            message: 'Phone number already exists in CRM',
+                                            child: Icon(Icons.warning_amber_rounded, color: Colors.amber),
+                                          )
+                                        : null),
+                              ),
                                   ),
                                 ),
                               ],
@@ -11311,7 +11311,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   'Opens the WhatsApp template dialog for this new lead',
                   style: TextStyle(fontSize: 11),
                 ),
-              ),
+                ),
             ],
           ),
         ),
@@ -11436,17 +11436,17 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
             final shouldSendWa = sendWhatsapp;
             final payload = <String, dynamic>{
-              'name': name.isEmpty ? 'Unnamed Lead' : name,
-              'phone': phone,
-              'status': 'NOT_STARTED',
-              'leadSource': 'MANUAL',
-              'channelPartnerName': selectedLeadSource == 'Channel Partner' ? cpName : null,
-              'channelPartnerPhone': selectedLeadSource == 'Channel Partner' ? cpPhone : null,
-              'referenceType': selectedLeadSource == 'Reference' ? selectedRefType : null,
-              'referenceName': selectedLeadSource == 'Reference' ? refName : null,
-              'campaignId': effectiveCampaignId,
-              'customFields': customFields,
-              'allowDuplicate': allowDuplicate,
+                    'name': name.isEmpty ? 'Unnamed Lead' : name,
+                    'phone': phone,
+                    'status': 'NOT_STARTED',
+                    'leadSource': 'MANUAL',
+                    'channelPartnerName': selectedLeadSource == 'Channel Partner' ? cpName : null,
+                    'channelPartnerPhone': selectedLeadSource == 'Channel Partner' ? cpPhone : null,
+                    'referenceType': selectedLeadSource == 'Reference' ? selectedRefType : null,
+                    'referenceName': selectedLeadSource == 'Reference' ? refName : null,
+                    'campaignId': effectiveCampaignId,
+                    'customFields': customFields,
+                    'allowDuplicate': allowDuplicate,
             };
 
             Navigator.pop(dialogCtx);
@@ -12775,7 +12775,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   onPressed: () => Navigator.pop(dialogCtx),
                   child: const Text('Cancel'),
                 ),
-                  ElevatedButton.icon(
+                ElevatedButton.icon(
                   icon: const Icon(Icons.delete_outline_rounded, size: 18),
                   label: const Text('Not Interested → Bin'),
                   style: ElevatedButton.styleFrom(

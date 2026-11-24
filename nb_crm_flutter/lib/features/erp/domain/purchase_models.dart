@@ -5,6 +5,7 @@ class ErpPurchaseSettings {
     this.defaultApproverName,
     this.csApproverEmployeeId,
     this.csApproverName,
+    this.defaultPoTerms = const [],
   });
 
   final String id;
@@ -12,10 +13,12 @@ class ErpPurchaseSettings {
   final String? defaultApproverName;
   final int? csApproverEmployeeId;
   final String? csApproverName;
+  final List<String> defaultPoTerms;
 
   factory ErpPurchaseSettings.fromJson(Map<String, dynamic> json) {
     final approver = json['defaultApprover'];
     final cs = json['csApprover'];
+    final termsRaw = json['defaultPoTerms'];
     return ErpPurchaseSettings(
       id: json['id']?.toString() ?? '',
       defaultApproverEmployeeId: json['defaultApproverEmployeeId'] is int
@@ -26,6 +29,55 @@ class ErpPurchaseSettings {
           ? json['csApproverEmployeeId'] as int
           : int.tryParse('${json['csApproverEmployeeId'] ?? ''}'),
       csApproverName: cs is Map ? cs['name']?.toString() : null,
+      defaultPoTerms: termsRaw is List
+          ? termsRaw.map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList()
+          : const [],
+    );
+  }
+}
+
+class ErpPurchaseOrderDetail {
+  const ErpPurchaseOrderDetail({
+    required this.id,
+    required this.poNumber,
+    required this.vendorName,
+    required this.orderDate,
+    required this.status,
+    this.totalAmount,
+    this.cgstRate = 9,
+    this.sgstRate = 9,
+    this.termsAndConditions = const [],
+    this.remarks,
+  });
+
+  final String id;
+  final String poNumber;
+  final String vendorName;
+  final DateTime orderDate;
+  final String status;
+  final double? totalAmount;
+  final double cgstRate;
+  final double sgstRate;
+  final List<String> termsAndConditions;
+  final String? remarks;
+
+  factory ErpPurchaseOrderDetail.fromJson(Map<String, dynamic> json) {
+    final termsRaw = json['termsAndConditions'];
+    return ErpPurchaseOrderDetail(
+      id: json['id']?.toString() ?? '',
+      poNumber: json['poNumber']?.toString() ?? '',
+      vendorName: json['vendorName']?.toString() ?? '',
+      orderDate: DateTime.tryParse(json['orderDate']?.toString() ?? '') ?? DateTime.now(),
+      status: json['status']?.toString() ?? 'OPEN',
+      totalAmount: json['totalAmount'] == null
+          ? null
+          : double.tryParse('${json['totalAmount']}'),
+      cgstRate: double.tryParse('${json['cgstRate'] ?? 9}') ?? 9,
+      sgstRate: double.tryParse('${json['sgstRate'] ?? 9}') ?? 9,
+      termsAndConditions: termsRaw is List
+          ? termsRaw.map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList()
+          : const [],
+      remarks: json['remarks']?.toString(),
     );
   }
 }

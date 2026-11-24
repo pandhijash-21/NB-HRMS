@@ -96,7 +96,7 @@ class _DprDetailViewState extends State<_DprDetailView> {
           .replaceAll(RegExp(r'[^a-zA-Z0-9_\- ]'), '')
           .trim()
           .replaceAll(RegExp(r'\s+'), '_');
-      final name = 'DPR_${project}_$tag_${dpr.dprNo}.xlsx';
+      final name = 'DPR_${project}_${tag}_${dpr.dprNo}.xlsx';
       await downloadBytes(
         bytes,
         name,

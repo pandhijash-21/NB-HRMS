@@ -72,4 +72,12 @@ class DprRepository {
   Future<void> remove(String id) async {
     await _dio.deleteEnvelope('dpr/$id', parse: (_) => true);
   }
+
+  Future<Uint8List> exportExcel(String id) async {
+    final response = await _dio.dio.get<List<int>>(
+      'dpr/$id/export.xlsx',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? const []);
+  }
 }

@@ -244,6 +244,155 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
   Widget _buildProfileSummaryHeader(EmployeeProfile profile) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final statusColor = profile.status.toUpperCase() == 'ACTIVE' ? Colors.green : Colors.grey;
+    final name = profile.generalInfo?.fullName ?? 'Unnamed Employee';
+    final designation = profile.generalInfo?.designation ?? 'No Designation';
+    final department = profile.generalInfo?.department ?? 'No Dept';
+
+    Widget identityBlock({required bool compact}) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            name,
+            maxLines: 2,
+            softWrap: true,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: compact ? 16 : 18,
+              fontWeight: FontWeight.w800,
+              height: 1.25,
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '$designation  ·  $department',
+            maxLines: 2,
+            softWrap: true,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              height: 1.3,
+              color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isDark
+                        ? const Color(0xFFC5A059).withValues(alpha: 0.15)
+                        : const Color(0xFFCFD8DC),
+                  ),
+                ),
+                child: Text(
+                  'Code: ${profile.generalInfo?.employeeCode ?? "N/A"}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
+                  border: Border.all(color: statusColor, width: 1.2),
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: Text(
+                  profile.status,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: statusColor,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    final accessCard = Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.security_rounded, size: 14, color: Color(0xFFC5A059)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Platform Login Access',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white70 : const Color(0xFF212F3D),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _buildAccessChip(
+                icon: Icons.phone_android_rounded,
+                label: 'App',
+                allowed: profile.allowApp,
+                isDark: isDark,
+                onToggle: () => _updatePlatformAccess(profile.id, allowApp: !profile.allowApp),
+              ),
+              _buildAccessChip(
+                icon: Icons.language_rounded,
+                label: 'Browser',
+                allowed: profile.allowBrowser,
+                isDark: isDark,
+                onToggle: () => _updatePlatformAccess(profile.id, allowBrowser: !profile.allowBrowser),
+              ),
+              _buildAccessChip(
+                icon: Icons.timer_outlined,
+                label: 'Browser After Punch-In',
+                allowed: profile.allowBrowserAfterPunchIn,
+                isDark: isDark,
+                onToggle: () => _updatePlatformAccess(
+                  profile.id,
+                  allowBrowserAfterPunchIn: !profile.allowBrowserAfterPunchIn,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -255,158 +404,65 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
           ),
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      child: Row(
-        children: [
-          Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final narrow = constraints.maxWidth < 720;
+          final avatar = Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFF263238).withValues(alpha: 0.15),
+                color: isDark
+                    ? const Color(0xFFC5A059).withValues(alpha: 0.2)
+                    : const Color(0xFF263238).withValues(alpha: 0.15),
                 width: 1.5,
               ),
             ),
             child: NbProfilePhoto(
               url: profile.photoUrl,
-              name: profile.generalInfo?.fullName,
+              name: name,
               identity: 'emp-${profile.id}',
               radius: 28,
               backgroundColor: isDark ? const Color(0xFF2B2722) : const Color(0xFFECEFF1),
               foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
             ),
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          );
+
+          if (narrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  profile.generalInfo?.fullName ?? 'Unnamed Employee',
-                  style: TextStyle(
-                    fontSize: 18, 
-                    fontWeight: FontWeight.w800, 
-                    color: isDark ? Colors.white : const Color(0xFF212F3D),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${profile.generalInfo?.designation ?? "No Designation"}  ·  ${profile.generalInfo?.department ?? "No Dept"}',
-                  style: TextStyle(
-                    fontSize: 13, 
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white54 : const Color(0xFF607D8B),
-                  ),
-                ),
-                const SizedBox(height: 8),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
-                        ),
-                      ),
-                      child: Text(
-                        'Code: ${profile.generalInfo?.employeeCode ?? "N/A"}',
-                        style: TextStyle(
-                          fontSize: 10, 
-                          color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238), 
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
-                        border: Border.all(color: statusColor, width: 1.2),
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      child: Text(
-                        profile.status,
-                        style: TextStyle(
-                          fontSize: 9, 
-                          fontWeight: FontWeight.w800, 
-                          color: statusColor, 
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
+                    avatar,
+                    const SizedBox(width: 14),
+                    Expanded(child: identityBlock(compact: true)),
                   ],
                 ),
+                const SizedBox(height: 14),
+                accessCard,
               ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          // Platform Access Control Card
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
-                width: 1,
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              avatar,
+              const SizedBox(width: 18),
+              Expanded(child: identityBlock(compact: false)),
+              const SizedBox(width: 16),
+              Flexible(
+                flex: 0,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360, minWidth: 220),
+                  child: accessCard,
+                ),
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.security_rounded, size: 14, color: Color(0xFFC5A059)),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Platform Login Access',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: isDark ? Colors.white70 : const Color(0xFF212F3D),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    _buildAccessChip(
-                      icon: Icons.phone_android_rounded,
-                      label: 'App',
-                      allowed: profile.allowApp,
-                      isDark: isDark,
-                      onToggle: () => _updatePlatformAccess(profile.id, allowApp: !profile.allowApp),
-                    ),
-                    _buildAccessChip(
-                      icon: Icons.language_rounded,
-                      label: 'Browser',
-                      allowed: profile.allowBrowser,
-                      isDark: isDark,
-                      onToggle: () => _updatePlatformAccess(profile.id, allowBrowser: !profile.allowBrowser),
-                    ),
-                    _buildAccessChip(
-                      icon: Icons.timer_outlined,
-                      label: 'Browser After Punch-In',
-                      allowed: profile.allowBrowserAfterPunchIn,
-                      isDark: isDark,
-                      onToggle: () => _updatePlatformAccess(
-                        profile.id,
-                        allowBrowserAfterPunchIn: !profile.allowBrowserAfterPunchIn,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

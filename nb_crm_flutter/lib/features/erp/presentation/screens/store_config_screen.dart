@@ -714,10 +714,41 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
         ),
         leading: const AppBackButton(fallbackLocation: '/erp/home'),
         actions: [
-          TextButton.icon(
-            onPressed: () => context.push('/erp/store/purchase-requests'),
-            icon: const Icon(Icons.request_quote_outlined, size: 18),
-            label: const Text('Purchase Request'),
+          Builder(
+            builder: (ctx) {
+              final narrow = MediaQuery.sizeOf(ctx).width < 420;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                child: narrow
+                    ? IconButton.filledTonal(
+                        onPressed: () => context.push('/erp/store/purchase-requests'),
+                        tooltip: 'Purchase Request',
+                        style: IconButton.styleFrom(
+                          foregroundColor: const Color(0xFF0D9488),
+                          backgroundColor: isDark
+                              ? const Color(0xFF0D9488).withValues(alpha: 0.18)
+                              : const Color(0xFFCCFBF1),
+                        ),
+                        icon: const Icon(Icons.request_quote_outlined, size: 20),
+                      )
+                    : FilledButton.tonalIcon(
+                        onPressed: () => context.push('/erp/store/purchase-requests'),
+                        style: FilledButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          foregroundColor: const Color(0xFF0D9488),
+                          backgroundColor: isDark
+                              ? const Color(0xFF0D9488).withValues(alpha: 0.18)
+                              : const Color(0xFFCCFBF1),
+                        ),
+                        icon: const Icon(Icons.request_quote_outlined, size: 18),
+                        label: const Text(
+                          'Purchase Request',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                      ),
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
@@ -726,29 +757,47 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
           ),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
+          preferredSize: const Size.fromHeight(52),
           child: TourTarget(
             id: TourIds.step('erp.store', 2),
             child: Container(
-            color: isDark ? const Color(0xFF1A1816) : Colors.white,
-            child: TabBar(
-              controller: _storeTabController,
-              indicatorColor: const Color(0xFF0D9488),
-              indicatorWeight: 3,
-              labelColor: const Color(0xFF0D9488),
-              unselectedLabelColor: isDark ? Colors.white60 : const Color(0xFF64748B),
-              tabs: const [
-                Tab(
-                  icon: Icon(Icons.inventory_2_outlined),
-                  text: 'Material',
-                ),
-                Tab(
-                  icon: Icon(Icons.precision_manufacturing_outlined),
-                  text: 'Machine',
-                ),
-              ],
+              color: isDark ? const Color(0xFF1A1816) : Colors.white,
+              child: TabBar(
+                controller: _storeTabController,
+                indicatorColor: const Color(0xFF0D9488),
+                indicatorWeight: 3,
+                labelColor: const Color(0xFF0D9488),
+                unselectedLabelColor: isDark ? Colors.white60 : const Color(0xFF64748B),
+                labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                tabs: const [
+                  Tab(
+                    height: 46,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.inventory_2_outlined, size: 18),
+                        SizedBox(width: 8),
+                        Text('Material'),
+                      ],
+                    ),
+                  ),
+                  Tab(
+                    height: 46,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.precision_manufacturing_outlined, size: 18),
+                        SizedBox(width: 8),
+                        Text('Machine'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
           ),
         ),
       ),

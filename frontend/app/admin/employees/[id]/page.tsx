@@ -17,7 +17,8 @@ import { AttendanceTab } from "@/components/profile/tabs/AttendanceTab";
 import { DocumentsTab } from "@/components/profile/tabs/DocumentsTab";
 import { SalaryTab } from "@/components/profile/tabs/SalaryTab";
 import { BankTab } from "@/components/profile/tabs/BankTab";
-import { canManageEmployeeAttendance, canManageLetters } from "@/lib/auth/permissions";
+import { canManageEmployeeAttendance, canManageLetters, hasPermission } from "@/lib/auth/permissions";
+import { useLivePermissions } from "@/lib/hooks/useLivePermissions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmploymentHistory } from "@/components/employees/EmploymentHistory";
 import { InstituteTransferDialog } from "@/components/employees/InstituteTransferDialog";
@@ -31,8 +32,7 @@ interface PageProps {
 export default function AdminEmployeeProfilePage({ params }: PageProps) {
   const { id } = use(params);
   const { data: session } = useSession();
-  const perms = (session?.user as { permissions?: Record<string, string[]> })?.permissions;
-  const role = (session?.user as { role?: string })?.role;
+  const { permissions: perms, role } = useLivePermissions();
   const canManageAttendanceSettings = canManageEmployeeAttendance(perms, role);
   const canGenerateLetters = canManageLetters(perms, role);
   const { data: rawEmployee, isLoading: loading, refetch } = useAdminEmployee(id);
@@ -68,19 +68,76 @@ export default function AdminEmployeeProfilePage({ params }: PageProps) {
     );
   }
 
-  const tabs = [
-    { value: "general",   label: "General",   content: <GeneralTab   employee={employee} isAdmin onUpdate={refetch} /> },
-    { value: "personal",  label: "Personal",  content: <PersonalTab employee={employee} isAdmin onUpdate={refetch} /> },
-    { value: "address",   label: "Address",   content: <AddressTab   employeeId={id} isAdmin /> },
-    { value: "other",     label: "Other",     content: <OtherTab     employee={employee} employeeId={id} isAdmin onUpdate={refetch} /> },
-    { value: "salary",    label: "Salary",    content: <SalaryTab    employee={employee} isAdmin /> },
-    { value: "bank",      label: "Bank",      content: <BankTab      employee={employee} isAdmin onUpdate={refetch} /> },
-    { value: "family",    label: "Family",    content: <FamilyTab    employeeId={id} isAdmin /> },
-    { value: "education", label: "Education", content: <EducationTab employeeId={id} isAdmin /> },
-    { value: "experience", label: "Experience", content: <ExperienceTab employeeId={id} isAdmin /> },
-    { value: "documents", label: "Documents", content: <DocumentsTab profile={rawEmployee} canManageLetters={canGenerateLetters} /> },
-    { value: "attendance", label: "Attendance", content: <AttendanceTab employeeId={Number(id)} canManageSettings={canManageAttendanceSettings} /> },
+  const allTabs = [
+    {
+      value: "general",
+      label: "General",
+      visible: hasPermission(perms, "PROFILE_GENERAL", "READ") || hasPermission(perms, "PERSONAL_INFO", "READ"),
+      content: <GeneralTab employee={employee} isAdmin onUpdate={refetch} />,
+    },
+    {
+      value: "personal",
+      label: "Personal",
+      visible: hasPermission(perms, "PROFILE_PERSONAL", "READ") || hasPermission(perms, "PERSONAL_INFO", "READ"),
+      content: <PersonalTab employee={employee} isAdmin onUpdate={refetch} />,
+    },
+    {
+      value: "address",
+      label: "Address",
+      visible: hasPermission(perms, "PROFILE_ADDRESS", "READ") || hasPermission(perms, "PERSONAL_INFO", "READ"),
+      content: <AddressTab employeeId={id} isAdmin />,
+    },
+    {
+      value: "other",
+      label: "Other",
+      visible: hasPermission(perms, "PROFILE_OTHER", "READ") || hasPermission(perms, "PERSONAL_INFO", "READ"),
+      content: <OtherTab employee={employee} employeeId={id} isAdmin onUpdate={refetch} />,
+    },
+    {
+      value: "salary",
+      label: "Salary",
+      visible: hasPermission(perms, "SALARY", "READ"),
+      content: <SalaryTab employee={employee} isAdmin />,
+    },
+    {
+      value: "bank",
+      label: "Bank",
+      visible: hasPermission(perms, "BANK_DETAILS", "READ"),
+      content: <BankTab employee={employee} isAdmin onUpdate={refetch} />,
+    },
+    {
+      value: "family",
+      label: "Family",
+      visible: hasPermission(perms, "PROFILE_FAMILY", "READ") || hasPermission(perms, "PERSONAL_INFO", "READ"),
+      content: <FamilyTab employeeId={id} isAdmin />,
+    },
+    {
+      value: "education",
+      label: "Education",
+      visible: hasPermission(perms, "EDUCATION", "READ"),
+      content: <EducationTab employeeId={id} isAdmin />,
+    },
+    {
+      value: "experience",
+      label: "Experience",
+      visible: hasPermission(perms, "EXPERIENCE", "READ"),
+      content: <ExperienceTab employeeId={id} isAdmin />,
+    },
+    {
+      value: "documents",
+      label: "Documents",
+      visible: hasPermission(perms, "DOCUMENTS", "READ"),
+      content: <DocumentsTab profile={rawEmployee} canManageLetters={canGenerateLetters} />,
+    },
+    {
+      value: "attendance",
+      label: "Attendance",
+      visible: hasPermission(perms, "PROFILE_ATTENDANCE", "READ") || hasPermission(perms, "ATTENDANCE", "READ"),
+      content: <AttendanceTab employeeId={Number(id)} canManageSettings={canManageAttendanceSettings} />,
+    },
   ];
+
+  const tabs = allTabs.filter((t) => t.visible);
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">

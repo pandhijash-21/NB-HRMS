@@ -181,7 +181,7 @@ export const roleService = {
           data: modules.map((m) => ({
             roleId: newRole.id,
             moduleKey: m.key,
-            canRead: true,
+            canRead: false,
             canWrite: false,
             canApprove: false,
             canDelete: false,

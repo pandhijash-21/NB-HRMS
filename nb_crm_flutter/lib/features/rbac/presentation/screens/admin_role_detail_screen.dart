@@ -579,6 +579,16 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
     final current = widget.permByKey[moduleKey];
     if (current == null) return patch;
 
+    // If canRead was explicitly set to false, revoke all permissions on this module
+    if (patch.containsKey('canRead') && patch['canRead'] == false) {
+      patch['canRead'] = false;
+      patch['canWrite'] = false;
+      patch['canApprove'] = false;
+      patch['canDelete'] = false;
+      patch['canExport'] = false;
+      return patch;
+    }
+
     final canRead = patch.containsKey('canRead') ? patch['canRead'] == true : current.canRead;
     var canWrite = patch.containsKey('canWrite') ? patch['canWrite'] == true : current.canWrite;
     var canApprove = patch.containsKey('canApprove') ? patch['canApprove'] == true : current.canApprove;
@@ -587,13 +597,11 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
 
     if (canWrite || canApprove || canDelete || canExport) {
       patch['canRead'] = true;
-    } else if (patch.containsKey('canRead') && patch['canRead'] != true) {
+    } else if (!canRead) {
       patch['canWrite'] = false;
       patch['canApprove'] = false;
       patch['canDelete'] = false;
       patch['canExport'] = false;
-    } else if (canRead) {
-      patch['canRead'] = true;
     }
 
     return patch;

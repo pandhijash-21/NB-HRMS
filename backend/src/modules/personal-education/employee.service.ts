@@ -7,7 +7,8 @@ import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
 import { passwordFromBirthDate, parseBirthDateInput } from '../../utils/dobPassword';
 import bcrypt from 'bcryptjs';
 import { safelyDeleteUserIds } from '../platform/platform.service';
-import { isAdminRole } from '../auth/permissions-map';
+import { isAdminRole, invalidateUserRoleCache } from '../auth/permissions-map';
+import { notifyRolePermissionsUpdated } from '../user-management/permission.service';
 import { redis, connectRedis } from '../../config/redis';
 
 function attachPosition<T extends { user?: { roleId: string } | null }>(
@@ -370,6 +371,7 @@ export const employeeService = {
       throw new Error('Employee has no active user account');
     }
 
+    const previousRoleId = employee.user.roleId;
     const roleId = await resolveRoleIdForPosition(positionDesignationId);
 
     const updatedUser = await prisma.user.update({
@@ -377,6 +379,13 @@ export const employeeService = {
       data: { roleId, updatedBy: updaterId },
       include: { role: { select: { id: true, name: true } } },
     });
+
+    invalidateUserRoleCache(employee.user.id);
+    if (previousRoleId) {
+      await invalidateSession(employee.user.id, previousRoleId);
+      await notifyRolePermissionsUpdated(previousRoleId);
+    }
+    await notifyRolePermissionsUpdated(roleId);
 
     const positionMap = await loadPositionMapByRoleId();
     return {

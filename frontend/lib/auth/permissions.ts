@@ -136,6 +136,18 @@ export function filterAdminNav(
         if (item.href === '/admin/employees') {
           return canViewWorkforce(perms, employeeViewScope);
         }
+        if (item.href === '/admin/audit') {
+          return hasPermission(perms, 'AUDIT', 'READ') || hasPermission(perms, 'REPORTS', 'READ');
+        }
+        if (item.href === '/admin/institutes' || item.href === '/admin/designations') {
+          return hasPermission(perms, 'FIELD_MGMT', 'READ') || hasPermission(perms, 'USER_MGMT', 'READ');
+        }
+        if (item.href === '/admin/live-tracking') {
+          return hasPermission(perms, 'TRACKING', 'READ') || hasPermission(perms, 'ATTENDANCE', 'READ');
+        }
+        if (item.href === '/admin/letters') {
+          return hasPermission(perms, 'DOCUMENTS', 'WRITE') || hasPermission(perms, 'FIELD_MGMT', 'READ');
+        }
         if (!item.module || !item.action) return true;
         return hasPermission(perms, item.module, item.action);
       }),

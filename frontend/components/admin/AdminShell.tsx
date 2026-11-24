@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import api from "@/lib/axios";
+import { useLivePermissions } from "@/lib/hooks/useLivePermissions";
 import {
   filterAdminNav,
   type NavGroupDef,
@@ -258,28 +259,7 @@ const adminNav: NavGroupDef[] = [
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
-  const { data: session } = useSession();
-  const [perms, setPerms] = useState<PermissionMap>(
-    (session?.user as { permissions?: PermissionMap })?.permissions ?? {},
-  );
-  const [viewScope, setViewScope] = useState<string>(
-    (session?.user as { employeeViewScope?: string })?.employeeViewScope ?? "NONE",
-  );
-
-  useEffect(() => {
-    const fromSession = (session?.user as { permissions?: PermissionMap })?.permissions;
-    const scopeFromSession = (session?.user as { employeeViewScope?: string })?.employeeViewScope;
-    if (fromSession && Object.keys(fromSession).length > 0 && scopeFromSession) {
-      setPerms(fromSession);
-      setViewScope(scopeFromSession);
-      return;
-    }
-    api.get("auth/me").then(({ data }) => {
-      setPerms(data.data?.permissions ?? fromSession ?? {});
-      setViewScope(data.data?.employeeViewScope ?? scopeFromSession ?? "NONE");
-    }).catch(() => {});
-  }, [session]);
-
+  const { permissions: perms, employeeViewScope: viewScope } = useLivePermissions();
   const navGroups = filterAdminNav(adminNav, perms, viewScope);
 
   return (

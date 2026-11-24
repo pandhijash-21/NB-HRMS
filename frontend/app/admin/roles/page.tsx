@@ -13,8 +13,9 @@ import { CreatePositionDialog } from "@/components/employees/CreatePositionDialo
 
 export default function RolesPage() {
   const [search, setSearch] = useState("");
+  const [positionsOnly, setPositionsOnly] = useState(false);
 
-  const { roles, loading, refetch } = useRolesList({ positionsOnly: true });
+  const { roles, loading, refetch } = useRolesList({ positionsOnly });
   const { deleteRole } = useRoleMgmtActions();
 
   const handleDelete = async (role: Role) => {
@@ -109,19 +110,35 @@ export default function RolesPage() {
             <h2 className="text-2xl font-bold text-[#1d3459] tracking-tight">Roles &amp; Permissions</h2>
           </div>
           <p className="text-xs text-slate-500 font-medium max-w-2xl">
-            Only institutional <strong>positions</strong> appear here. Create positions from{" "}
-            <Link href="/admin/employees" className="text-[#1d3459] underline font-semibold">
-              Workforce → Create Position
-            </Link>
-            , assign them to employees, then edit what each position can access below.
+            Configure permission matrices for all institutional roles and positions. Select a role below to customize its granular access.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setPositionsOnly(false)}
+              className={`px-3 py-1.5 rounded-md transition-colors ${
+                !positionsOnly ? "bg-white text-[#1d3459] shadow-sm font-bold" : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              All Roles
+            </button>
+            <button
+              type="button"
+              onClick={() => setPositionsOnly(true)}
+              className={`px-3 py-1.5 rounded-md transition-colors ${
+                positionsOnly ? "bg-white text-[#1d3459] shadow-sm font-bold" : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Positions Only
+            </button>
+          </div>
           <Input
-            placeholder="Find positions…"
+            placeholder="Find roles or positions…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-64 text-sm bg-white border-slate-200 focus:ring-[#1d3459] h-10"
+            className="w-56 text-sm bg-white border-slate-200 focus:ring-[#1d3459] h-9"
           />
           <CreatePositionDialog onCreated={refetch} />
         </div>

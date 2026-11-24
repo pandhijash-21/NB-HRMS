@@ -49,13 +49,24 @@ export async function invalidateRoleSessions(roleId: string, moduleKey?: string)
   }
 }
 
-function normalizePermissionFlags(flags: {
-  canRead: boolean;
-  canWrite: boolean;
-  canApprove: boolean;
-  canDelete: boolean;
-  canExport: boolean;
-}) {
+function normalizePermissionFlags(
+  flags: {
+    canRead: boolean;
+    canWrite: boolean;
+    canApprove: boolean;
+    canDelete: boolean;
+    canExport: boolean;
+  },
+  explicitCanRead?: boolean,
+) {
+  if (explicitCanRead === false) {
+    flags.canRead = false;
+    flags.canWrite = false;
+    flags.canApprove = false;
+    flags.canDelete = false;
+    flags.canExport = false;
+    return flags;
+  }
   const hasElevated =
     flags.canWrite || flags.canApprove || flags.canDelete || flags.canExport;
   if (hasElevated) flags.canRead = true;
@@ -184,6 +195,23 @@ export const permissionService = {
       }
     }
 
+    const normalizedPermissions = input.permissions.map((p) => {
+      const norm = normalizePermissionFlags(
+        {
+          canRead: p.canRead,
+          canWrite: p.canWrite,
+          canApprove: p.canApprove,
+          canDelete: p.canDelete,
+          canExport: p.canExport,
+        },
+        p.canRead,
+      );
+      return {
+        ...p,
+        ...norm,
+      };
+    });
+
     const roleName = requester?.roleName ?? requester?.role;
     if (
       requester &&
@@ -191,7 +219,7 @@ export const permissionService = {
       !isSuperAdminRole(roleName)
     ) {
       const held = requester.permissions ?? {};
-      for (const p of input.permissions) {
+      for (const p of normalizedPermissions) {
         const denied = orgAdminPermissionService.assertGrantAllowed(held, p.moduleKey, p);
         if (denied) return denied;
       }
@@ -200,7 +228,7 @@ export const permissionService = {
     await prisma.$transaction([
       prisma.rolePermission.deleteMany({ where: { roleId } }),
       prisma.rolePermission.createMany({
-        data: input.permissions.map((p) => ({
+        data: normalizedPermissions.map((p) => ({
           roleId,
           moduleKey:  p.moduleKey,
           canRead:    p.canRead,
@@ -214,7 +242,7 @@ export const permissionService = {
       }),
     ]);
 
-    invalidateRolePermissionCache(roleId);
+    await notifyRolePermissionsUpdated(roleId);
 
     return permissionService.getForRole(roleId, requester);
   },
@@ -235,13 +263,16 @@ export const permissionService = {
     const existing = await prisma.rolePermission.findUnique({
       where: { roleId_moduleKey: { roleId, moduleKey } },
     });
-    const merged = normalizePermissionFlags({
-      canRead: input.canRead ?? existing?.canRead ?? false,
-      canWrite: input.canWrite ?? existing?.canWrite ?? false,
-      canApprove: input.canApprove ?? existing?.canApprove ?? false,
-      canDelete: input.canDelete ?? existing?.canDelete ?? false,
-      canExport: input.canExport ?? existing?.canExport ?? false,
-    });
+    const merged = normalizePermissionFlags(
+      {
+        canRead: input.canRead ?? existing?.canRead ?? false,
+        canWrite: input.canWrite ?? existing?.canWrite ?? false,
+        canApprove: input.canApprove ?? existing?.canApprove ?? false,
+        canDelete: input.canDelete ?? existing?.canDelete ?? false,
+        canExport: input.canExport ?? existing?.canExport ?? false,
+      },
+      input.canRead,
+    );
 
     const roleName = requester?.roleName ?? requester?.role;
     if (

@@ -12,6 +12,7 @@ interface UseSSEOptions {
   onChangeRequestCreated?: (data: any) => void;   // admin: new pending request
   onChangeRequestApproved?: (data: any) => void;  // employee: their request approved
   onChangeRequestRejected?: (data: any) => void;  // employee: their request rejected
+  onPermissionsUpdated?: (data: any) => void;     // role permissions updated
 }
 
 /**
@@ -51,6 +52,16 @@ export function useSSE(options: UseSSEOptions) {
 
     es.addEventListener("change_request_rejected", (e) => {
       options.onChangeRequestRejected?.(JSON.parse(e.data));
+    });
+
+    es.addEventListener("permissions_updated", (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        window.dispatchEvent(new CustomEvent("live_permissions_updated", { detail: payload }));
+        options.onPermissionsUpdated?.(payload);
+      } catch {
+        window.dispatchEvent(new CustomEvent("live_permissions_updated"));
+      }
     });
 
     es.onerror = () => {

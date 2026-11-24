@@ -25,15 +25,18 @@ export interface SystemModule {
 export type EmployeeViewScope = "NONE" | "SELF" | "INSTITUTE" | "UNIVERSITY";
 
 export interface Permission {
-  id: string;
+  id?: string;
   moduleKey: string;
+  moduleName?: string;
+  category?: string;
+  sortOrder?: number;
   canRead: boolean;
   canWrite: boolean;
   canApprove: boolean;
   canDelete: boolean;
   canExport: boolean;
   employeeViewScope?: EmployeeViewScope;
-  module: SystemModule;
+  module?: SystemModule;
 }
 
 export function useRolesList(options?: { positionsOnly?: boolean }) {
@@ -92,7 +95,23 @@ export function useRoleMgmtActions() {
     return res.data;
   };
 
-  return { createRole, updateRole, deleteRole, updatePermissions };
+  const replacePermissions = async (
+    roleId: string,
+    permissions: Array<{
+      moduleKey: string;
+      canRead: boolean;
+      canWrite: boolean;
+      canApprove: boolean;
+      canDelete: boolean;
+      canExport: boolean;
+      employeeViewScope?: EmployeeViewScope;
+    }>,
+  ) => {
+    const res = await api.put(`/admin/roles/${roleId}/permissions`, { permissions });
+    return res.data;
+  };
+
+  return { createRole, updateRole, deleteRole, updatePermissions, replacePermissions };
 }
 
 export function useSystemModules() {

@@ -7,7 +7,8 @@ import { buildCredentialView } from './credentials.util';
 import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
 import { passwordFromBirthDate } from '../../utils/dobPassword';
 import { clearLoginLock, loadLocksByUserIds, lockSummary } from '../auth/loginLock.service';
-import { isAdminRole, isSuperAdminRole, isSystemAdminRole } from '../auth/permissions-map';
+import { isAdminRole, isSuperAdminRole, isSystemAdminRole, invalidateUserRoleCache } from '../auth/permissions-map';
+import { notifyRolePermissionsUpdated } from './permission.service';
 
 async function invalidateSession(userId: string, roleId?: string) {
   try {
@@ -384,14 +385,19 @@ export const userService = {
       },
     });
 
-    // Role changed → force re-login for new permissions
+    // Role changed → invalidate cache and notify connected sessions
     if (input.roleId && input.roleId !== user.roleId) {
+      invalidateUserRoleCache(id);
       await invalidateSession(id, user.roleId);
+      if (user.roleId) await notifyRolePermissionsUpdated(user.roleId);
+      await notifyRolePermissionsUpdated(input.roleId);
     }
 
     // Deactivated or browser access restricted for another user → kick session
     if (input.isActive === false || (input.allowBrowser === false && id !== requesterId)) {
+      invalidateUserRoleCache(id);
       await invalidateSession(id, user.roleId);
+      if (user.roleId) await notifyRolePermissionsUpdated(user.roleId);
     }
 
     return updated;

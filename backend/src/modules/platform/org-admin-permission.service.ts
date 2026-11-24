@@ -78,13 +78,24 @@ export type OrgAdminPatchInput = {
   employeeViewScope?: 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY';
 };
 
-function normalizePermissionFlags(flags: {
-  canRead: boolean;
-  canWrite: boolean;
-  canApprove: boolean;
-  canDelete: boolean;
-  canExport: boolean;
-}) {
+function normalizePermissionFlags(
+  flags: {
+    canRead: boolean;
+    canWrite: boolean;
+    canApprove: boolean;
+    canDelete: boolean;
+    canExport: boolean;
+  },
+  explicitCanRead?: boolean,
+) {
+  if (explicitCanRead === false) {
+    flags.canRead = false;
+    flags.canWrite = false;
+    flags.canApprove = false;
+    flags.canDelete = false;
+    flags.canExport = false;
+    return flags;
+  }
   const hasElevated =
     flags.canWrite || flags.canApprove || flags.canDelete || flags.canExport;
   if (hasElevated) flags.canRead = true;
@@ -206,13 +217,16 @@ export const orgAdminPermissionService = {
     const existing = await prisma.organizationAdminPermission.findUnique({
       where: { organizationId_moduleKey: { organizationId, moduleKey } },
     });
-    const merged = normalizePermissionFlags({
-      canRead: input.canRead ?? existing?.canRead ?? false,
-      canWrite: input.canWrite ?? existing?.canWrite ?? false,
-      canApprove: input.canApprove ?? existing?.canApprove ?? false,
-      canDelete: input.canDelete ?? existing?.canDelete ?? false,
-      canExport: input.canExport ?? existing?.canExport ?? false,
-    });
+    const merged = normalizePermissionFlags(
+      {
+        canRead: input.canRead ?? existing?.canRead ?? false,
+        canWrite: input.canWrite ?? existing?.canWrite ?? false,
+        canApprove: input.canApprove ?? existing?.canApprove ?? false,
+        canDelete: input.canDelete ?? existing?.canDelete ?? false,
+        canExport: input.canExport ?? existing?.canExport ?? false,
+      },
+      input.canRead,
+    );
 
     const employeeViewScope =
       input.employeeViewScope ??

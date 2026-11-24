@@ -11,6 +11,7 @@ export type SessionAuthContext = {
 /** Permissions from NextAuth session, or fetched from /auth/me when missing (legacy sessions). */
 export async function resolveSessionAuthContext(
   session: Session | null,
+  options?: { forceRefresh?: boolean },
 ): Promise<SessionAuthContext> {
   const user = session?.user as {
     permissions?: PermissionMap;
@@ -20,7 +21,7 @@ export async function resolveSessionAuthContext(
 
   const fromSession = user?.permissions;
   const scopeFromSession = user?.employeeViewScope as SessionAuthContext["employeeViewScope"] | undefined;
-  if (fromSession && Object.keys(fromSession).length > 0 && scopeFromSession) {
+  if (!options?.forceRefresh && fromSession && Object.keys(fromSession).length > 0 && scopeFromSession) {
     return { permissions: fromSession, employeeViewScope: scopeFromSession };
   }
 

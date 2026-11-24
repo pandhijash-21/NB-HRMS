@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { useSession } from "next-auth/react";
 import { hasPermission } from "@/lib/auth/permissions";
+import { useLivePermissions } from "@/lib/hooks/useLivePermissions";
 
 const iconCalendar = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
@@ -17,7 +18,7 @@ const iconCalendar = (
 export default function EmployeeLayout({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const employeeId = (session?.user as any)?.employeeId;
-  const permissions = (session?.user as any)?.permissions;
+  const { permissions } = useLivePermissions();
 
   const canAttendance = hasPermission(permissions, "ATTENDANCE", "READ");
   const canChat = hasPermission(permissions, "CHAT", "READ");

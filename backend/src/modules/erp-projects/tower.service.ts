@@ -211,25 +211,12 @@ function mapUnitBody(body: Record<string, unknown>) {
   };
 }
 
+/** Partial save: only identity fields are hard-required. Remaining fields
+ *  (facing, pricing, etc.) may be filled later — completeness is enforced
+ *  when creating a quotation / final deal. */
 function requireUnit(data: ReturnType<typeof mapUnitBody>) {
   if (!data.unitNo) throw new Error('Unit No is required');
-  if (!data.unitTypeCode) throw new Error('Unit type is required');
   if (data.floorNo == null) throw new Error('Floor No is required');
-  if (data.superBuiltUp == null) throw new Error('Super built-up is required');
-  if (data.carpetArea == null) throw new Error('Carpet (RERA) is required');
-  if (!data.areaUnitCode) throw new Error('Area unit is required');
-  if (!data.statusCode) throw new Error('Unit status is required');
-  if (!data.facingCode) throw new Error('Facing is required');
-  if (!data.categoryCode) throw new Error('Unit category is required');
-  if (data.builtUpArea == null) throw new Error('Built-up area is required');
-  if (data.balconyArea == null) throw new Error('Balcony area is required');
-  if (data.terraceArea == null) throw new Error('Terrace area is required');
-  if (data.plotArea == null) throw new Error('Plot area is required');
-  if (!data.parkingAllocation) throw new Error('Parking allocation is required');
-  if (data.plc == null) throw new Error('PLC is required');
-  if (data.baseRate == null) throw new Error('Base rate is required');
-  if (data.totalValue == null) throw new Error('Total unit value is required');
-  if (!data.remarks) throw new Error('Remarks is required');
 }
 
 export const towerService = {

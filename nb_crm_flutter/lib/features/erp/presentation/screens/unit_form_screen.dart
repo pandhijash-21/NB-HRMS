@@ -1188,17 +1188,30 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
   }
 
   Future<void> _save() async {
+    // Partial save allowed — only Unit No / Floor are hard-required in the form.
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     final body = _buildPayload();
     try {
-      await context.read<ProjectRepository>().updateUnit(
+      final updated = await context.read<ProjectRepository>().updateUnit(
             projectId: widget.projectId,
             towerId: widget.towerId,
             unitId: widget.unitId,
             body: body,
           );
       if (!mounted) return;
+      final missing = updated.missingCompletenessFields;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            missing.isEmpty
+                ? 'Unit saved — ready for quotation'
+                : 'Unit saved (incomplete). Still needed: ${missing.take(4).join(', ')}'
+                    '${missing.length > 4 ? '…' : ''}',
+          ),
+          backgroundColor: missing.isEmpty ? Colors.green.shade700 : Colors.orange.shade800,
+        ),
+      );
       context.go('/erp/structure/${widget.projectId}/towers/${widget.towerId}/units');
     } catch (e) {
       if (!mounted) return;
@@ -1672,7 +1685,7 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
                         category: 'PROJECT_UNIT_TYPE',
                         label: 'Unit Type',
                         value: _unitTypeCode,
-                        required: true,
+                        required: false,
                         onChanged: (v) => setState(() => _unitTypeCode = v),
                       ),
                       TextFormField(
@@ -1691,22 +1704,20 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
                         controller: _superBuiltUp,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                        decoration: _dec('Super Built-up Area'),
-                        validator: _req,
+                        decoration: _dec('Super Built-up Area', required: false),
                       ),
                       TextFormField(
                         controller: _carpet,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                        decoration: _dec('Carpet Area (RERA)'),
-                        validator: _req,
+                        decoration: _dec('Carpet Area (RERA)', required: false),
                       ),
                       lookupDropdown(
                         context: context,
                         category: 'PROJECT_AREA_UNIT',
                         label: 'Area Unit',
                         value: _areaUnitCode,
-                        required: true,
+                        required: false,
                         onChanged: (v) => setState(() => _areaUnitCode = v),
                       ),
                       lookupDropdown(
@@ -1714,7 +1725,7 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
                         category: 'PROJECT_UNIT_STATUS',
                         label: 'Unit Status',
                         value: _statusCode,
-                        required: true,
+                        required: false,
                         onChanged: (v) => setState(() => _statusCode = v),
                       ),
                     ]),
@@ -1722,7 +1733,101 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
                 ),
               ),
 
-              // CARD 2: Base Pricing & Total Unit Value Formula
+              // CARD 2: Facing / areas / parking (above pricing) — optional until quotation
+              _card(
+                'Unit Details',
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    InkWell(
+                      onTap: () => setState(() => _more = !_more),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _more ? Icons.expand_less : Icons.expand_more,
+                            color: const Color(0xFF2563eb),
+                          ),
+                          const SizedBox(width: 4),
+                          const Expanded(
+                            child: Text(
+                              'Facing, Balcony, Terrace, Plot, Parking, Category, Remarks',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF2563eb),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_more) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Optional now — required when creating a quotation / final deal.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _grid([
+                        lookupDropdown(
+                          context: context,
+                          category: 'PROJECT_UNIT_FACING',
+                          label: 'Facing',
+                          value: _facingCode,
+                          required: false,
+                          onChanged: (v) => setState(() => _facingCode = v),
+                        ),
+                        lookupDropdown(
+                          context: context,
+                          category: 'PROJECT_UNIT_CATEGORY',
+                          label: 'Unit Category',
+                          value: _categoryCode,
+                          required: false,
+                          onChanged: (v) => setState(() => _categoryCode = v),
+                        ),
+                        TextFormField(
+                          controller: _builtUp,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                          decoration: _dec('Built-up Area', required: false),
+                        ),
+                        TextFormField(
+                          controller: _balcony,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                          decoration: _dec('Balcony Area', required: false),
+                        ),
+                        TextFormField(
+                          controller: _terrace,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                          decoration: _dec('Terrace Area', required: false),
+                        ),
+                        TextFormField(
+                          controller: _plot,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                          decoration: _dec('Plot Area', required: false),
+                        ),
+                        TextFormField(
+                          controller: _parking,
+                          decoration: _dec('Parking Allocation', required: false),
+                        ),
+                      ]),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _remarks,
+                        maxLines: 2,
+                        decoration: _dec('Remarks', required: false),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              // CARD 3: Base Pricing & Total Unit Value Formula
               _card(
                 'Pricing & Base Charges',
                 Column(
@@ -1809,8 +1914,9 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
                             ? '(${_formatNum(areaNum)} sq.ft × ${_formatCurrency(baseRateNum)}/sq.ft)'
                             : '(Enter Super Built-up area above)',
                         isDark: isDark,
-                        isRequired: true,
+                        isRequired: false,
                         hint: 'e.g. 5000',
+                        helper: 'Required before quotation',
                         icon: Icons.currency_rupee_rounded,
                         accentColor: const Color(0xFF2563eb),
                       ),
@@ -2706,96 +2812,6 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
                 ),
               ),
 
-              // CARD 8: More Details
-              _card(
-                'More details',
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    InkWell(
-                      onTap: () => setState(() => _more = !_more),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _more ? Icons.expand_less : Icons.expand_more,
-                            color: const Color(0xFF2563eb),
-                          ),
-                          const SizedBox(width: 4),
-                          const Expanded(
-                            child: Text(
-                              'Facing, Balcony, Terrace, Plot, Parking, Category, Remarks',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF2563eb),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (_more) ...[
-                      const SizedBox(height: 12),
-                      _grid([
-                        lookupDropdown(
-                          context: context,
-                          category: 'PROJECT_UNIT_FACING',
-                          label: 'Facing',
-                          value: _facingCode,
-                          required: true,
-                          onChanged: (v) => setState(() => _facingCode = v),
-                        ),
-                        lookupDropdown(
-                          context: context,
-                          category: 'PROJECT_UNIT_CATEGORY',
-                          label: 'Unit Category',
-                          value: _categoryCode,
-                          required: true,
-                          onChanged: (v) => setState(() => _categoryCode = v),
-                        ),
-                        TextFormField(
-                          controller: _builtUp,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                          decoration: _dec('Built-up Area'),
-                          validator: _req,
-                        ),
-                        TextFormField(
-                          controller: _balcony,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                          decoration: _dec('Balcony Area'),
-                          validator: _req,
-                        ),
-                        TextFormField(
-                          controller: _terrace,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                          decoration: _dec('Terrace Area'),
-                          validator: _req,
-                        ),
-                        TextFormField(
-                          controller: _plot,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                          decoration: _dec('Plot Area'),
-                          validator: _req,
-                        ),
-                        TextFormField(
-                          controller: _parking,
-                          decoration: _dec('Parking Allocation'),
-                          validator: _req,
-                        ),
-                      ]),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _remarks,
-                        maxLines: 2,
-                        decoration: _dec('Remarks', required: false),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
             ],
           ),
         );

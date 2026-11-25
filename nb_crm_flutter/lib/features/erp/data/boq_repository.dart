@@ -358,6 +358,21 @@ class BoqRepository {
     );
   }
 
+  Future<ErpStoreInward> linkInwardToPo(
+    String inwardId, {
+    required String purchaseOrderId,
+    List<Map<String, dynamic>>? lines,
+  }) async {
+    return _dio.postEnvelope<ErpStoreInward>(
+      'erp/resources/inwards/$inwardId/link-po',
+      data: {
+        'purchaseOrderId': purchaseOrderId,
+        if (lines != null) 'lines': lines,
+      },
+      parse: (raw) => ErpStoreInward.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
   Future<({String url, String? fileName})> uploadStoreFile({
     required List<int> bytes,
     required String filename,

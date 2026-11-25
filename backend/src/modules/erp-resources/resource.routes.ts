@@ -359,6 +359,19 @@ resourceRouter.post('/inwards', requireAuth, requirePermission('STORE', 'WRITE')
 });
 
 resourceRouter.post(
+  '/inwards/:id/link-po',
+  requireAuth,
+  requirePermission('STORE', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      return res.json(ok(await storeInwardService.linkInwardToPo(p(req.params.id), req.body ?? {})));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+resourceRouter.post(
   '/upload',
   requireAuth,
   requirePermission('STORE', 'WRITE'),

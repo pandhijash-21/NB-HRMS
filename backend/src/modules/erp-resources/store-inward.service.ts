@@ -26,14 +26,17 @@ function parseDate(v: unknown, fallback = new Date()): Date {
 /** Accepted qty already received against a PO line (FAIL inwards contribute 0). */
 async function acceptedByPoItem(poItemIds: string[]): Promise<Map<string, number>> {
   const map = new Map<string, number>();
-  if (poItemIds.length === 0) return map;
+  const ids = poItemIds.filter(Boolean);
+  if (ids.length === 0) return map;
   const rows = await prisma.erpStoreInwardLine.groupBy({
     by: ['purchaseOrderItemId'],
-    where: { purchaseOrderItemId: { in: poItemIds } },
+    where: { purchaseOrderItemId: { in: ids } },
     _sum: { quantityAccepted: true },
   });
   for (const r of rows) {
-    map.set(r.purchaseOrderItemId, Number(r._sum.quantityAccepted ?? 0));
+    if (r.purchaseOrderItemId) {
+      map.set(r.purchaseOrderItemId, Number(r._sum.quantityAccepted ?? 0));
+    }
   }
   return map;
 }
@@ -367,10 +370,15 @@ export const storeInwardService = {
   },
 
   async createInward(body: Record<string, unknown>, userId?: string) {
-    const purchaseOrderId = str(body.purchaseOrderId);
+    const rawPoId = str(body.purchaseOrderId);
+    const isNa =
+      body.na === true ||
+      String(body.purchaseOrderId ?? '').toUpperCase() === 'NA' ||
+      rawPoId == null ||
+      rawPoId === '';
+    const purchaseOrderId = isNa ? null : rawPoId;
     const storeId = str(body.storeId);
     const qcStatus = str(body.qcStatus)?.toUpperCase();
-    if (!purchaseOrderId) throw new Error('Purchase order is required');
     if (!storeId) throw new Error('Store is required');
     if (!qcStatus || !['PASSED', 'PARTIAL_PASS', 'FAIL'].includes(qcStatus)) {
       throw new Error('QC status is required (PASSED, PARTIAL_PASS, or FAIL)');
@@ -381,9 +389,17 @@ export const storeInwardService = {
     });
     if (!store) throw new Error('Store not found or inactive');
 
-    const po = await this.getPurchaseOrder(purchaseOrderId);
-    if (po.status === 'CANCELLED' || po.status === 'RECEIVED') {
-      throw new Error(`Cannot receive against PO in status ${po.status}`);
+    const resourceType =
+      String(body.resourceType ?? 'MATERIAL').toUpperCase() === 'MACHINE'
+        ? 'MACHINE'
+        : 'MATERIAL';
+
+    let po: Awaited<ReturnType<typeof this.getPurchaseOrder>> | null = null;
+    if (purchaseOrderId) {
+      po = await this.getPurchaseOrder(purchaseOrderId);
+      if (po.status === 'CANCELLED' || po.status === 'RECEIVED') {
+        throw new Error(`Cannot receive against PO in status ${po.status}`);
+      }
     }
 
     const linesIn = Array.isArray(body.lines) ? body.lines : [];
@@ -396,16 +412,14 @@ export const storeInwardService = {
       if (!returnDateRaw) throw new Error('Return date is required for partial pass / fail');
       returnDate = parseDate(returnDateRaw);
     }
-    if (qcStatus === 'PARTIAL_PASS' && headerRejected <= 0) {
-      // Allow per-line rejection instead of header; validate later
-    }
 
-    const remainingByItem = new Map(po.items.map((i) => [i.id, i.remainingQty]));
-    const poItemById = new Map(po.items.map((i) => [i.id, i]));
+    const remainingByItem = new Map(po?.items.map((i) => [i.id, i.remainingQty]) ?? []);
+    const poItemById = new Map(po?.items.map((i) => [i.id, i]) ?? []);
 
     type PreparedLine = {
-      purchaseOrderItemId: string;
+      purchaseOrderItemId: string | null;
       materialId: string | null;
+      machineId: string | null;
       itemName: string;
       brand: string | null;
       unitCode: string | null;
@@ -421,20 +435,8 @@ export const storeInwardService = {
 
     for (let idx = 0; idx < linesIn.length; idx++) {
       const raw = (linesIn[idx] ?? {}) as Record<string, unknown>;
-      const poItemId = str(raw.purchaseOrderItemId) || str(raw.poItemId);
-      if (!poItemId) throw new Error(`Line ${idx + 1}: PO item is required`);
-      const poItem = poItemById.get(poItemId);
-      if (!poItem) throw new Error(`Line ${idx + 1}: item not on this PO`);
-
       const qtyReceived = num(raw.quantityReceived) ?? num(raw.quantity) ?? 0;
       if (qtyReceived <= 0) throw new Error(`Line ${idx + 1}: quantity must be > 0`);
-
-      const remaining = remainingByItem.get(poItemId) ?? 0;
-      if (qtyReceived > remaining + 1e-9) {
-        throw new Error(
-          `Line ${idx + 1}: qty ${qtyReceived} exceeds remaining ${remaining} for "${poItem.itemName}" on this PO`,
-        );
-      }
 
       let qtyRejected = 0;
       let qtyAccepted = qtyReceived;
@@ -451,21 +453,86 @@ export const storeInwardService = {
         lineRejectSum += qtyRejected;
       }
 
-      // Consume remaining for multi-line same item validation within this request
-      remainingByItem.set(poItemId, remaining - qtyReceived);
+      if (po) {
+        const poItemId = str(raw.purchaseOrderItemId) || str(raw.poItemId);
+        if (!poItemId) throw new Error(`Line ${idx + 1}: PO item is required`);
+        const poItem = poItemById.get(poItemId);
+        if (!poItem) throw new Error(`Line ${idx + 1}: item not on this PO`);
 
-      prepared.push({
-        purchaseOrderItemId: poItemId,
-        materialId: poItem.materialId,
-        itemName: poItem.itemName,
-        brand: poItem.brand,
-        unitCode: poItem.unitCode,
-        size: poItem.size,
-        quantityReceived: qtyReceived,
-        quantityAccepted: qtyAccepted,
-        quantityRejected: qtyRejected,
-        sortOrder: idx,
-      });
+        const remaining = remainingByItem.get(poItemId) ?? 0;
+        if (qtyReceived > remaining + 1e-9) {
+          throw new Error(
+            `Line ${idx + 1}: qty ${qtyReceived} exceeds remaining ${remaining} for "${poItem.itemName}" on this PO`,
+          );
+        }
+        remainingByItem.set(poItemId, remaining - qtyReceived);
+
+        prepared.push({
+          purchaseOrderItemId: poItemId,
+          materialId: poItem.materialId,
+          machineId: null,
+          itemName: poItem.itemName,
+          brand: poItem.brand,
+          unitCode: poItem.unitCode,
+          size: poItem.size,
+          quantityReceived: qtyReceived,
+          quantityAccepted: qtyAccepted,
+          quantityRejected: qtyRejected,
+          sortOrder: idx,
+        });
+      } else {
+        // NA mode — pick material / machine or free-text item
+        const materialId = str(raw.materialId);
+        const machineId = str(raw.machineId);
+        let itemName = str(raw.itemName);
+        let brand = str(raw.brand);
+        let unitCode = str(raw.unitCode);
+        let size = str(raw.size);
+        let resolvedMaterialId = materialId;
+        let resolvedMachineId = machineId;
+
+        if (resourceType === 'MACHINE') {
+          if (machineId) {
+            const mac = await prisma.erpMachine.findFirst({
+              where: { id: machineId, isActive: true },
+            });
+            if (!mac) throw new Error(`Line ${idx + 1}: machine not found`);
+            itemName = itemName || mac.name;
+            brand = brand ?? mac.brand;
+            unitCode = unitCode ?? mac.unitCode;
+            size = size ?? mac.size;
+            resolvedMachineId = mac.id;
+          } else if (!itemName) {
+            throw new Error(`Line ${idx + 1}: select a machine or enter name`);
+          }
+        } else if (materialId) {
+          const mat = await prisma.erpMaterial.findFirst({
+            where: { id: materialId, isActive: true },
+          });
+          if (!mat) throw new Error(`Line ${idx + 1}: material not found`);
+          itemName = itemName || mat.name;
+          brand = brand ?? mat.brand;
+          unitCode = unitCode ?? mat.unitCode;
+          size = size ?? mat.size;
+          resolvedMaterialId = mat.id;
+        } else if (!itemName) {
+          throw new Error(`Line ${idx + 1}: select a material or enter name`);
+        }
+
+        prepared.push({
+          purchaseOrderItemId: null,
+          materialId: resolvedMaterialId,
+          machineId: resolvedMachineId,
+          itemName: itemName!,
+          brand,
+          unitCode,
+          size,
+          quantityReceived: qtyReceived,
+          quantityAccepted: qtyAccepted,
+          quantityRejected: qtyRejected,
+          sortOrder: idx,
+        });
+      }
     }
 
     if (qcStatus === 'PARTIAL_PASS') {
@@ -473,7 +540,6 @@ export const storeInwardService = {
       if (totalRejected <= 0) {
         throw new Error('Partial pass requires quantity rejected > 0');
       }
-      // If header rejected provided but lines have 0, distribute onto first line
       if (headerRejected > 0 && lineRejectSum <= 0) {
         const first = prepared[0]!;
         if (headerRejected > first.quantityReceived) {
@@ -483,6 +549,9 @@ export const storeInwardService = {
         first.quantityAccepted = first.quantityReceived - headerRejected;
       }
     }
+
+    const poLabel = po?.poNumber ?? 'NA';
+    const vendorName = str(body.vendorName) ?? (po ? po.vendorName : null);
 
     const inward = await prisma.$transaction(async (tx) => {
       const header = await tx.erpStoreInward.create({
@@ -501,12 +570,14 @@ export const storeInwardService = {
                 ? dec(prepared.reduce((s, l) => s + l.quantityReceived, 0))
                 : null,
           returnDate,
+          vendorName,
           remarks: str(body.remarks),
           createdBy: userId ?? null,
           lines: {
             create: prepared.map((l) => ({
               purchaseOrderItemId: l.purchaseOrderItemId,
               materialId: l.materialId,
+              machineId: l.machineId,
               itemName: l.itemName,
               brand: l.brand,
               unitCode: l.unitCode,
@@ -525,33 +596,29 @@ export const storeInwardService = {
         },
       });
 
-      // Add accepted qty to stock (material or machine)
-      const resourceType =
-        String(body.resourceType ?? 'MATERIAL').toUpperCase() === 'MACHINE'
-          ? 'MACHINE'
-          : 'MATERIAL';
-
       for (const line of prepared) {
         if (line.quantityAccepted <= 0) continue;
 
         if (resourceType === 'MACHINE') {
-          let machineId: string | null = null;
-          const existing = await tx.erpMachine.findFirst({
-            where: { name: line.itemName, isActive: true },
-          });
-          if (existing) {
-            machineId = existing.id;
-          } else {
-            const created = await tx.erpMachine.create({
-              data: {
-                name: line.itemName,
-                brand: line.brand,
-                unitCode: line.unitCode,
-                size: line.size,
-                qtyOnHand: dec(0),
-              },
+          let machineId = line.machineId;
+          if (!machineId) {
+            const existing = await tx.erpMachine.findFirst({
+              where: { name: line.itemName, isActive: true },
             });
-            machineId = created.id;
+            if (existing) {
+              machineId = existing.id;
+            } else {
+              const created = await tx.erpMachine.create({
+                data: {
+                  name: line.itemName,
+                  brand: line.brand,
+                  unitCode: line.unitCode,
+                  size: line.size,
+                  qtyOnHand: dec(0),
+                },
+              });
+              machineId = created.id;
+            }
           }
 
           await tx.erpMachine.update({
@@ -563,9 +630,13 @@ export const storeInwardService = {
               machineId,
               logType: 'PURCHASE',
               quantity: dec(line.quantityAccepted),
-              remarks: `PO ${po.poNumber} / Challan ${str(body.challanNumber) ?? '—'} / QC ${qcStatus}`,
+              remarks: `PO ${poLabel} / Challan ${str(body.challanNumber) ?? '—'} / QC ${qcStatus}`,
               createdBy: userId ?? null,
             },
+          });
+          await tx.erpStoreInwardLine.updateMany({
+            where: { inwardId: header.id, sortOrder: line.sortOrder },
+            data: { machineId },
           });
           continue;
         }
@@ -588,10 +659,12 @@ export const storeInwardService = {
               },
             });
             materialId = created.id;
-            await tx.erpPurchaseOrderItem.update({
-              where: { id: line.purchaseOrderItemId },
-              data: { materialId },
-            });
+            if (line.purchaseOrderItemId) {
+              await tx.erpPurchaseOrderItem.update({
+                where: { id: line.purchaseOrderItemId },
+                data: { materialId },
+              });
+            }
           }
         }
 
@@ -604,16 +677,12 @@ export const storeInwardService = {
             materialId,
             logType: 'PURCHASE',
             quantity: dec(line.quantityAccepted),
-            remarks: `PO ${po.poNumber} / Challan ${str(body.challanNumber) ?? '—'} / QC ${qcStatus}`,
+            remarks: `PO ${poLabel} / Challan ${str(body.challanNumber) ?? '—'} / QC ${qcStatus}`,
             createdBy: userId ?? null,
           },
         });
         await tx.erpStoreInwardLine.updateMany({
-          where: {
-            inwardId: header.id,
-            purchaseOrderItemId: line.purchaseOrderItemId,
-            sortOrder: line.sortOrder,
-          },
+          where: { inwardId: header.id, sortOrder: line.sortOrder },
           data: { materialId },
         });
       }
@@ -621,7 +690,103 @@ export const storeInwardService = {
       return header;
     });
 
-    await refreshPoStatus(purchaseOrderId);
+    if (purchaseOrderId) await refreshPoStatus(purchaseOrderId);
     return inward;
+  },
+
+  /**
+   * Link an NA (no-PO) inward to a purchase order later.
+   * body: { purchaseOrderId, lines?: [{ inwardLineId, purchaseOrderItemId }] }
+   * If lines omitted, tries 1:1 match by item name against remaining PO items.
+   */
+  async linkInwardToPo(inwardId: string, body: Record<string, unknown>) {
+    const purchaseOrderId = str(body.purchaseOrderId);
+    if (!purchaseOrderId) throw new Error('Purchase order is required');
+
+    const inward = await prisma.erpStoreInward.findUnique({
+      where: { id: inwardId },
+      include: { lines: { orderBy: { sortOrder: 'asc' } } },
+    });
+    if (!inward) throw new Error('Store inward not found');
+    if (inward.purchaseOrderId) {
+      throw new Error('This inward is already linked to a purchase order');
+    }
+
+    const po = await this.getPurchaseOrder(purchaseOrderId);
+    if (po.status === 'CANCELLED') {
+      throw new Error('Cannot link to a cancelled PO');
+    }
+
+    const mappingsRaw = Array.isArray(body.lines) ? body.lines : [];
+    const explicit = new Map<string, string>();
+    for (const raw of mappingsRaw) {
+      const row = (raw ?? {}) as Record<string, unknown>;
+      const lineId = str(row.inwardLineId) || str(row.lineId);
+      const poItemId = str(row.purchaseOrderItemId) || str(row.poItemId);
+      if (lineId && poItemId) explicit.set(lineId, poItemId);
+    }
+
+    const remainingByItem = new Map(po.items.map((i) => [i.id, i.remainingQty]));
+    const poItemById = new Map(po.items.map((i) => [i.id, i]));
+    const usedPoItems = new Set<string>();
+
+    type Link = { lineId: string; poItemId: string };
+    const links: Link[] = [];
+
+    for (const line of inward.lines) {
+      let poItemId = explicit.get(line.id) ?? null;
+      if (!poItemId) {
+        const match = po.items.find(
+          (i) =>
+            !usedPoItems.has(i.id) &&
+            i.itemName.trim().toLowerCase() === line.itemName.trim().toLowerCase() &&
+            (remainingByItem.get(i.id) ?? 0) + 1e-9 >= Number(line.quantityAccepted),
+        );
+        poItemId = match?.id ?? null;
+      }
+      if (!poItemId) {
+        throw new Error(
+          `Could not map inward line "${line.itemName}" to a PO item — provide lines: [{ inwardLineId, purchaseOrderItemId }]`,
+        );
+      }
+      const poItem = poItemById.get(poItemId);
+      if (!poItem) throw new Error(`PO item ${poItemId} not found on selected PO`);
+      if (usedPoItems.has(poItemId)) {
+        throw new Error(`PO item "${poItem.itemName}" mapped more than once`);
+      }
+      const remaining = remainingByItem.get(poItemId) ?? 0;
+      const accepted = Number(line.quantityAccepted);
+      if (accepted > remaining + 1e-9) {
+        throw new Error(
+          `Accepted qty ${accepted} for "${line.itemName}" exceeds remaining ${remaining} on PO item "${poItem.itemName}"`,
+        );
+      }
+      usedPoItems.add(poItemId);
+      remainingByItem.set(poItemId, remaining - accepted);
+      links.push({ lineId: line.id, poItemId });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.erpStoreInward.update({
+        where: { id: inwardId },
+        data: {
+          purchaseOrderId,
+          vendorName: inward.vendorName ?? po.vendorName,
+        },
+      });
+      for (const link of links) {
+        const poItem = poItemById.get(link.poItemId)!;
+        await tx.erpStoreInwardLine.update({
+          where: { id: link.lineId },
+          data: {
+            purchaseOrderItemId: link.poItemId,
+            materialId: poItem.materialId ?? undefined,
+          },
+        });
+      }
+    });
+
+    await refreshPoStatus(purchaseOrderId);
+    return this.getInward(inwardId);
   },
 };

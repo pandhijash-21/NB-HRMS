@@ -2829,6 +2829,7 @@ model ErpMachine {
   projectUses ErpMachineProjectUse[]
   issues      ErpMachineIssue[]
   returnLogs  ErpMachineReturnLog[]
+  inwardLines ErpStoreInwardLine[]
 
   @@index([isActive, name])
   @@map("erp_machines")
@@ -3162,22 +3163,25 @@ model ErpPurchaseOrderItem {
 }
 
 model ErpStoreInward {
-  id               String                @id @default(uuid())
-  purchaseOrderId  String                @map("purchase_order_id")
-  storeId          String                @map("store_id")
-  inwardDate       DateTime              @map("inward_date") @db.Date
-  truckNumber      String?               @map("truck_number")
-  challanNumber    String?               @map("challan_number")
-  challanImageUrl  String?               @map("challan_image_url")
+  id               String                 @id @default(uuid())
+  /// Null when received as NA (no PO yet) — can be linked later.
+  purchaseOrderId  String?                @map("purchase_order_id")
+  storeId          String                 @map("store_id")
+  inwardDate       DateTime               @map("inward_date") @db.Date
+  truckNumber      String?                @map("truck_number")
+  challanNumber    String?                @map("challan_number")
+  challanImageUrl  String?                @map("challan_image_url")
   qcStatus         ErpStoreInwardQcStatus @map("qc_status")
-  quantityRejected Decimal?              @map("quantity_rejected") @db.Decimal(14, 4)
-  returnDate       DateTime?             @map("return_date") @db.Date
-  remarks          String?               @db.Text
-  createdBy        String?               @map("created_by")
-  createdAt        DateTime              @default(now()) @map("created_at")
-  updatedAt        DateTime              @updatedAt @map("updated_at")
+  quantityRejected Decimal?               @map("quantity_rejected") @db.Decimal(14, 4)
+  returnDate       DateTime?              @map("return_date") @db.Date
+  /// Free-text vendor when PO is NA.
+  vendorName       String?                @map("vendor_name")
+  remarks          String?                @db.Text
+  createdBy        String?                @map("created_by")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
 
-  purchaseOrder ErpPurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  purchaseOrder ErpPurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   store         ErpStoreMaster      @relation(fields: [storeId], references: [id], onDelete: Restrict)
   lines         ErpStoreInwardLine[]
 
@@ -3189,8 +3193,10 @@ model ErpStoreInward {
 model ErpStoreInwardLine {
   id                  String  @id @default(uuid())
   inwardId            String  @map("inward_id")
-  purchaseOrderItemId String  @map("purchase_order_item_id")
+  /// Null when inward was against NA (no PO line yet).
+  purchaseOrderItemId String? @map("purchase_order_item_id")
   materialId          String? @map("material_id")
+  machineId           String? @map("machine_id")
   itemName            String  @map("item_name")
   brand               String?
   unitCode            String? @map("unit_code")
@@ -3200,12 +3206,14 @@ model ErpStoreInwardLine {
   quantityRejected    Decimal @default(0) @map("quantity_rejected") @db.Decimal(14, 4)
   sortOrder           Int     @default(0) @map("sort_order")
 
-  inward            ErpStoreInward       @relation(fields: [inwardId], references: [id], onDelete: Cascade)
-  purchaseOrderItem ErpPurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
-  material          ErpMaterial?         @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  inward            ErpStoreInward        @relation(fields: [inwardId], references: [id], onDelete: Cascade)
+  purchaseOrderItem ErpPurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id], onDelete: SetNull)
+  material          ErpMaterial?          @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  machine           ErpMachine?           @relation(fields: [machineId], references: [id], onDelete: SetNull)
 
   @@index([inwardId, sortOrder])
   @@index([purchaseOrderItemId])
+  @@index([machineId])
   @@map("erp_store_inward_lines")
 }
 

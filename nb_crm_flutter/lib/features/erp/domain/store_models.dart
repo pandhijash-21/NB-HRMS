@@ -173,8 +173,9 @@ class ErpPurchaseOrder {
 class ErpStoreInwardLine {
   const ErpStoreInwardLine({
     required this.id,
-    required this.purchaseOrderItemId,
+    this.purchaseOrderItemId,
     this.materialId,
+    this.machineId,
     required this.itemName,
     this.brand,
     this.unitCode,
@@ -185,8 +186,9 @@ class ErpStoreInwardLine {
   });
 
   final String id;
-  final String purchaseOrderItemId;
+  final String? purchaseOrderItemId;
   final String? materialId;
+  final String? machineId;
   final String itemName;
   final String? brand;
   final String? unitCode;
@@ -198,8 +200,9 @@ class ErpStoreInwardLine {
   factory ErpStoreInwardLine.fromJson(Map<String, dynamic> json) =>
       ErpStoreInwardLine(
         id: json['id']?.toString() ?? '',
-        purchaseOrderItemId: json['purchaseOrderItemId']?.toString() ?? '',
+        purchaseOrderItemId: json['purchaseOrderItemId']?.toString(),
         materialId: json['materialId']?.toString(),
+        machineId: json['machineId']?.toString(),
         itemName: json['itemName']?.toString() ?? '',
         brand: json['brand']?.toString(),
         unitCode: json['unitCode']?.toString(),
@@ -213,7 +216,7 @@ class ErpStoreInwardLine {
 class ErpStoreInward {
   const ErpStoreInward({
     required this.id,
-    required this.purchaseOrderId,
+    this.purchaseOrderId,
     required this.storeId,
     required this.inwardDate,
     this.truckNumber,
@@ -230,7 +233,7 @@ class ErpStoreInward {
   });
 
   final String id;
-  final String purchaseOrderId;
+  final String? purchaseOrderId;
   final String storeId;
   final DateTime inwardDate;
   final String? truckNumber;
@@ -245,13 +248,16 @@ class ErpStoreInward {
   final String? storeName;
   final List<ErpStoreInwardLine> lines;
 
+  bool get isNaPo => purchaseOrderId == null || purchaseOrderId!.isEmpty;
+
   factory ErpStoreInward.fromJson(Map<String, dynamic> json) {
     final po = json['purchaseOrder'];
     final store = json['store'];
     final linesRaw = json['lines'];
+    final headerVendor = json['vendorName']?.toString();
     return ErpStoreInward(
       id: json['id']?.toString() ?? '',
-      purchaseOrderId: json['purchaseOrderId']?.toString() ?? '',
+      purchaseOrderId: json['purchaseOrderId']?.toString(),
       storeId: json['storeId']?.toString() ?? '',
       inwardDate: DateTime.tryParse(json['inwardDate']?.toString() ?? '') ?? DateTime.now(),
       truckNumber: json['truckNumber']?.toString(),
@@ -262,7 +268,7 @@ class ErpStoreInward {
       returnDate: DateTime.tryParse(json['returnDate']?.toString() ?? ''),
       remarks: json['remarks']?.toString(),
       poNumber: po is Map ? po['poNumber']?.toString() : null,
-      vendorName: po is Map ? po['vendorName']?.toString() : null,
+      vendorName: headerVendor ?? (po is Map ? po['vendorName']?.toString() : null),
       storeName: store is Map ? store['name']?.toString() : null,
       lines: linesRaw is List
           ? linesRaw

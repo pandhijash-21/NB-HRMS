@@ -279,24 +279,32 @@ class ErpProjectUnit {
       isDuplex && (unitNo.endsWith('-2') || (remarks?.toLowerCase().contains('upper') ?? false));
   bool get isDuplexBase => isDuplex && !isDuplexUpper;
 
-  bool get isComplete =>
-      unitNo.trim().isNotEmpty &&
-      (unitTypeCode?.isNotEmpty ?? false) &&
-      superBuiltUp != null &&
-      carpetArea != null &&
-      (areaUnitCode?.isNotEmpty ?? false) &&
-      (statusCode?.isNotEmpty ?? false) &&
-      (facingCode?.isNotEmpty ?? false) &&
-      (categoryCode?.isNotEmpty ?? false) &&
-      builtUpArea != null &&
-      balconyArea != null &&
-      terraceArea != null &&
-      plotArea != null &&
-      (parkingAllocation?.isNotEmpty ?? false) &&
-      plc != null &&
-      baseRate != null &&
-      totalValue != null &&
-      (remarks?.isNotEmpty ?? false);
+  /// Fields required before quotation / final deal / post-sales.
+  List<String> get missingCompletenessFields {
+    final missing = <String>[];
+    if (unitNo.trim().isEmpty) missing.add('Unit No');
+    if (unitTypeCode == null || unitTypeCode!.isEmpty) missing.add('Unit Type');
+    if (superBuiltUp == null) missing.add('Super Built-up');
+    if (carpetArea == null) missing.add('Carpet (RERA)');
+    if (areaUnitCode == null || areaUnitCode!.isEmpty) missing.add('Area Unit');
+    if (statusCode == null || statusCode!.isEmpty) missing.add('Unit Status');
+    if (facingCode == null || facingCode!.isEmpty) missing.add('Facing');
+    if (categoryCode == null || categoryCode!.isEmpty) missing.add('Unit Category');
+    if (builtUpArea == null) missing.add('Built-up Area');
+    if (balconyArea == null) missing.add('Balcony Area');
+    if (terraceArea == null) missing.add('Terrace Area');
+    if (plotArea == null) missing.add('Plot Area');
+    if (parkingAllocation == null || parkingAllocation!.isEmpty) {
+      missing.add('Parking Allocation');
+    }
+    if (plc == null) missing.add('PLC');
+    if (baseRate == null) missing.add('Base Rate');
+    if (totalValue == null) missing.add('Total Unit Value');
+    if (remarks == null || remarks!.trim().isEmpty) missing.add('Remarks');
+    return missing;
+  }
+
+  bool get isComplete => missingCompletenessFields.isEmpty;
 
   factory ErpProjectUnit.fromJson(Map<String, dynamic> json) {
     List<ErpUnitTax> parseTaxes(dynamic v) {

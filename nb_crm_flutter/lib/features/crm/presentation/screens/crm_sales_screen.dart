@@ -19,6 +19,7 @@ import '../widgets/crm_scope_selector.dart';
 import '../widgets/crm_telecaller_status_dialog.dart';
 import '../widgets/crm_send_whatsapp_dialog.dart';
 import '../../../erp/presentation/project_providers.dart';
+import '../../../erp/presentation/widgets/complete_unit_details_dialog.dart';
 import '../../../erp/domain/project_models.dart';
 import '../../../erp/domain/structure_models.dart';
 import '../utils/proposal_print.dart';
@@ -1946,6 +1947,19 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
           }
 
           if (matchedUnit != null) {
+            if (!matchedUnit.isComplete && matchedProj != null && matchedTower != null) {
+              if (!context.mounted) return;
+              final completed = await showCompleteUnitDetailsDialog(
+                context: context,
+                projectId: matchedProj.id,
+                towerId: matchedTower.id,
+                unit: matchedUnit,
+                reason:
+                    'This unit is incomplete. Fill all details before generating a quotation / final deal.',
+              );
+              if (completed == null) return;
+              matchedUnit = completed;
+            }
             unitNo = matchedUnit.unitNo;
             unitType = matchedUnit.unitTypeCode ?? (matchedUnit.isDuplex ? 'Duplex' : 'Apartment');
             if (matchedUnit.carpetArea != null && matchedUnit.carpetArea! > 0) {
@@ -6169,7 +6183,7 @@ class _ErpSelectUnitDialogState extends ConsumerState<_ErpSelectUnitDialog> {
             backgroundColor: const Color(0xFF16A34A),
             foregroundColor: Colors.white,
           ),
-          onPressed: () {
+          onPressed: () async {
             if (chosenUnitNo.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Please select or specify a unit number.')),
@@ -6177,34 +6191,56 @@ class _ErpSelectUnitDialogState extends ConsumerState<_ErpSelectUnitDialog> {
               return;
             }
 
+            var selected = _selectedUnit;
+            final projectId = _selectedProject?.id;
+            final towerId = _selectedTower?.id;
+            if (selected != null &&
+                !selected.isComplete &&
+                projectId != null &&
+                projectId.isNotEmpty &&
+                towerId != null &&
+                towerId.isNotEmpty) {
+              final completed = await showCompleteUnitDetailsDialog(
+                context: context,
+                projectId: projectId,
+                towerId: towerId,
+                unit: selected,
+                reason:
+                    'Complete this unit before recording it for quotation / final deal / post-sales.',
+              );
+              if (completed == null || !mounted) return;
+              selected = completed;
+              _selectUnit(completed);
+            }
+
             final unitData = {
-              'projectId': _selectedProject?.id,
+              'projectId': projectId,
               'projectName': projectName,
-              'towerId': _selectedTower?.id,
+              'towerId': towerId,
               'towerName': towerName,
-              'unitId': _selectedUnit?.id ?? chosenUnitNo,
+              'unitId': selected?.id ?? chosenUnitNo,
               'unitNo': chosenUnitNo,
               'unitType': _unitTypeCtrl.text.trim(),
               'carpetArea': _carpetAreaCtrl.text.trim(),
               'superBuiltUp': _superBuiltUpCtrl.text.trim(),
               'floorNo': _floorNoCtrl.text.trim(),
               'baseRate': _baseRateCtrl.text.trim(),
-              'plc': _selectedUnit?.plc ?? 0.0,
-              'frc': _selectedUnit?.frc ?? 0.0,
-              'developmentCharge': _selectedUnit?.developmentCharge ?? 0.0,
-              'totalUnitValue': _selectedUnit?.totalUnitValue ?? 0.0,
-              'taxes': _selectedUnit?.taxes.map((t) => {
+              'plc': selected?.plc ?? 0.0,
+              'frc': selected?.frc ?? 0.0,
+              'developmentCharge': selected?.developmentCharge ?? 0.0,
+              'totalUnitValue': selected?.totalUnitValue ?? 0.0,
+              'taxes': selected?.taxes.map((t) => {
                     'name': t.name,
                     'ratePercent': t.ratePercent,
                     'amount': t.amount,
                   }).toList() ?? [],
-              'maintenance': _selectedUnit?.maintenance.map((m) => {
+              'maintenance': selected?.maintenance.map((m) => {
                     'name': m.name,
                     'ratePerSqft': m.ratePerSqft,
                     'amount': m.amount,
                     'calculationType': m.calculationType,
                   }).toList() ?? [],
-              'otherCharges': _selectedUnit?.otherCharges.map((o) => {
+              'otherCharges': selected?.otherCharges.map((o) => {
                     'name': o.name,
                     'docCount': o.docCount,
                     'feePerDoc': o.feePerDoc,
@@ -6216,7 +6252,7 @@ class _ErpSelectUnitDialogState extends ConsumerState<_ErpSelectUnitDialog> {
             };
 
             widget.onSave(unitData);
-            Navigator.pop(context);
+            if (mounted) Navigator.pop(context);
           },
           child: const Text('Save Unit Shown'),
         ),

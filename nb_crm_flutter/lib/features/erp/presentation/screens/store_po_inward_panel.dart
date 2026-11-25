@@ -4,8 +4,12 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../data/boq_repository.dart';
+import '../../domain/resource_models.dart';
 import '../../domain/store_models.dart';
 import '../widgets/quick_create_masters.dart';
+
+/// Sentinel for inward without a PO — stock is taken now; PO can be linked later.
+const String kNaPurchaseOrder = '__NA__';
 
 /// PO-based goods inward form embedded in Material / Machine Inward tabs.
 class StorePoInwardPanel extends StatefulWidget {
@@ -29,6 +33,7 @@ enum StoreInwardKind { material, machine }
 
 class _InwardLineDraft {
   String? poItemId;
+  String? resourceId; // materialId or machineId when NA
   final qtyCtrl = TextEditingController();
   final rejectCtrl = TextEditingController(text: '0');
 
@@ -42,6 +47,8 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
   List<ErpPurchaseOrder> _pos = [];
   List<ErpStoreMaster> _stores = [];
   List<ErpStoreInward> _recent = [];
+  List<ErpMaterial> _materials = [];
+  List<ErpMachine> _machines = [];
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -52,6 +59,7 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
   DateTime _date = DateTime.now();
   final _truckCtrl = TextEditingController();
   final _challanCtrl = TextEditingController();
+  final _vendorCtrl = TextEditingController();
   String? _challanImageUrl;
   bool _uploading = false;
   String _qc = 'PASSED';
@@ -60,6 +68,8 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
   final _remarksCtrl = TextEditingController();
 
   final List<_InwardLineDraft> _lines = [_InwardLineDraft()];
+
+  bool get _isNa => _poId == kNaPurchaseOrder;
 
   @override
   void initState() {
@@ -71,6 +81,7 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
   void dispose() {
     _truckCtrl.dispose();
     _challanCtrl.dispose();
+    _vendorCtrl.dispose();
     _headerRejectCtrl.dispose();
     _remarksCtrl.dispose();
     for (final l in _lines) {
@@ -86,16 +97,23 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
     });
     try {
       final repo = context.read<BoqRepository>();
+      final isMachine = widget.resourceKind == StoreInwardKind.machine;
       final res = await Future.wait([
         repo.listPurchaseOrders(openOnly: true),
         repo.listStores(),
         repo.listInwards(),
+        if (isMachine) repo.listMachines() else repo.listMaterials(),
       ]);
       if (!mounted) return;
       setState(() {
         _pos = res[0] as List<ErpPurchaseOrder>;
         _stores = res[1] as List<ErpStoreMaster>;
         _recent = (res[2] as List<ErpStoreInward>).take(20).toList();
+        if (isMachine) {
+          _machines = res[3] as List<ErpMachine>;
+        } else {
+          _materials = res[3] as List<ErpMaterial>;
+        }
         _loading = false;
       });
     } catch (e) {
@@ -151,11 +169,12 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
       _selectedPo = null;
       for (final l in _lines) {
         l.poItemId = null;
+        l.resourceId = null;
         l.qtyCtrl.clear();
         l.rejectCtrl.text = '0';
       }
     });
-    if (id == null) return;
+    if (id == null || id == kNaPurchaseOrder) return;
     try {
       final po = await context.read<BoqRepository>().getPurchaseOrder(id);
       if (!mounted) return;
@@ -226,7 +245,7 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
   Future<void> _submit() async {
     if (_poId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a purchase order')),
+        const SnackBar(content: Text('Select a purchase order or NA')),
       );
       return;
     }
@@ -247,30 +266,54 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
 
     final linesPayload = <Map<String, dynamic>>[];
     for (final line in _lines) {
-      if (line.poItemId == null) continue;
-      final item = _itemById(line.poItemId);
       final qty = double.tryParse(line.qtyCtrl.text.trim()) ?? 0;
       if (qty <= 0) continue;
-      if (item != null && qty > item.remainingQty + 1e-9) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Qty for ${item.itemName} exceeds remaining ${item.remainingQty}',
-            ),
-          ),
-        );
-        return;
-      }
       final reject = double.tryParse(line.rejectCtrl.text.trim()) ?? 0;
-      linesPayload.add({
-        'purchaseOrderItemId': line.poItemId,
-        'quantityReceived': qty,
-        if (_qc == 'PARTIAL_PASS') 'quantityRejected': reject,
-      });
+
+      if (_isNa) {
+        if (line.resourceId == null) continue;
+        if (widget.resourceKind == StoreInwardKind.machine) {
+          linesPayload.add({
+            'machineId': line.resourceId,
+            'quantityReceived': qty,
+            if (_qc == 'PARTIAL_PASS') 'quantityRejected': reject,
+          });
+        } else {
+          linesPayload.add({
+            'materialId': line.resourceId,
+            'quantityReceived': qty,
+            if (_qc == 'PARTIAL_PASS') 'quantityRejected': reject,
+          });
+        }
+      } else {
+        if (line.poItemId == null) continue;
+        final item = _itemById(line.poItemId);
+        if (item != null && qty > item.remainingQty + 1e-9) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Qty for ${item.itemName} exceeds remaining ${item.remainingQty}',
+              ),
+            ),
+          );
+          return;
+        }
+        linesPayload.add({
+          'purchaseOrderItemId': line.poItemId,
+          'quantityReceived': qty,
+          if (_qc == 'PARTIAL_PASS') 'quantityRejected': reject,
+        });
+      }
     }
     if (linesPayload.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add at least one item with quantity')),
+        SnackBar(
+          content: Text(
+            _isNa
+                ? 'Add at least one ${widget.resourceKind == StoreInwardKind.machine ? 'machine' : 'material'} with quantity'
+                : 'Add at least one item with quantity',
+          ),
+        ),
       );
       return;
     }
@@ -278,7 +321,7 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
     setState(() => _saving = true);
     try {
       await context.read<BoqRepository>().createInward({
-        'purchaseOrderId': _poId,
+        if (_isNa) 'na': true else 'purchaseOrderId': _poId,
         'storeId': _storeId,
         'resourceType':
             widget.resourceKind == StoreInwardKind.machine ? 'MACHINE' : 'MATERIAL',
@@ -288,6 +331,7 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
             _challanCtrl.text.trim().isEmpty ? null : _challanCtrl.text.trim(),
         'challanImageUrl': _challanImageUrl,
         'qcStatus': _qc,
+        if (_isNa && _vendorCtrl.text.trim().isNotEmpty) 'vendorName': _vendorCtrl.text.trim(),
         if (_qc == 'PARTIAL_PASS' && _headerRejectCtrl.text.trim().isNotEmpty)
           'quantityRejected': double.tryParse(_headerRejectCtrl.text.trim()),
         if (_returnDate != null)
@@ -297,10 +341,17 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Goods inward saved')),
+        SnackBar(
+          content: Text(
+            _isNa
+                ? 'Inward saved as NA — you can link a PO later from Recent inwards'
+                : 'Goods inward saved',
+          ),
+        ),
       );
       _truckCtrl.clear();
       _challanCtrl.clear();
+      _vendorCtrl.clear();
       _headerRejectCtrl.clear();
       _remarksCtrl.clear();
       _challanImageUrl = null;
@@ -321,6 +372,72 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
       );
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _linkInwardToPo(ErpStoreInward inv) async {
+    if (_pos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No open POs available to link')),
+      );
+      return;
+    }
+    String? selectedPoId = _pos.first.id;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Link Purchase Order'),
+        content: StatefulBuilder(
+          builder: (ctx, setLocal) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Attach a PO to this NA inward. Lines are matched by item name when possible.',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: selectedPoId,
+                decoration: const InputDecoration(
+                  labelText: 'Purchase Order *',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  for (final po in _pos)
+                    DropdownMenuItem(
+                      value: po.id,
+                      child: Text(
+                        '${po.poNumber} — ${po.vendorName}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (v) => setLocal(() => selectedPoId = v),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Link')),
+        ],
+      ),
+    );
+    if (ok != true || selectedPoId == null || !mounted) return;
+    try {
+      await context.read<BoqRepository>().linkInwardToPo(
+            inv.id,
+            purchaseOrderId: selectedPoId!,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PO linked to inward')),
+      );
+      await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -361,8 +478,8 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
             children: [
               Text(
                 widget.resourceKind == StoreInwardKind.machine
-                    ? 'Machine Inward (against PO)'
-                    : 'Material Inward (against PO)',
+                    ? 'Machine Inward'
+                    : 'Material Inward',
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 16,
@@ -371,7 +488,9 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
               ),
               const SizedBox(height: 4),
               Text(
-                'PO, store, truck, challan, QC — qty cannot exceed PO remaining.',
+                _isNa
+                    ? 'NA mode: take stock now without a PO. You can link the PO later from Recent inwards.'
+                    : 'Select PO or NA. With a PO, qty cannot exceed remaining.',
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark ? Colors.white54 : const Color(0xFF64748B),
@@ -384,7 +503,7 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
                   child: OutlinedButton.icon(
                     onPressed: _createSamplePo,
                     icon: const Icon(Icons.add_shopping_cart_outlined),
-                    label: const Text('No POs yet — create sample PO (until Purchase menu)'),
+                    label: const Text('No POs yet — create sample PO (optional)'),
                   ),
                 ),
               DropdownButtonFormField<String>(
@@ -392,8 +511,13 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
                 decoration: const InputDecoration(
                   labelText: 'Purchase Order *',
                   border: OutlineInputBorder(),
+                  helperText: 'Choose NA if PO is not created yet',
                 ),
                 items: [
+                  const DropdownMenuItem(
+                    value: kNaPurchaseOrder,
+                    child: Text('NA — no PO (link later)'),
+                  ),
                   for (final po in _pos)
                     DropdownMenuItem(
                       value: po.id,
@@ -405,6 +529,17 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
                 ],
                 onChanged: _onPoChanged,
               ),
+              if (_isNa) ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _vendorCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Vendor (optional)',
+                    border: OutlineInputBorder(),
+                    helperText: 'Record who supplied — update when PO is linked',
+                  ),
+                ),
+              ],
               if (_selectedPo != null) ...[
                 const SizedBox(height: 12),
                 _PoDetailsCard(po: _selectedPo!, isDark: isDark),
@@ -560,7 +695,7 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
                   ),
                   const Spacer(),
                   TextButton.icon(
-                    onPressed: _selectedPo == null
+                    onPressed: (_selectedPo == null && !_isNa)
                         ? null
                         : () => setState(() => _lines.add(_InwardLineDraft())),
                     icon: const Icon(Icons.add, size: 18),
@@ -620,12 +755,24 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
         for (final inv in _recent)
           Card(
             child: ListTile(
-              title: Text('${inv.poNumber ?? inv.purchaseOrderId} · ${inv.storeName ?? ''}'),
-              subtitle: Text(
-                '${DateFormat('dd MMM yyyy').format(inv.inwardDate)} · QC ${inv.qcStatus}'
-                '${inv.challanNumber != null ? ' · Challan ${inv.challanNumber}' : ''}',
+              title: Text(
+                '${inv.isNaPo ? 'NA (no PO)' : (inv.poNumber ?? inv.purchaseOrderId)}'
+                '${inv.storeName != null && inv.storeName!.isNotEmpty ? ' · ${inv.storeName}' : ''}',
               ),
-              trailing: Text('${inv.lines.length} items'),
+              subtitle: Text(
+                [
+                  DateFormat('dd MMM yyyy').format(inv.inwardDate),
+                  'QC ${inv.qcStatus}',
+                  if (inv.vendorName != null && inv.vendorName!.isNotEmpty) inv.vendorName!,
+                  if (inv.challanNumber != null) 'Challan ${inv.challanNumber}',
+                ].join(' · '),
+              ),
+              trailing: inv.isNaPo
+                  ? TextButton(
+                      onPressed: () => _linkInwardToPo(inv),
+                      child: const Text('Link PO'),
+                    )
+                  : Text('${inv.lines.length} items'),
             ),
           ),
       ];
@@ -646,7 +793,6 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
     final line = _lines[index];
     final item = _itemById(line.poItemId);
     final items = _availableItems;
-    // Keep selected item visible even if remaining became 0 after edit
     final dropdownItems = [
       ...items,
       if (item != null && !items.any((e) => e.id == item.id)) item,
@@ -672,96 +818,129 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
                   ),
               ],
             ),
-            DropdownButtonFormField<String>(
-              value: line.poItemId,
-              decoration: const InputDecoration(
-                labelText: 'Item (from PO) *',
-                border: OutlineInputBorder(),
-              ),
-              items: [
-                for (final it in dropdownItems)
-                  DropdownMenuItem(
-                    value: it.id,
-                    child: Text(
-                      '${it.itemName} · rem ${it.remainingQty.toStringAsFixed(0)}'
-                      '${it.unitCode != null ? ' ${it.unitCode}' : ''}',
-                      overflow: TextOverflow.ellipsis,
-                    ),
+            if (_isNa) ...[
+              if (widget.resourceKind == StoreInwardKind.machine)
+                MachineDropdownWithCreate(
+                  value: line.resourceId,
+                  machines: _machines,
+                  required: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Machine *',
+                    border: OutlineInputBorder(),
                   ),
-              ],
-              onChanged: (v) {
-                setState(() {
-                  line.poItemId = v;
-                  final sel = _itemById(v);
-                  if (sel != null) {
-                    line.qtyCtrl.text = sel.remainingQty.toStringAsFixed(
-                      sel.remainingQty == sel.remainingQty.roundToDouble() ? 0 : 2,
-                    );
-                  }
-                });
-              },
-            ),
-            if (item != null) ...[
-              const SizedBox(height: 10),
-              TextFormField(
-                initialValue: item.itemName,
-                readOnly: true,
-                decoration: InputDecoration(
-                  labelText: widget.resourceKind == StoreInwardKind.machine
-                      ? 'Machine Name'
-                      : 'Material Name',
-                  border: const OutlineInputBorder(),
-                  filled: true,
+                  onChanged: (v) => setState(() => line.resourceId = v),
+                  onMachineCreated: (created) => setState(() {
+                    _machines = [..._machines, created];
+                    line.resourceId = created.id;
+                  }),
+                )
+              else
+                MaterialDropdownWithCreate(
+                  value: line.resourceId,
+                  materials: _materials,
+                  required: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Material *',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (v) => setState(() => line.resourceId = v),
+                  onMaterialCreated: (created) => setState(() {
+                    _materials = [..._materials, created];
+                    line.resourceId = created.id;
+                  }),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      initialValue: item.brand ?? '',
-                      readOnly: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Brand',
-                        border: OutlineInputBorder(),
-                        filled: true,
+            ] else ...[
+              DropdownButtonFormField<String>(
+                value: line.poItemId,
+                decoration: const InputDecoration(
+                  labelText: 'Item (from PO) *',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  for (final it in dropdownItems)
+                    DropdownMenuItem(
+                      value: it.id,
+                      child: Text(
+                        '${it.itemName} · rem ${it.remainingQty.toStringAsFixed(0)}'
+                        '${it.unitCode != null ? ' ${it.unitCode}' : ''}',
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextFormField(
-                      initialValue: item.unitCode ?? '',
-                      readOnly: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Unit',
-                        border: OutlineInputBorder(),
-                        filled: true,
-                      ),
-                    ),
-                  ),
                 ],
+                onChanged: (v) {
+                  setState(() {
+                    line.poItemId = v;
+                    final sel = _itemById(v);
+                    if (sel != null) {
+                      line.qtyCtrl.text = sel.remainingQty.toStringAsFixed(
+                        sel.remainingQty == sel.remainingQty.roundToDouble() ? 0 : 2,
+                      );
+                    }
+                  });
+                },
               ),
-              const SizedBox(height: 10),
-              TextFormField(
-                initialValue: item.size ?? '',
-                readOnly: true,
-                decoration: InputDecoration(
-                  labelText: widget.resourceKind == StoreInwardKind.machine
-                      ? 'Capacity / Size'
-                      : 'Size / Spec',
-                  border: const OutlineInputBorder(),
-                  filled: true,
+              if (item != null) ...[
+                const SizedBox(height: 10),
+                TextFormField(
+                  initialValue: item.itemName,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: widget.resourceKind == StoreInwardKind.machine
+                        ? 'Machine Name'
+                        : 'Material Name',
+                    border: const OutlineInputBorder(),
+                    filled: true,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Ordered: ${item.orderedQty} · Already received: ${item.receivedQty} · Remaining: ${item.remainingQty}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        initialValue: item.brand ?? '',
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Brand',
+                          border: OutlineInputBorder(),
+                          filled: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        initialValue: item.unitCode ?? '',
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Unit',
+                          border: OutlineInputBorder(),
+                          filled: true,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  initialValue: item.size ?? '',
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: widget.resourceKind == StoreInwardKind.machine
+                        ? 'Capacity / Size'
+                        : 'Size / Spec',
+                    border: const OutlineInputBorder(),
+                    filled: true,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Ordered: ${item.orderedQty} · Already received: ${item.receivedQty} · Remaining: ${item.remainingQty}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
             ],
             const SizedBox(height: 8),
             Row(

@@ -434,7 +434,7 @@ export const dprService = {
           srNo: sr,
           date: day.toISOString().slice(0, 10),
           site,
-          supplierName: inv.purchaseOrder.vendorName || '—',
+          supplierName: inv.purchaseOrder?.vendorName || inv.vendorName || '—',
           challanNumber: inv.challanNumber,
           material: line.itemName,
           detailGrade: detail,
@@ -443,7 +443,7 @@ export const dprService = {
           qtyReceived: Number(line.quantityReceived),
           qtyAccepted: Number(line.quantityAccepted),
           unitCode: line.unitCode,
-          poNumber: inv.purchaseOrder.poNumber,
+          poNumber: inv.purchaseOrder?.poNumber ?? 'NA',
           qcStatus: inv.qcStatus,
           inwardId: inv.id,
         });

@@ -77,10 +77,16 @@ export async function resolveOrCreateRoleForDesignation(
     include: { linkedRole: { select: { id: true, name: true, isActive: true } } },
   });
 
-  // If designation has an active linked role, use it
-  if (designation?.linkedRole?.isActive) {
+  // If designation already has a linked role, use it (reactivate if needed)
+  if (designation?.linkedRole) {
+    if (!designation.linkedRole.isActive) {
+      await tx.role.update({
+        where: { id: designation.linkedRole.id },
+        data: { isActive: true },
+      });
+    }
     return {
-      role: designation.linkedRole,
+      role: { id: designation.linkedRole.id, name: designation.linkedRole.name },
       designation: {
         id: designation.id,
         name: designation.name,
@@ -89,7 +95,7 @@ export async function resolveOrCreateRoleForDesignation(
     };
   }
 
-  // 2. Search for matching existing Role
+  // 2. Search for matching existing Role (include inactive — unique name still blocks recreate)
   const desigName = designation?.name ?? raw;
   const code = roleCodeFromName(desigName);
   const normalized = desigName.trim().toUpperCase().replace(/[\s-]+/g, '_');
@@ -109,42 +115,63 @@ export async function resolveOrCreateRoleForDesignation(
 
   const uniqueCandidates = [...new Set(candidates.filter(Boolean))];
 
-  // Try exact candidate list first
-  let matchingRole = await tx.role.findFirst({
-    where: {
-      name: { in: uniqueCandidates, mode: 'insensitive' },
-      isActive: true,
-    },
-  });
+  // Prefer equals+insensitive over `in`+mode (Prisma `in` does not reliably honor mode)
+  let matchingRole =
+    (await tx.role.findFirst({
+      where: {
+        OR: uniqueCandidates.map((name) => ({
+          name: { equals: name, mode: 'insensitive' as const },
+        })),
+      },
+      orderBy: { isActive: 'desc' },
+    })) ?? null;
 
-  // If still not found, check if any active role contains or matches without trailing 's'
+  // If still not found, slug-match without trailing 's'
   if (!matchingRole) {
-    const allRoles = await tx.role.findMany({ where: { isActive: true } });
+    const allRoles = await tx.role.findMany();
     const targetSlug = slugify(desigName).replace(/s$/, '');
-    matchingRole = allRoles.find((r) => {
-      const rSlug = slugify(r.name).replace(/s$/, '');
-      return rSlug === targetSlug && r.name !== 'ADMIN';
-    }) ?? null;
+    matchingRole =
+      allRoles.find((r) => {
+        const rSlug = slugify(r.name).replace(/s$/, '');
+        return rSlug === targetSlug && r.name.toUpperCase() !== 'ADMIN';
+      }) ?? null;
   }
 
-  // 3. If no matching role exists at all, create one
+  // 3. If no matching role exists at all, create one (handle unique race / leftover name)
   if (!matchingRole) {
     const newRoleName = code || normalized || 'EMPLOYEE';
-    // Ensure valid identifier
     const sanitizedName = /^[A-Z][A-Z0-9_]*$/.test(newRoleName)
       ? newRoleName
       : `ROLE_${normalized}`;
 
-    matchingRole = await tx.role.create({
-      data: {
-        name: sanitizedName,
-        description: `Permissions for ${desigName}`,
-        isSystem: false,
-        createdBy: creatorId ?? null,
-      },
-    });
+    try {
+      matchingRole = await tx.role.create({
+        data: {
+          name: sanitizedName,
+          description: `Permissions for ${desigName}`,
+          isSystem: false,
+          createdBy: creatorId ?? null,
+        },
+      });
+      await copyRolePermissionsFromTemplate(tx, 'EMPLOYEE', matchingRole.id, creatorId);
+    } catch (err: unknown) {
+      const codeName =
+        err && typeof err === 'object' && 'code' in err
+          ? String((err as { code?: string }).code)
+          : '';
+      if (codeName !== 'P2002') throw err;
+      matchingRole = await tx.role.findFirst({
+        where: { name: { equals: sanitizedName, mode: 'insensitive' } },
+      });
+      if (!matchingRole) throw err;
+    }
+  }
 
-    await copyRolePermissionsFromTemplate(tx, 'EMPLOYEE', matchingRole.id, creatorId);
+  if (!matchingRole.isActive) {
+    matchingRole = await tx.role.update({
+      where: { id: matchingRole.id },
+      data: { isActive: true },
+    });
   }
 
   // 4. Ensure master Designation exists and has linkedRoleId set

@@ -1261,9 +1261,11 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
   void _showBatchApplyDialog() {
     if (_tower == null) return;
     final currentFloor = int.tryParse(_floorNo.text.trim()) ?? 0;
+    final unitNoLabel = _unitNo.text.trim().isEmpty ? 'this unit' : _unitNo.text.trim();
+    int applyMode = 0; // 0 = horizontal (current), 1 = vertical
     int scope = 0; // 0 = same floor, 1 = selected floors, 2 = whole tower
     final allFloors = <int>{for (final u in _tower!.units) u.floorNo}.toList()..sort();
-    final selectedFloors = <int>{currentFloor};
+    final selectedFloors = <int>{...allFloors};
     bool absorbDuplex = _isDuplex && _absorbUpperFloor;
 
     String floorLabel(int f) {
@@ -1283,33 +1285,85 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
                 children: [
                   Icon(Icons.copy_all_rounded, color: Color(0xFF2563eb)),
                   SizedBox(width: 10),
-                  Text('Apply Configuration to Other Units', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                  Expanded(
+                    child: Text(
+                      'Apply Configuration to Other Units',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                    ),
+                  ),
                 ],
               ),
               content: SizedBox(
-                width: 500,
+                width: 520,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Apply this unit\'s areas, rate, FRC, dev charges, PLC, taxes, maintenance, other charges, and specs to other units:',
+                        'Apply this unit\'s areas, rate, FRC, dev charges, PLC, taxes, maintenance, other charges, and specs:',
                         style: TextStyle(fontSize: 13),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
+                      const Text('Apply mode', style: TextStyle(fontWeight: FontWeight.w700)),
                       RadioListTile<int>(
                         value: 0,
-                        groupValue: scope,
-                        title: Text('All other units on Floor $currentFloor'),
-                        subtitle: Text('Updates remaining units on ${floorLabel(currentFloor)} with SAME configuration'),
-                        onChanged: (v) => setDlgState(() => scope = v!),
+                        groupValue: applyMode,
+                        title: const Text('Horizontal (current)'),
+                        subtitle: const Text(
+                          'Apply to all units in the floor scope below (same floor / selected floors / whole tower).',
+                        ),
+                        onChanged: (v) => setDlgState(() {
+                          applyMode = v!;
+                          if (applyMode == 0) {
+                            selectedFloors
+                              ..clear()
+                              ..add(currentFloor);
+                          }
+                        }),
                       ),
                       RadioListTile<int>(
                         value: 1,
+                        groupValue: applyMode,
+                        title: Text('Vertical — same stack as $unitNoLabel'),
+                        subtitle: Text(
+                          'Apply only to the matching unit on each floor '
+                          '(e.g. $unitNoLabel → same position / *${RegExp(r'(\d+)$').firstMatch(unitNoLabel)?.group(1) ?? unitNoLabel} on other floors).',
+                        ),
+                        onChanged: (v) => setDlgState(() {
+                          applyMode = v!;
+                          if (applyMode == 1) {
+                            selectedFloors
+                              ..clear()
+                              ..addAll(allFloors);
+                            scope = 1;
+                          }
+                        }),
+                      ),
+                      const Divider(),
+                      Text(
+                        applyMode == 1 ? 'Floors to cover' : 'Floor scope',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      if (applyMode == 0)
+                        RadioListTile<int>(
+                          value: 0,
+                          groupValue: scope,
+                          title: Text('All other units on Floor $currentFloor'),
+                          subtitle: Text(
+                            'Updates remaining units on ${floorLabel(currentFloor)} with SAME configuration',
+                          ),
+                          onChanged: (v) => setDlgState(() => scope = v!),
+                        ),
+                      RadioListTile<int>(
+                        value: 1,
                         groupValue: scope,
-                        title: const Text('Selected Floors'),
-                        subtitle: const Text('Apply SAME configuration across specific floors'),
+                        title: Text(applyMode == 1 ? 'Selected floors' : 'Selected Floors'),
+                        subtitle: Text(
+                          applyMode == 1
+                              ? 'Vertical stack only on the floors you tick'
+                              : 'Apply SAME configuration across specific floors',
+                        ),
                         onChanged: (v) => setDlgState(() => scope = v!),
                       ),
                       if (scope == 1) ...[
@@ -1340,11 +1394,19 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
                       RadioListTile<int>(
                         value: 2,
                         groupValue: scope,
-                        title: const Text('All units in this Tower'),
-                        subtitle: const Text('Apply SAME configuration to all units in this tower'),
+                        title: Text(
+                          applyMode == 1
+                              ? 'All floors in this Tower'
+                              : 'All units in this Tower',
+                        ),
+                        subtitle: Text(
+                          applyMode == 1
+                              ? 'Vertical stack on every floor'
+                              : 'Apply SAME configuration to all units in this tower',
+                        ),
                         onChanged: (v) => setDlgState(() => scope = v!),
                       ),
-                      if (_isDuplex) ...[
+                      if (_isDuplex && applyMode == 0) ...[
                         const Divider(),
                         CheckboxListTile(
                           value: absorbDuplex,
@@ -1372,11 +1434,22 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
                   icon: const Icon(Icons.check_rounded, size: 18),
                   label: const Text('Apply to Units'),
                   onPressed: () async {
+                    final resolvedScope = applyMode == 1
+                        ? (scope == 1 ? 'FLOOR_RANGE' : 'ALL_TOWER')
+                        : (scope == 0
+                            ? 'SAME_FLOOR'
+                            : (scope == 1 ? 'FLOOR_RANGE' : 'ALL_TOWER'));
+                    final floors = (applyMode == 1 && scope == 2)
+                        ? allFloors
+                        : ((scope == 1 || (applyMode == 1 && scope == 1))
+                            ? selectedFloors.toList()
+                            : null);
                     Navigator.pop(dlgContext);
                     await _executeBatchApply(
-                      scope: scope == 0 ? 'SAME_FLOOR' : (scope == 1 ? 'FLOOR_RANGE' : 'ALL_TOWER'),
-                      floors: scope == 1 ? selectedFloors.toList() : null,
-                      absorbUpperFloors: absorbDuplex,
+                      scope: resolvedScope,
+                      floors: floors,
+                      absorbUpperFloors: absorbDuplex && applyMode == 0,
+                      applyMode: applyMode == 1 ? 'VERTICAL' : 'ALL_IN_SCOPE',
                     );
                   },
                 ),
@@ -1392,6 +1465,7 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
     required String scope,
     List<int>? floors,
     required bool absorbUpperFloors,
+    String applyMode = 'ALL_IN_SCOPE',
   }) async {
     setState(() => _applyingBatch = true);
     final unitData = _buildPayload();
@@ -1401,7 +1475,10 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
             towerId: widget.towerId,
             body: {
               'scope': scope,
+              'applyMode': applyMode,
               'currentFloor': int.tryParse(_floorNo.text.trim()) ?? 0,
+              'sourceUnitId': widget.unitId,
+              'sourceUnitNo': _unitNo.text.trim(),
               if (floors != null) 'floors': floors,
               if (floors != null) 'targetFloorNos': floors,
               if (scope == 'ALL_TOWER') 'allUnits': true,

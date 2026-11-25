@@ -99,8 +99,15 @@ export const generalService = {
       data,
     });
 
-    if (input.designation?.trim()) {
-      await syncEmployeeRoleFromDesignation(employeeId, input.designation.trim(), updatedBy);
+    // Only rematch role when designation actually changed — email/manager edits
+    // should not recreate roles (avoids unique-constraint noise on role.name).
+    const nextDesig = input.designation?.trim() || '';
+    const prevDesig = existing.designation?.trim() || '';
+    if (nextDesig && nextDesig.toLowerCase() !== prevDesig.toLowerCase()) {
+      await syncEmployeeRoleFromDesignation(employeeId, nextDesig, updatedBy);
+    } else if (nextDesig && !existing.designationId) {
+      // First-time link of designationId without changing the text
+      await syncEmployeeRoleFromDesignation(employeeId, nextDesig, updatedBy);
     }
 
     diffAndAudit(req, {

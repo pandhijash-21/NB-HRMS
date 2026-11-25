@@ -491,9 +491,12 @@ export const towerService = {
     towerId: string,
     payload: {
       scope?: string;
+      /** ALL_IN_SCOPE (default) = current behaviour; VERTICAL = same unit column across floors */
+      applyMode?: string;
       currentFloor?: number;
       floors?: number[];
       sourceUnitId?: string;
+      sourceUnitNo?: string;
       targetUnitIds?: string[];
       targetFloorNos?: number[];
       allUnits?: boolean;
@@ -512,6 +515,42 @@ export const towerService = {
     });
 
     const prefix = tower ? towerPrefix(tower.name) : 'T';
+    const applyMode = String(payload.applyMode ?? 'ALL_IN_SCOPE').toUpperCase();
+    const isVertical = applyMode === 'VERTICAL' || applyMode === 'VERTICAL_STACK';
+
+    /** Match vertical column: trailing digits (101) or same index on floor. */
+    const unitColumnKey = (unitNo: string) => {
+      const clean = unitNo.replace(/-2$/i, '');
+      const m = clean.match(/(\d+)$/);
+      return m ? m[1] : clean.toLowerCase();
+    };
+
+    const sourceUnit =
+      (payload.sourceUnitId
+        ? allTowerUnits.find((u) => u.id === payload.sourceUnitId)
+        : null) ??
+      (payload.sourceUnitNo
+        ? allTowerUnits.find(
+            (u) =>
+              u.unitNo.toLowerCase() === String(payload.sourceUnitNo).toLowerCase() &&
+              (payload.currentFloor == null || u.floorNo === Number(payload.currentFloor)),
+          )
+        : null) ??
+      (data.unitNo
+        ? allTowerUnits.find(
+            (u) =>
+              u.unitNo.replace(/-2$/i, '').toLowerCase() ===
+                String(data.unitNo).replace(/-2$/i, '').toLowerCase() &&
+              (payload.currentFloor == null || u.floorNo === Number(payload.currentFloor)),
+          )
+        : null);
+
+    const sourceColumn = sourceUnit ? unitColumnKey(sourceUnit.unitNo) : null;
+    const sourceIndexOnFloor = sourceUnit
+      ? allTowerUnits
+          .filter((u) => u.floorNo === sourceUnit.floorNo)
+          .findIndex((u) => u.id === sourceUnit.id)
+      : -1;
 
     // If batch applying duplex mode
     if (data.isDuplex) {
@@ -632,6 +671,30 @@ export const towerService = {
     if (payload.targetUnitIds && payload.targetUnitIds.length > 0) {
       const set = new Set(payload.targetUnitIds);
       targetUnits = allTowerUnits.filter((u) => set.has(u.id));
+    } else if (isVertical) {
+      // Vertical: same unit column (e.g. *101) on selected / all floors
+      let floorSet: Set<number> | null = null;
+      if (payload.scope === 'FLOOR_RANGE' && Array.isArray(payload.floors) && payload.floors.length > 0) {
+        floorSet = new Set(payload.floors.map(Number));
+      } else if (payload.targetFloorNos && payload.targetFloorNos.length > 0) {
+        floorSet = new Set(payload.targetFloorNos.map(Number));
+      } else if (payload.scope === 'SAME_FLOOR' && payload.currentFloor != null) {
+        // Vertical on same floor only makes sense with other floors — treat as all floors
+        floorSet = null;
+      }
+      // ALL_TOWER or unspecified → all floors
+
+      targetUnits = allTowerUnits.filter((u) => {
+        if (floorSet && !floorSet.has(u.floorNo)) return false;
+        if (sourceUnit && u.id === sourceUnit.id) return true; // include source (idempotent)
+        if (sourceColumn && unitColumnKey(u.unitNo) === sourceColumn) return true;
+        if (sourceIndexOnFloor >= 0) {
+          const peers = allTowerUnits.filter((x) => x.floorNo === u.floorNo);
+          const idx = peers.findIndex((x) => x.id === u.id);
+          if (idx === sourceIndexOnFloor) return true;
+        }
+        return false;
+      });
     } else if (payload.scope === 'SAME_FLOOR' && payload.currentFloor != null) {
       targetUnits = allTowerUnits.filter((u) => u.floorNo === Number(payload.currentFloor));
     } else if (payload.scope === 'FLOOR_RANGE' && Array.isArray(payload.floors) && payload.floors.length > 0) {

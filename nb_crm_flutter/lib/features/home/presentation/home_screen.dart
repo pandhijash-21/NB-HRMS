@@ -13,6 +13,7 @@ import '../../auth/presentation/bloc/auth_bloc.dart';
 import '../../auth/domain/permissions.dart';
 import '../../attendance/presentation/attendance_providers.dart';
 import '../../leave/presentation/widgets/leave_shared_widgets.dart';
+import '../../../core/services/widget_sync_service.dart';
 import '../../../core/tour/models/tour_models.dart';
 import '../../../core/tour/widgets/tour_target.dart';
 
@@ -204,6 +205,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _punchOutIso = day.summary.lastOut;
         _punchLoading = false;
       });
+      final auth = context.read<AuthBloc>().state;
+      unawaited(WidgetSyncService.syncAttendance(
+        employeeName: auth.user?.name ?? 'Employee',
+        employeeCode: auth.user?.employeeId?.toString(),
+        punchInIso: day.summary.firstIn,
+        punchOutIso: day.summary.lastOut,
+      ));
     } catch (_) {
       if (!mounted) return;
       setState(() {

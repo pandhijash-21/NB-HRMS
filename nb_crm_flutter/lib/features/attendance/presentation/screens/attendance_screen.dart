@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -8,6 +10,7 @@ import 'package:latlong2/latlong.dart';
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/widget_sync_service.dart';
 import '../../../../core/tour/models/tour_models.dart';
 import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../auth/domain/permissions.dart';
@@ -235,6 +238,11 @@ class _AttendanceViewState extends State<_AttendanceView> {
       await svc.executePunch(context, empId);
       if (mounted) {
         context.read<AttendanceBloc>().add(AttendanceRefreshRequested(employeeId: empId));
+        final authUser = context.read<AuthBloc>().state.user;
+        unawaited(WidgetSyncService.syncAttendance(
+          employeeName: authUser?.name ?? 'Employee',
+          employeeCode: authUser?.employeeId?.toString(),
+        ));
       }
     } finally {
       if (mounted) {

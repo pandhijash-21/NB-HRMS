@@ -6,6 +6,7 @@ import '../../../../core/network/api_envelope.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/services/background_tracking_service.dart';
 import '../../../../core/services/web_live_tracking_service.dart';
+import '../../../../core/services/widget_sync_service.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../../data/auth_repository.dart';
 import '../../domain/permissions.dart';
@@ -421,6 +422,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     _stopSessionWatch();
     await _repo.clearSession();
     WebLiveTrackingService.stop(preventRestart: true);
+    unawaited(WidgetSyncService.clearWidget());
     emit(AuthState.unauthenticated(infoMessage: event.infoMessage));
   }
 

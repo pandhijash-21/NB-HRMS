@@ -17,6 +17,7 @@ import 'core/services/branding_config.dart';
 import 'core/services/location_alert_sound.dart';
 import 'core/services/mr_nb_tour_service.dart';
 import 'core/services/splash_video_cache.dart';
+import 'core/services/widget_sync_service.dart';
 import 'core/storage/secure_storage_service.dart';
 import 'core/theme/app_breakpoints.dart';
 import 'core/theme/app_theme.dart';
@@ -104,6 +105,14 @@ void main() async {
   final lookupsBloc = LookupsBloc(lookupRepository: appRepositories.lookupRepository);
 
   final router = createAppRouter(authBloc);
+
+  if (!kIsWeb) {
+    unawaited(WidgetSyncService.init(onWidgetClick: (uri) {
+      if (uri != null) {
+        router.go('/attendance');
+      }
+    }));
+  }
 
   runApp(
     appRepositories.wrapWithProviders(

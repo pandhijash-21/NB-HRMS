@@ -351,6 +351,8 @@ class LeaveRepository {
     required String fromDate,
     required String toDate,
     required String reason,
+    bool isHalfDay = false,
+    String? halfDaySession,
   }) async {
     return _dio.postEnvelope<LeaveApplication>(
       'leave/wfh/apply',
@@ -358,6 +360,8 @@ class LeaveRepository {
         'fromDate': fromDate,
         'toDate': toDate,
         'reason': reason,
+        'isHalfDay': isHalfDay,
+        if (halfDaySession != null) 'halfDaySession': halfDaySession,
       },
       parse: (raw) {
         if (raw is! Map) throw const FormatException('Invalid WFH apply response');

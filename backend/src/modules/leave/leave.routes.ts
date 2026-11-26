@@ -353,8 +353,16 @@ leaveRouter.post('/wfh/apply', requireAuth, async (req: Request, res: Response) 
       return res.status(403).json(fail('You are not authorized to apply for Work From Home (WFH). Please contact HR/Admin.'));
     }
 
-    if (!req.body.fromDate || !req.body.toDate) {
-      return res.status(400).json(fail('From Date and To Date are required'));
+    const isHalfDay = Boolean(req.body.isHalfDay);
+    const halfDaySession = isHalfDay ? (String(req.body.halfDaySession || 'MORNING').toUpperCase() as 'MORNING' | 'AFTERNOON') : null;
+    const fromDate = req.body.fromDate;
+    const toDate = isHalfDay ? fromDate : (req.body.toDate || fromDate);
+
+    if (!fromDate) {
+      return res.status(400).json(fail('From Date is required'));
+    }
+    if (!toDate) {
+      return res.status(400).json(fail('To Date is required'));
     }
     if (!req.body.reason || !String(req.body.reason).trim()) {
       return res.status(400).json(fail('Reason for Work From Home is required'));
@@ -364,12 +372,13 @@ leaveRouter.post('/wfh/apply', requireAuth, async (req: Request, res: Response) 
     const app = await leaveApplicationService.apply({
       employeeId,
       leaveTypeId: wfhType.id,
-      fromDate: req.body.fromDate,
-      toDate: req.body.toDate,
+      fromDate,
+      toDate,
       reason: String(req.body.reason).trim(),
       appliedBy: req.user!.id,
       isAppliedByAdmin: false,
-      isHalfDay: false,
+      isHalfDay,
+      halfDaySession,
     });
     return res.status(201).json(ok(app));
   } catch (e: any) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/utils/open_url.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../domain/attendance_models.dart';
 import '../../../leave/presentation/widgets/leave_shared_widgets.dart';
@@ -62,6 +63,68 @@ class AdminEmployeeAttendanceHistoryScreen extends ConsumerWidget {
               ref: ref,
               employeeId: employeeId,
             ),
+          ),
+          const SizedBox(width: 4),
+          PopupMenuButton<String>(
+            tooltip: 'Export attendance report',
+            icon: const Icon(Icons.download_rounded, color: Color(0xFFC5A059)),
+            onSelected: (format) async {
+              try {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Generating ${format.toUpperCase()} report…')),
+                );
+                final repo = ref.read(attendanceRepositoryProvider);
+                final bytes = await repo.exportSingleEmployeeReport(
+                  employeeId: employeeId,
+                  year: month.year,
+                  month: month.month,
+                  format: format,
+                );
+                final ext = format == 'pdf' ? 'pdf' : 'xlsx';
+                final mime = format == 'pdf'
+                    ? 'application/pdf'
+                    : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                final fileName =
+                    'attendance_employee_${employeeId}_${month.year}-${month.month.toString().padLeft(2, '0')}.$ext';
+                await downloadBytes(bytes, fileName, mimeType: mime);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Downloaded $fileName'),
+                      backgroundColor: Colors.green.shade700,
+                    ),
+                  );
+                }
+              } catch (err) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Export failed: $err'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'pdf',
+                child: Row(
+                  children: [
+                    Icon(Icons.picture_as_pdf_rounded, size: 18, color: Colors.red),
+                    SizedBox(width: 10),
+                    Text('Download PDF Report'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'excel',
+                child: Row(
+                  children: [
+                    Icon(Icons.table_view_rounded, size: 18, color: Color(0xFF0F766E)),
+                    SizedBox(width: 10),
+                    Text('Download Excel (.xlsx)'),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(width: 8),
         ],

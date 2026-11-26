@@ -65,7 +65,12 @@ class _AdminAttendanceReportScreenState extends State<AdminAttendanceReportScree
     }
   }
 
-  Future<void> _export() async {
+  String _exportFormat = 'excel';
+
+  Future<void> _export([String? formatOverride]) async {
+    final format = formatOverride ?? _exportFormat;
+    setState(() => _exportFormat = format);
+
     final fields = _selectedFields.toList();
     if (fields.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -91,16 +96,21 @@ class _AdminAttendanceReportScreenState extends State<AdminAttendanceReportScree
             month: _month,
             fields: fields,
             employeeIds: _mode == 'EMPLOYEE_WISE' ? _selectedEmployeeIds.toList() : null,
+            format: format,
           );
       if (!mounted) return;
       final tag = '$_year-${_month.toString().padLeft(2, '0')}';
+      final ext = format == 'pdf' ? 'pdf' : 'xlsx';
+      final mime = format == 'pdf'
+          ? 'application/pdf'
+          : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
       final name = _mode == 'DAY_WISE_MONTHLY'
-          ? 'attendance_daywise_$tag.xlsx'
-          : 'attendance_employee_$tag.xlsx';
+          ? 'attendance_daywise_$tag.$ext'
+          : 'attendance_employee_$tag.$ext';
       await downloadBytes(
         bytes,
         name,
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        mimeType: mime,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -488,7 +498,7 @@ class _AdminAttendanceReportScreenState extends State<AdminAttendanceReportScree
                         ],
                       ),
                     ),
-                    // Sticky download bar
+                    // Sticky download bar with Excel and PDF actions
                     Material(
                       elevation: 8,
                       color: isDark ? const Color(0xFF1A1816) : Colors.white,
@@ -496,34 +506,68 @@ class _AdminAttendanceReportScreenState extends State<AdminAttendanceReportScree
                         top: false,
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
-                          child: SizedBox(
-                            height: 50,
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: _exporting ? null : _export,
-                              icon: _exporting
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.2,
-                                        color: Colors.white,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: SizedBox(
+                                  height: 50,
+                                  child: FilledButton.icon(
+                                    onPressed: _exporting ? null : () => _export('excel'),
+                                    icon: _exporting && _exportFormat == 'excel'
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.2,
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        : const Icon(Icons.table_view_rounded, size: 20),
+                                    label: Text(
+                                      _exporting && _exportFormat == 'excel' ? 'Exporting…' : 'Download Excel',
+                                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                                    ),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFF0F766E),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
-                                    )
-                                  : const Icon(Icons.download_rounded, size: 20),
-                              label: Text(
-                                _exporting ? 'Generating Excel…' : 'Download Excel',
-                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                              ),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: _accent,
-                                foregroundColor: Colors.white,
-                                disabledBackgroundColor: _accent.withValues(alpha: 0.5),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: SizedBox(
+                                  height: 50,
+                                  child: FilledButton.icon(
+                                    onPressed: _exporting ? null : () => _export('pdf'),
+                                    icon: _exporting && _exportFormat == 'pdf'
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.2,
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        : const Icon(Icons.picture_as_pdf_rounded, size: 20),
+                                    label: Text(
+                                      _exporting && _exportFormat == 'pdf' ? 'Exporting…' : 'Download PDF',
+                                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                                    ),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFFDC2626),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),

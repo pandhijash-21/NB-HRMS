@@ -824,6 +824,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             section: 'Tracking',
             alertBadge: true,
           ),
+        if (canAccessAdmin || canAdminAttendance || Permissions.canReadAttendance(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/admin/attendance/report',
+            Icons.assessment_outlined,
+            Icons.assessment_rounded,
+            'Attendance Report',
+            section: 'Reports',
+          ),
         ],
       ...sharedCollab,
       ],
@@ -1342,6 +1350,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       'ERP',
       'CRM',
       'HR',
+      'Reports',
       'Organisation',
       'Tracking',
       'Collaboration',

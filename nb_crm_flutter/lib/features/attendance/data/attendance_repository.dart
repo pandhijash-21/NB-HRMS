@@ -376,8 +376,9 @@ class AttendanceRepository {
     required String mode,
     required int year,
     required int month,
-    required List<String> fields,
+    List<String>? fields,
     List<int>? employeeIds,
+    String format = 'excel',
   }) async {
     final response = await _dio.dio.post<List<int>>(
       'attendance/admin/report/export',
@@ -385,8 +386,27 @@ class AttendanceRepository {
         'mode': mode,
         'year': year,
         'month': month,
-        'fields': fields,
+        if (fields != null) 'fields': fields,
         if (employeeIds != null && employeeIds.isNotEmpty) 'employeeIds': employeeIds,
+        'format': format,
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? []);
+  }
+
+  Future<Uint8List> exportSingleEmployeeReport({
+    required int employeeId,
+    required int year,
+    required int month,
+    String format = 'pdf',
+  }) async {
+    final response = await _dio.dio.get<List<int>>(
+      'attendance/employee/$employeeId/report/export',
+      queryParameters: {
+        'year': year,
+        'month': month,
+        'format': format,
       },
       options: Options(responseType: ResponseType.bytes),
     );

@@ -3,6 +3,11 @@ import { randomUUID } from 'crypto';
 import { deriveDayInOut } from './dayPunch.rules';
 import { evaluateWebAttendanceGate } from './webAttendanceGate';
 import { notifyAdminsWebAttendance } from './webAttendanceNotify';
+import {
+  buildAttendanceExcel,
+  buildAttendancePdf,
+  type EmployeeAttendanceExportData,
+} from './attendance.export';
 
 const IST_OFFSET_MIN = 330;
 const IST_OFFSET_MS = IST_OFFSET_MIN * 60 * 1000;
@@ -51,7 +56,7 @@ function fitsHalfDayWindow(
   return false;
 }
 const WEEKDAY_CODES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'] as const;
-type DayStatus = 'PRESENT' | 'LEAVE' | 'ABSENT' | 'HOLIDAY' | 'WFH';
+type DayStatus = 'PRESENT' | 'LEAVE' | 'ABSENT' | 'HOLIDAY' | 'WFH' | 'WFH_HALF_DAY';
 
 function istDayStartUtc(ymd: string) {
   // "YYYY-MM-DDT00:00:00+05:30" parsed into a UTC Date instance
@@ -473,16 +478,29 @@ function approvedLeaveDateSet(
   return out;
 }
 
+export type WfhDayDetail = {
+  isHalfDay: boolean;
+  session: 'MORNING' | 'AFTERNOON' | null;
+};
+
 function resolveDayStatus(
   hasPunch: boolean,
   dateYmd: string,
   approvedLeaveDates: Set<string>,
   holidayDates: Set<string>,
   wfhDates?: Set<string>,
+  wfhMap?: Map<string, WfhDayDetail>,
 ): DayStatus {
+  if (wfhMap && wfhMap.has(dateYmd)) {
+    const detail = wfhMap.get(dateYmd)!;
+    if (detail.isHalfDay) {
+      return hasPunch ? 'PRESENT' : 'WFH_HALF_DAY';
+    }
+    return 'WFH';
+  }
+  if (wfhDates && wfhDates.has(dateYmd)) return 'WFH';
   if (hasPunch) return 'PRESENT';
   if (holidayDates.has(dateYmd)) return 'HOLIDAY';
-  if (wfhDates && wfhDates.has(dateYmd)) return 'WFH';
   if (approvedLeaveDates.has(dateYmd)) return 'LEAVE';
   return 'ABSENT';
 }
@@ -500,7 +518,7 @@ async function fetchApprovedLeaveAndWfhDates(
   employeeId: number,
   fromYmd: string,
   toYmd: string,
-): Promise<{ approvedLeaveDates: Set<string>; wfhDates: Set<string> }> {
+): Promise<{ approvedLeaveDates: Set<string>; wfhDates: Set<string>; wfhMap: Map<string, WfhDayDetail> }> {
   const fromDate = parseYmd(fromYmd);
   const toDate = parseYmd(toYmd);
   const approvedLeaves = await prisma.leaveApplication.findMany({
@@ -514,6 +532,8 @@ async function fetchApprovedLeaveAndWfhDates(
       status: true,
       fromDate: true,
       toDate: true,
+      isHalfDay: true,
+      halfDaySession: true,
       leaveType: { select: { code: true } },
     },
   });
@@ -521,9 +541,29 @@ async function fetchApprovedLeaveAndWfhDates(
   const normalLeaves = approvedLeaves.filter((l) => l.leaveType?.code !== 'WFH');
   const wfhLeaves = approvedLeaves.filter((l) => l.leaveType?.code === 'WFH');
 
+  const wfhMap = new Map<string, WfhDayDetail>();
+  const rangeStart = istDayStartUtc(fromYmd).getTime();
+  const rangeEnd = istDayStartUtc(toYmd).getTime();
+
+  for (const app of wfhLeaves) {
+    let cursor = istDayStartUtc(istKeyFromUtcDate(app.fromDate));
+    const end = istDayStartUtc(istKeyFromUtcDate(app.toDate));
+    while (cursor.getTime() <= end.getTime()) {
+      if (cursor.getTime() >= rangeStart && cursor.getTime() <= rangeEnd) {
+        const k = istKeyFromUtcDate(cursor);
+        wfhMap.set(k, {
+          isHalfDay: Boolean(app.isHalfDay),
+          session: (app.halfDaySession as any) ?? null,
+        });
+      }
+      cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+    }
+  }
+
   return {
     approvedLeaveDates: approvedLeaveDateSet(normalLeaves, fromYmd, toYmd),
     wfhDates: approvedLeaveDateSet(wfhLeaves, fromYmd, toYmd),
+    wfhMap,
   };
 }
 
@@ -912,16 +952,20 @@ export const attendanceService = {
 
     const hasPunch = punches.length > 0;
     const [leaveApp, holidayDates] = await Promise.all([
-      hasPunch ? Promise.resolve(null) : fetchApprovedLeaveOnDate(params.employeeId, params.date),
+      fetchApprovedLeaveOnDate(params.employeeId, params.date),
       fetchHolidayDates(params.employeeId, params.date, params.date),
     ]);
     const isWfh = leaveApp?.leaveType?.code === 'WFH';
+    const wfhMap = isWfh && leaveApp
+      ? new Map([[params.date, { isHalfDay: Boolean(leaveApp.isHalfDay), session: (leaveApp as any).halfDaySession ?? null }]])
+      : undefined;
     const dayStatus = resolveDayStatus(
       hasPunch,
       params.date,
       !isWfh && leaveApp ? new Set([params.date]) : new Set<string>(),
       holidayDates,
       isWfh && leaveApp ? new Set([params.date]) : new Set<string>(),
+      wfhMap,
     );
 
     return {
@@ -931,11 +975,13 @@ export const attendanceService = {
         lastOut,
         totalMinutes: raw.totalMinutes,
         dayStatus,
-        wfh: dayStatus === 'WFH' && leaveApp
+        wfh: (dayStatus === 'WFH' || dayStatus === 'WFH_HALF_DAY') && leaveApp
           ? {
               applicationNo: leaveApp.applicationNo,
               fromDate: leaveApp.fromDate.toISOString(),
               toDate: leaveApp.toDate.toISOString(),
+              isHalfDay: Boolean(leaveApp.isHalfDay),
+              halfDaySession: (leaveApp as any).halfDaySession ?? null,
               reason: leaveApp.reason,
             }
           : null,
@@ -1066,7 +1112,7 @@ export const attendanceService = {
     const basePolicy = await resolveEffectivePolicy(params.employeeId);
     const dayOverrides = await fetchDayOverridesMap(params.from, params.to);
 
-    const approvedLeaveDates = await fetchApprovedLeaveDates(
+    const { approvedLeaveDates, wfhDates, wfhMap } = await fetchApprovedLeaveAndWfhDates(
       params.employeeId,
       params.from,
       params.to,
@@ -1106,6 +1152,7 @@ export const attendanceService = {
       punches: PunchRow[];
       dayStatus: DayStatus;
       eval: DayPunchEval;
+      wfhDetails: WfhDayDetail | null;
     };
     const draftDays: DraftDay[] = [];
 
@@ -1121,7 +1168,7 @@ export const attendanceService = {
       const evaluation = evaluateDayPunches(dayPolicy, firstIn, lastOut);
 
       const hasPunch = Boolean(firstIn);
-      const dayStatus = resolveDayStatus(hasPunch, date, approvedLeaveDates, holidayDates);
+      const dayStatus = resolveDayStatus(hasPunch, date, approvedLeaveDates, holidayDates, wfhDates, wfhMap);
 
       draftDays.push({
         date,
@@ -1130,6 +1177,7 @@ export const attendanceService = {
         punches: dayPunches,
         dayStatus,
         eval: evaluation,
+        wfhDetails: wfhMap.get(date) ?? null,
       });
 
       cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
@@ -1147,6 +1195,7 @@ export const attendanceService = {
       meetsPunchOut: d.eval.meetsPunchOut,
       bufferGraceUsed: d.bufferGraceUsed,
       dayStatus: d.dayStatus,
+      wfhDetails: d.wfhDetails,
     }));
 
     return {
@@ -1771,10 +1820,10 @@ export const attendanceService = {
   },
 
   /**
-   * Admin attendance Excel export.
+   * Admin attendance Export (Excel & PDF).
    * mode=DAY_WISE_MONTHLY → every active employee, every day in month.
    * mode=EMPLOYEE_WISE → only selected employeeIds for that month.
-   * `fields` controls which columns appear (dynamic).
+   * format: 'excel' (default) or 'pdf'.
    */
   async exportAttendanceReport(params: {
     mode: 'DAY_WISE_MONTHLY' | 'EMPLOYEE_WISE';
@@ -1782,14 +1831,13 @@ export const attendanceService = {
     month: number;
     employeeIds?: number[];
     fields?: string[];
-  }): Promise<{ buffer: Buffer; fileName: string }> {
-    const xlsx = await import('xlsx');
+    format?: 'excel' | 'pdf';
+  }): Promise<{ buffer: Buffer; fileName: string; mimeType: string }> {
     const mode = params.mode;
     if (mode !== 'DAY_WISE_MONTHLY' && mode !== 'EMPLOYEE_WISE') {
       throw new Error('mode must be DAY_WISE_MONTHLY or EMPLOYEE_WISE');
     }
 
-    const fieldKeys = normalizeReportFields(params.fields);
     const { from, to } = monthRangeYmd(params.year, params.month);
 
     let employeeIds: number[] = [];
@@ -1805,7 +1853,7 @@ export const attendanceService = {
       employeeIds = emps.map((e) => e.id);
     }
 
-    const rows: Record<string, string | number | boolean | null>[] = [];
+    const exportEmployees: EmployeeAttendanceExportData[] = [];
     // Process in small batches to avoid hammering DB for large orgs
     const batchSize = 8;
     for (let i = 0; i < employeeIds.length; i += batchSize) {
@@ -1818,53 +1866,115 @@ export const attendanceService = {
           }),
         ),
       );
+
       for (const hist of histories) {
         if (!hist) continue;
-        for (const day of hist.days) {
-          const raw: Record<string, string | number | boolean | null> = {
-            employeeId: hist.employee.employeeId,
-            employeeCode: hist.employee.employeeCode,
-            fullName: hist.employee.fullName,
-            designation: hist.employee.designation,
-            department: hist.employee.department,
-            date: day.date,
-            firstIn: formatIsoToIstHm(day.firstIn),
-            lastOut: formatIsoToIstHm(day.lastOut),
-            totalHours: formatMinutesAsHours(day.totalMinutes),
-            totalMinutes: day.totalMinutes ?? 0,
-            dayStatus: day.dayStatus,
-            isLate: day.isLate ? 'Yes' : 'No',
-            isHalfDay: day.isHalfDay ? 'Yes' : 'No',
-            meetsPunchOut: day.meetsPunchOut ? 'Yes' : 'No',
-            bufferGraceUsed: day.bufferGraceUsed ? 'Yes' : 'No',
-            punchCount: Array.isArray(day.punches) ? day.punches.length : 0,
+
+        const totalCalendarDays = hist.days.length;
+        let presentDays = 0;
+        let wfhFullDays = 0;
+        let wfhHalfDays = 0;
+        let halfDays = 0;
+        let leaveDays = 0;
+        let holidayDays = 0;
+        let absentDays = 0;
+        let totalWorkedMinutes = 0;
+        let lateCount = 0;
+        let bufferGraceUsedCount = 0;
+
+        const daysExport = hist.days.map((d) => {
+          const dayDate = new Date(d.date + 'T00:00:00Z');
+          const dayName = dayDate.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+
+          if (d.dayStatus === 'PRESENT') presentDays++;
+          else if (d.dayStatus === 'WFH') wfhFullDays++;
+          else if (d.dayStatus === 'WFH_HALF_DAY') wfhHalfDays++;
+          else if (d.dayStatus === 'LEAVE') leaveDays++;
+          else if (d.dayStatus === 'HOLIDAY') holidayDays++;
+          else absentDays++;
+
+          if (d.isHalfDay) halfDays++;
+          if (d.isLate) lateCount++;
+          if (d.bufferGraceUsed) bufferGraceUsedCount++;
+          totalWorkedMinutes += d.totalMinutes || 0;
+
+          return {
+            date: d.date,
+            dayName,
+            firstIn: formatIsoToIstHm(d.firstIn),
+            lastOut: formatIsoToIstHm(d.lastOut),
+            totalMinutes: d.totalMinutes || 0,
+            dayStatus: d.dayStatus,
+            isLate: Boolean(d.isLate),
+            isHalfDay: Boolean(d.isHalfDay),
+            bufferGraceUsed: Boolean(d.bufferGraceUsed),
+            meetsPunchOut: Boolean(d.meetsPunchOut),
+            punchCount: Array.isArray(d.punches) ? d.punches.length : 0,
+            wfhDetails: (d as any).wfhDetails ?? null,
+            remarks: null,
           };
-          const out: Record<string, string | number | boolean | null> = {};
-          for (const key of fieldKeys) {
-            const meta = ATTENDANCE_REPORT_FIELD_MAP.get(key);
-            if (!meta) continue;
-            out[meta.label] = raw[key] ?? '';
-          }
-          rows.push(out);
-        }
+        });
+
+        const totalWorkingDays = totalCalendarDays - holidayDays;
+        const averageDailyMinutes = presentDays > 0 ? Math.round(totalWorkedMinutes / presentDays) : 0;
+
+        exportEmployees.push({
+          employee: hist.employee,
+          policy: {
+            punchInTime: hist.policy?.punchInTime,
+            punchOutTime: hist.policy?.punchOutTime,
+            punchInBufferMinutes: hist.policy?.punchInBufferMinutes,
+          },
+          period: {
+            year: params.year,
+            month: params.month,
+            from,
+            to,
+          },
+          summary: {
+            totalCalendarDays,
+            totalWorkingDays,
+            presentDays,
+            wfhFullDays,
+            wfhHalfDays,
+            halfDays,
+            leaveDays,
+            holidayDays,
+            absentDays,
+            totalWorkedMinutes,
+            averageDailyMinutes,
+            lateCount,
+            bufferGraceUsedCount,
+          },
+          days: daysExport,
+        });
       }
     }
 
-    const wb = xlsx.utils.book_new();
-    const ws = xlsx.utils.json_to_sheet(
-      rows.length > 0
-        ? rows
-        : [
-            Object.fromEntries(
-              fieldKeys.map((k) => [ATTENDANCE_REPORT_FIELD_MAP.get(k)?.label ?? k, '']),
-            ),
-          ],
-    );
-    const sheetName = mode === 'DAY_WISE_MONTHLY' ? 'Day Wise' : 'Employee Wise';
-    xlsx.utils.book_append_sheet(wb, ws, sheetName);
-    const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
-    const fileName = `attendance_${mode === 'DAY_WISE_MONTHLY' ? 'daywise' : 'employee'}_${params.year}-${String(params.month).padStart(2, '0')}.xlsx`;
-    return { buffer, fileName };
+    const exportInput = {
+      mode,
+      year: params.year,
+      month: params.month,
+      employees: exportEmployees,
+    };
+
+    const isSingleEmp = mode === 'EMPLOYEE_WISE' && exportEmployees.length === 1;
+    const empSlug = isSingleEmp ? `_${exportEmployees[0].employee.fullName.replace(/\s+/g, '_')}` : '';
+    const format = String(params.format || 'excel').toLowerCase();
+
+    if (format === 'pdf') {
+      const { buffer, fileName: generatedName } = await buildAttendancePdf(exportInput);
+      const fileName = `attendance_report_${params.year}-${String(params.month).padStart(2, '0')}${empSlug}.pdf`;
+      return { buffer, fileName: generatedName || fileName, mimeType: 'application/pdf' };
+    } else {
+      const { buffer, fileName: generatedName } = buildAttendanceExcel(exportInput);
+      const fileName = `attendance_report_${params.year}-${String(params.month).padStart(2, '0')}${empSlug}.xlsx`;
+      return {
+        buffer,
+        fileName: generatedName || fileName,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      };
+    }
   },
 };
 

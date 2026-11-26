@@ -41,7 +41,10 @@ class AttendanceCalendarDay {
   bool get isLeave => (dayStatus ?? '').toUpperCase() == 'LEAVE';
   bool get isHoliday => (dayStatus ?? '').toUpperCase() == 'HOLIDAY';
   bool get isAbsent => (dayStatus ?? '').toUpperCase() == 'ABSENT';
-  bool get isWfh => (dayStatus ?? '').toUpperCase() == 'WFH';
+  bool get isWfh =>
+      (dayStatus ?? '').toUpperCase() == 'WFH' ||
+      (dayStatus ?? '').toUpperCase() == 'WFH_HALF_DAY';
+  bool get isWfhHalfDay => (dayStatus ?? '').toUpperCase() == 'WFH_HALF_DAY';
 }
 
 class AttendancePunch {
@@ -258,6 +261,35 @@ class AttendanceDayLeaveInfo {
   }
 }
 
+class AttendanceDayWfhInfo {
+  const AttendanceDayWfhInfo({
+    this.applicationNo,
+    this.fromDate,
+    this.toDate,
+    this.isHalfDay,
+    this.halfDaySession,
+    this.reason,
+  });
+
+  final String? applicationNo;
+  final String? fromDate;
+  final String? toDate;
+  final bool? isHalfDay;
+  final String? halfDaySession;
+  final String? reason;
+
+  factory AttendanceDayWfhInfo.fromJson(Map<String, dynamic> json) {
+    return AttendanceDayWfhInfo(
+      applicationNo: json['applicationNo'] as String?,
+      fromDate: json['fromDate']?.toString(),
+      toDate: json['toDate']?.toString(),
+      isHalfDay: json['isHalfDay'] as bool?,
+      halfDaySession: json['halfDaySession'] as String?,
+      reason: json['reason'] as String?,
+    );
+  }
+}
+
 class AttendanceMyDaySummary {
   const AttendanceMyDaySummary({
     this.firstIn,
@@ -267,6 +299,7 @@ class AttendanceMyDaySummary {
     this.evaluation,
     this.dayStatus,
     this.leave,
+    this.wfh,
   });
 
   final String? firstIn;
@@ -276,16 +309,22 @@ class AttendanceMyDaySummary {
   final AttendanceDayEvaluation? evaluation;
   final String? dayStatus;
   final AttendanceDayLeaveInfo? leave;
+  final AttendanceDayWfhInfo? wfh;
 
   bool get isLeave => (dayStatus ?? '').toUpperCase() == 'LEAVE';
   bool get isHoliday => (dayStatus ?? '').toUpperCase() == 'HOLIDAY';
   bool get isAbsent => (dayStatus ?? '').toUpperCase() == 'ABSENT';
-  bool get isWfh => (dayStatus ?? '').toUpperCase() == 'WFH';
+  bool get isWfh =>
+      (dayStatus ?? '').toUpperCase() == 'WFH' ||
+      (dayStatus ?? '').toUpperCase() == 'WFH_HALF_DAY';
+  bool get isWfhHalfDay =>
+      (dayStatus ?? '').toUpperCase() == 'WFH_HALF_DAY' || wfh?.isHalfDay == true;
 
   factory AttendanceMyDaySummary.fromJson(Map<String, dynamic> json) {
     final policy = _asMap(json['policy']);
     final evaluation = _asMap(json['evaluation']);
     final leave = _asMap(json['leave']);
+    final wfh = _asMap(json['wfh']);
     return AttendanceMyDaySummary(
       firstIn: json['firstIn'] as String?,
       lastOut: json['lastOut'] as String?,
@@ -295,6 +334,7 @@ class AttendanceMyDaySummary {
           evaluation != null ? AttendanceDayEvaluation.fromJson(evaluation) : null,
       dayStatus: json['dayStatus'] as String?,
       leave: leave != null ? AttendanceDayLeaveInfo.fromJson(leave) : null,
+      wfh: wfh != null ? AttendanceDayWfhInfo.fromJson(wfh) : null,
     );
   }
 }
@@ -389,6 +429,7 @@ class AdminAttendanceHistoryDay {
     this.isHalfDay,
     this.meetsPunchOut,
     this.dayStatus,
+    this.wfhDetails,
   });
 
   final String date;
@@ -400,6 +441,14 @@ class AdminAttendanceHistoryDay {
   final bool? isHalfDay;
   final bool? meetsPunchOut;
   final String? dayStatus;
+  final Map<String, dynamic>? wfhDetails;
+
+  bool get isWfh =>
+      (dayStatus ?? '').toUpperCase() == 'WFH' ||
+      (dayStatus ?? '').toUpperCase() == 'WFH_HALF_DAY';
+  bool get isWfhHalfDay =>
+      (dayStatus ?? '').toUpperCase() == 'WFH_HALF_DAY' ||
+      wfhDetails?['isHalfDay'] == true;
 
   factory AdminAttendanceHistoryDay.fromJson(Map<String, dynamic> json) {
     return AdminAttendanceHistoryDay(
@@ -412,6 +461,7 @@ class AdminAttendanceHistoryDay {
       isHalfDay: json['isHalfDay'] as bool?,
       meetsPunchOut: json['meetsPunchOut'] as bool?,
       dayStatus: json['dayStatus'] as String?,
+      wfhDetails: _asMap(json['wfhDetails']),
     );
   }
 }

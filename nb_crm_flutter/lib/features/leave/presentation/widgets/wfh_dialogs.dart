@@ -263,13 +263,19 @@ class _WfhSectionCardState extends State<WfhSectionCard> {
   }
 }
 
-/// Dialog: Apply for Work From Home (From Date, To Date, Reason)
-Future<void> showApplyWfhDialog(BuildContext context, {VoidCallback? onSuccess}) async {
+/// Dialog: Apply for Work From Home (Full Day / Half Day, Sessions, Reason)
+Future<void> showApplyWfhDialog(
+  BuildContext context, {
+  DateTime? initialDate,
+  VoidCallback? onSuccess,
+}) async {
   final isDark = Theme.of(context).brightness == Brightness.dark;
   const accentColor = Color(0xFF0D9488);
 
-  DateTime fromDate = DateTime.now();
-  DateTime toDate = DateTime.now();
+  DateTime fromDate = initialDate ?? DateTime.now();
+  DateTime toDate = initialDate ?? DateTime.now();
+  bool isHalfDay = false;
+  String halfDaySession = 'MORNING'; // 'MORNING' | 'AFTERNOON'
   final reasonCtrl = TextEditingController();
   final formKey = GlobalKey<FormState>();
   bool isSubmitting = false;
@@ -281,7 +287,7 @@ Future<void> showApplyWfhDialog(BuildContext context, {VoidCallback? onSuccess})
       return StatefulBuilder(
         builder: (ctx, setDlgState) {
           final daysDiff = toDate.difference(fromDate).inDays + 1;
-          final workingDays = daysDiff < 1 ? 1 : daysDiff;
+          final workingDays = isHalfDay ? 0.5 : (daysDiff < 1 ? 1 : daysDiff);
 
           return AlertDialog(
             backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
@@ -299,14 +305,14 @@ Future<void> showApplyWfhDialog(BuildContext context, {VoidCallback? onSuccess})
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
-                    'Apply for WFH',
+                    'Apply for Work From Home',
                     style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
                   ),
                 ),
               ],
             ),
             content: SizedBox(
-              width: 480,
+              width: 500,
               child: Form(
                 key: formKey,
                 child: SingleChildScrollView(
@@ -315,116 +321,285 @@ Future<void> showApplyWfhDialog(BuildContext context, {VoidCallback? onSuccess})
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Select the date range and provide a reason for your remote working period.',
+                        'Submit your Work From Home request. HR approval is required before it is calculated in your attendance record.',
                         style: TextStyle(
                           fontSize: 13,
                           color: isDark ? Colors.white70 : const Color(0xFF607D8B),
                         ),
                       ),
-                      const SizedBox(height: 20),
-                      // Date range selectors
+                      const SizedBox(height: 18),
+                      // Duration selection: Full Day vs Half Day
+                      const Text(
+                        'Day Type *',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'From Date *',
-                                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                                ),
-                                const SizedBox(height: 6),
-                                InkWell(
-                                  onTap: () async {
-                                    final picked = await showDatePicker(
-                                      context: ctx,
-                                      initialDate: fromDate,
-                                      firstDate: DateTime(DateTime.now().year - 1),
-                                      lastDate: DateTime(DateTime.now().year + 2),
-                                    );
-                                    if (picked != null) {
-                                      setDlgState(() {
-                                        fromDate = picked;
-                                        if (toDate.isBefore(fromDate)) {
-                                          toDate = fromDate;
-                                        }
-                                      });
-                                    }
-                                  },
+                            child: InkWell(
+                              onTap: () => setDlgState(() => isHalfDay = false),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: !isHalfDay
+                                      ? accentColor.withValues(alpha: isDark ? 0.25 : 0.12)
+                                      : (isDark ? const Color(0xFF2B2722) : const Color(0xFFF8FAFC)),
                                   borderRadius: BorderRadius.circular(10),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: isDark ? Colors.white24 : Colors.grey.shade300,
-                                      ),
-                                      borderRadius: BorderRadius.circular(10),
-                                      color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF8FAFC),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.calendar_today_rounded, size: 16, color: accentColor),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          _formatYmd(fromDate),
-                                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                        ),
-                                      ],
-                                    ),
+                                  border: Border.all(
+                                    color: !isHalfDay ? accentColor : (isDark ? Colors.white24 : Colors.grey.shade300),
+                                    width: !isHalfDay ? 1.5 : 1,
                                   ),
                                 ),
-                              ],
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      !isHalfDay ? Icons.radio_button_checked : Icons.radio_button_off,
+                                      size: 16,
+                                      color: !isHalfDay ? accentColor : (isDark ? Colors.white54 : Colors.grey),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Full Day (1.0)',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                        color: !isHalfDay ? accentColor : (isDark ? Colors.white70 : Colors.black87),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 14),
+                          const SizedBox(width: 12),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'To Date *',
-                                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                                ),
-                                const SizedBox(height: 6),
-                                InkWell(
-                                  onTap: () async {
-                                    final picked = await showDatePicker(
-                                      context: ctx,
-                                      initialDate: toDate.isBefore(fromDate) ? fromDate : toDate,
-                                      firstDate: fromDate,
-                                      lastDate: DateTime(DateTime.now().year + 2),
-                                    );
-                                    if (picked != null) {
-                                      setDlgState(() => toDate = picked);
-                                    }
-                                  },
+                            child: InkWell(
+                              onTap: () => setDlgState(() {
+                                isHalfDay = true;
+                                toDate = fromDate;
+                              }),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: isHalfDay
+                                      ? accentColor.withValues(alpha: isDark ? 0.25 : 0.12)
+                                      : (isDark ? const Color(0xFF2B2722) : const Color(0xFFF8FAFC)),
                                   borderRadius: BorderRadius.circular(10),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: isDark ? Colors.white24 : Colors.grey.shade300,
-                                      ),
-                                      borderRadius: BorderRadius.circular(10),
-                                      color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF8FAFC),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.calendar_today_rounded, size: 16, color: accentColor),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          _formatYmd(toDate),
-                                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                        ),
-                                      ],
-                                    ),
+                                  border: Border.all(
+                                    color: isHalfDay ? accentColor : (isDark ? Colors.white24 : Colors.grey.shade300),
+                                    width: isHalfDay ? 1.5 : 1,
                                   ),
                                 ),
-                              ],
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      isHalfDay ? Icons.radio_button_checked : Icons.radio_button_off,
+                                      size: 16,
+                                      color: isHalfDay ? accentColor : (isDark ? Colors.white54 : Colors.grey),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Half Day (0.5)',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                        color: isHalfDay ? accentColor : (isDark ? Colors.white70 : Colors.black87),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ],
                       ),
+                      if (isHalfDay) ...[
+                        const SizedBox(height: 14),
+                        const Text(
+                          'Half Day Session *',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ChoiceChip(
+                                label: const Center(child: Text('Morning Session')),
+                                selected: halfDaySession == 'MORNING',
+                                selectedColor: accentColor.withValues(alpha: 0.2),
+                                onSelected: (val) {
+                                  if (val) setDlgState(() => halfDaySession = 'MORNING');
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ChoiceChip(
+                                label: const Center(child: Text('Afternoon Session')),
+                                selected: halfDaySession == 'AFTERNOON',
+                                selectedColor: accentColor.withValues(alpha: 0.2),
+                                onSelected: (val) {
+                                  if (val) setDlgState(() => halfDaySession = 'AFTERNOON');
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                      // Date selectors
+                      if (isHalfDay) ...[
+                        const Text(
+                          'Date *',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                        const SizedBox(height: 6),
+                        InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: ctx,
+                              initialDate: fromDate,
+                              firstDate: DateTime(DateTime.now().year - 1),
+                              lastDate: DateTime(DateTime.now().year + 2),
+                            );
+                            if (picked != null) {
+                              setDlgState(() {
+                                fromDate = picked;
+                                toDate = picked;
+                              });
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: isDark ? Colors.white24 : Colors.grey.shade300,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF8FAFC),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.calendar_today_rounded, size: 16, color: accentColor),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _formatYmd(fromDate),
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'From Date *',
+                                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  InkWell(
+                                    onTap: () async {
+                                      final picked = await showDatePicker(
+                                        context: ctx,
+                                        initialDate: fromDate,
+                                        firstDate: DateTime(DateTime.now().year - 1),
+                                        lastDate: DateTime(DateTime.now().year + 2),
+                                      );
+                                      if (picked != null) {
+                                        setDlgState(() {
+                                          fromDate = picked;
+                                          if (toDate.isBefore(fromDate)) {
+                                            toDate = fromDate;
+                                          }
+                                        });
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: isDark ? Colors.white24 : Colors.grey.shade300,
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                        color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF8FAFC),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.calendar_today_rounded, size: 16, color: accentColor),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            _formatYmd(fromDate),
+                                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'To Date *',
+                                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  InkWell(
+                                    onTap: () async {
+                                      final picked = await showDatePicker(
+                                        context: ctx,
+                                        initialDate: toDate.isBefore(fromDate) ? fromDate : toDate,
+                                        firstDate: fromDate,
+                                        lastDate: DateTime(DateTime.now().year + 2),
+                                      );
+                                      if (picked != null) {
+                                        setDlgState(() => toDate = picked);
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: isDark ? Colors.white24 : Colors.grey.shade300,
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                        color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF8FAFC),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.calendar_today_rounded, size: 16, color: accentColor),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            _formatYmd(toDate),
+                                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -438,11 +613,34 @@ Future<void> showApplyWfhDialog(BuildContext context, {VoidCallback? onSuccess})
                             const Icon(Icons.info_outline_rounded, size: 16, color: accentColor),
                             const SizedBox(width: 8),
                             Text(
-                              'Duration: $workingDays calendar day${workingDays > 1 ? 's' : ''}',
+                              isHalfDay
+                                  ? 'Duration: 0.5 Day (${halfDaySession == 'MORNING' ? 'Morning' : 'Afternoon'})'
+                                  : 'Duration: $workingDays calendar day${workingDays > 1 ? 's' : ''}',
                               style: const TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w700,
                                 color: accentColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: isDark ? 0.15 : 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.amber.shade600.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.gavel_rounded, size: 16, color: Colors.amber.shade700),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                'HR must approve your WFH request before it is calculated into your attendance.',
+                                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
                               ),
                             ),
                           ],
@@ -505,14 +703,16 @@ Future<void> showApplyWfhDialog(BuildContext context, {VoidCallback? onSuccess})
                           final repo = context.read<LeaveRepository>();
                           await repo.applyWfh(
                             fromDate: _formatYmd(fromDate),
-                            toDate: _formatYmd(toDate),
+                            toDate: _formatYmd(isHalfDay ? fromDate : toDate),
                             reason: reasonCtrl.text.trim(),
+                            isHalfDay: isHalfDay,
+                            halfDaySession: isHalfDay ? halfDaySession : null,
                           );
                           if (context.mounted) {
                             Navigator.pop(dlgCtx);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('WFH request submitted successfully. Sent for reporting approvals.'),
+                                content: Text('WFH request submitted successfully. Awaiting HR approval.'),
                                 backgroundColor: Color(0xFF0D9488),
                               ),
                             );

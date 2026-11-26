@@ -66,6 +66,38 @@ export default function AdminEmployeeAttendanceHistoryPage() {
   const [editingDate, setEditingDate] = useState("");
   const [editingTime, setEditingTime] = useState("");
   const [editingType, setEditingType] = useState("");
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  const handleDownloadReport = async (format: "pdf" | "excel") => {
+    setDownloading(format);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
+      const res = await fetch(
+        `/api/attendance/employee/${employeeId}/report/export?year=${year}&month=${month}&format=${format}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      if (!res.ok) throw new Error("Failed to export report");
+      const blob = await res.blob();
+      const ext = format === "pdf" ? "pdf" : "xlsx";
+      const fileName = `attendance_${historyQ.data?.employee.employeeCode || employeeId}_${year}-${String(month).padStart(2, "0")}.${ext}`;
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      alert(err.message || "Failed to download attendance report");
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   const daysWithPunches = useMemo(
     () => (historyQ.data?.days ?? []).filter((d) => d.punches.length > 0).slice().reverse(),
@@ -161,6 +193,25 @@ export default function AdminEmployeeAttendanceHistoryPage() {
           </span>
           <Button variant="outline" size="sm" onClick={nextMonth}>
             Next
+          </Button>
+          <div className="h-4 w-px bg-slate-200 mx-1 hidden sm:block" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-red-700 border-red-200 hover:bg-red-50 hidden sm:inline-flex"
+            disabled={downloading !== null}
+            onClick={() => handleDownloadReport("pdf")}
+          >
+            {downloading === "pdf" ? "Exporting..." : "Export PDF"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-teal-700 border-teal-200 hover:bg-teal-50 hidden sm:inline-flex"
+            disabled={downloading !== null}
+            onClick={() => handleDownloadReport("excel")}
+          >
+            {downloading === "excel" ? "Exporting..." : "Export Excel"}
           </Button>
         </div>
       </div>

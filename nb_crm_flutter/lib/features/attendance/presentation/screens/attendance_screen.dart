@@ -15,6 +15,7 @@ import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/attendance_repository.dart';
 import '../../domain/attendance_models.dart';
 import '../../../leave/presentation/widgets/leave_shared_widgets.dart';
+import '../../../leave/presentation/widgets/wfh_dialogs.dart';
 import '../bloc/attendance_bloc.dart';
 import '../geofenced_punch_service.dart';
 import '../web_attendance_gate.dart';
@@ -674,13 +675,45 @@ class _AttendanceViewState extends State<_AttendanceView> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  'Day Detail · ${state.selectedDate.isEmpty ? '—' : state.selectedDate}',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: isDark ? Colors.white : const Color(0xFF212F3D),
-                    letterSpacing: -0.3,
+                Expanded(
+                  child: Text(
+                    'Day Detail · ${state.selectedDate.isEmpty ? '—' : state.selectedDate}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : const Color(0xFF212F3D),
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    DateTime? initDt;
+                    if (state.selectedDate.isNotEmpty) {
+                      initDt = DateTime.tryParse(state.selectedDate);
+                    }
+                    showApplyWfhDialog(
+                      context,
+                      initialDate: initDt,
+                      onSuccess: () {
+                        final empId = auth.user?.employeeId;
+                        context.read<AttendanceBloc>().add(AttendanceRefreshRequested(employeeId: empId));
+                      },
+                    );
+                  },
+                  icon: const Icon(Icons.home_work_rounded, size: 16, color: Color(0xFF0D9488)),
+                  label: const Text(
+                    'Mark WFH',
+                    style: TextStyle(
+                      color: Color(0xFF0D9488),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF0D9488)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                 ),
               ],
@@ -1300,13 +1333,15 @@ class _DayDetail extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
-                        Icon(Icons.home_work_rounded, size: 18, color: Color(0xFF0D9488)),
-                        SizedBox(width: 8),
+                        const Icon(Icons.home_work_rounded, size: 18, color: Color(0xFF0D9488)),
+                        const SizedBox(width: 8),
                         Text(
-                          'WORK FROM HOME (WFH)',
-                          style: TextStyle(
+                          summary.isWfhHalfDay
+                              ? 'APPROVED WFH (HALF DAY)'
+                              : 'APPROVED WORK FROM HOME (FULL DAY)',
+                          style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
                             color: Color(0xFF0D9488),
@@ -1317,7 +1352,9 @@ class _DayDetail extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Approved Work From Home',
+                      summary.isWfhHalfDay
+                          ? 'Approved WFH Half Day (${summary.wfh?.halfDaySession ?? "Morning"})'
+                          : 'Approved Work From Home (Full Day)',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -1326,7 +1363,9 @@ class _DayDetail extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'This day is marked as approved Work From Home in your attendance record.',
+                      summary.isWfhHalfDay
+                          ? 'This day is marked as approved half-day remote work in your attendance record.'
+                          : 'This day is marked as approved Work From Home in your attendance record.',
                       style: TextStyle(
                         fontSize: 12,
                         color: isDark ? Colors.white70 : const Color(0xFF607D8B),

@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../data/project_repository.dart';
 import '../../domain/structure_models.dart';
@@ -170,6 +172,57 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
   ErpProjectTower? _tower;
   List<ErpProjectUnit> _otherUnits = [];
 
+  DateTime? _draftTime;
+
+  String get _draftKey => 'erp_unit_${widget.projectId}_${widget.towerId}_${widget.unitId}';
+
+  void _autoSaveDraft() {
+    if (!mounted || _loading) return;
+    FormDraftService.instance.autoSave(
+      formId: _draftKey,
+      data: _buildPayload(),
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    final draft = await FormDraftService.instance.loadDraftInfo(_draftKey);
+    if (draft != null && mounted) {
+      final data = draft.data;
+      setState(() {
+        _draftTime = draft.savedAt;
+        if (data['unitNo'] != null) _unitNo.text = data['unitNo'].toString();
+        if (data['floorNo'] != null) _floorNo.text = data['floorNo'].toString();
+        if (data['unitTypeCode'] != null) _unitTypeCode = data['unitTypeCode'].toString();
+        if (data['isDuplex'] != null) _isDuplex = data['isDuplex'] == true;
+        if (data['absorbUpperFloor'] != null) _absorbUpperFloor = data['absorbUpperFloor'] == true;
+        if (data['superBuiltUp'] != null) _superBuiltUp.text = data['superBuiltUp'].toString();
+        if (data['carpetArea'] != null) _carpet.text = data['carpetArea'].toString();
+        if (data['areaUnitCode'] != null) _areaUnitCode = data['areaUnitCode'].toString();
+        if (data['statusCode'] != null) _statusCode = data['statusCode'].toString();
+        if (data['facingCode'] != null) _facingCode = data['facingCode'].toString();
+        if (data['categoryCode'] != null) _categoryCode = data['categoryCode'].toString();
+        if (data['builtUpArea'] != null) _builtUp.text = data['builtUpArea'].toString();
+        if (data['balconyArea'] != null) _balcony.text = data['balconyArea'].toString();
+        if (data['terraceArea'] != null) _terrace.text = data['terraceArea'].toString();
+        if (data['plotArea'] != null) _plot.text = data['plotArea'].toString();
+        if (data['parkingAllocation'] != null) _parking.text = data['parkingAllocation'].toString();
+        if (data['plc'] != null) _plc.text = data['plc'].toString();
+        if (data['frc'] != null) _frc.text = data['frc'].toString();
+        if (data['developmentCharge'] != null) _developmentCharge.text = data['developmentCharge'].toString();
+        if (data['baseRate'] != null) _baseRate.text = data['baseRate'].toString();
+        if (data['remarks'] != null) _remarks.text = data['remarks'].toString();
+      });
+      _recalcAllPricing();
+    }
+  }
+
+  Future<void> _discardDraft() async {
+    await FormDraftService.instance.clearDraft(_draftKey);
+    if (!mounted) return;
+    setState(() => _draftTime = null);
+    _loadData();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -178,6 +231,21 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
     _frc.addListener(_recalcAllPricing);
     _developmentCharge.addListener(_recalcAllPricing);
     _plc.addListener(_recalcAllPricing);
+
+    _unitNo.addListener(_autoSaveDraft);
+    _floorNo.addListener(_autoSaveDraft);
+    _superBuiltUp.addListener(_autoSaveDraft);
+    _carpet.addListener(_autoSaveDraft);
+    _builtUp.addListener(_autoSaveDraft);
+    _balcony.addListener(_autoSaveDraft);
+    _terrace.addListener(_autoSaveDraft);
+    _plot.addListener(_autoSaveDraft);
+    _parking.addListener(_autoSaveDraft);
+    _plc.addListener(_autoSaveDraft);
+    _frc.addListener(_autoSaveDraft);
+    _developmentCharge.addListener(_autoSaveDraft);
+    _baseRate.addListener(_autoSaveDraft);
+    _remarks.addListener(_autoSaveDraft);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
@@ -213,6 +281,7 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
             _hydrate(unit!);
             _loading = false;
           });
+          await _restoreDraftIfAny();
         }
       } else {
         if (mounted) {
@@ -1199,6 +1268,7 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
             unitId: widget.unitId,
             body: body,
           );
+      await FormDraftService.instance.clearDraft(_draftKey);
       if (!mounted) return;
       final missing = updated.missingCompletenessFields;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1635,6 +1705,14 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
             children: [
+              if (_draftTime != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: FormDraftBanner(
+                    savedAt: _draftTime!,
+                    onDiscard: _discardDraft,
+                  ),
+                ),
               // Autofill Banner Card
               if (_otherUnits.isNotEmpty)
                 Container(

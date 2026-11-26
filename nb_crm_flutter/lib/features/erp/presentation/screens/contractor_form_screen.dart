@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../lookups/domain/lookup_models.dart';
@@ -57,15 +59,100 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
 
   bool _hydrated = false;
   bool _saving = false;
+  FormDraftInfo? _draftInfo;
 
   @override
   void initState() {
     super.initState();
-    if (widget.isEdit) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+    _nameCtrl.addListener(_autoSaveDraft);
+    _mobileCtrl.addListener(_autoSaveDraft);
+    _emailCtrl.addListener(_autoSaveDraft);
+    _altMobileCtrl.addListener(_autoSaveDraft);
+    _bankCtrl.addListener(_autoSaveDraft);
+    _branchCtrl.addListener(_autoSaveDraft);
+    _ifscCtrl.addListener(_autoSaveDraft);
+    _accountCtrl.addListener(_autoSaveDraft);
+    _paymentCtrl.addListener(_autoSaveDraft);
+    _panCtrl.addListener(_autoSaveDraft);
+    _gstCtrl.addListener(_autoSaveDraft);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.isEdit) {
         if (mounted) _loadContractor();
+      } else {
+        _restoreDraftIfAny();
+      }
+    });
+  }
+
+  void _autoSaveDraft() {
+    if (_saving) return;
+    final data = {
+      'name': _nameCtrl.text.trim(),
+      'mobile': _mobileCtrl.text.trim(),
+      'email': _emailCtrl.text.trim(),
+      'altMobile': _altMobileCtrl.text.trim(),
+      'bank': _bankCtrl.text.trim(),
+      'branch': _branchCtrl.text.trim(),
+      'ifsc': _ifscCtrl.text.trim(),
+      'account': _accountCtrl.text.trim(),
+      'payment': _paymentCtrl.text.trim(),
+      'pan': _panCtrl.text.trim(),
+      'gst': _gstCtrl.text.trim(),
+      'tdsCode': _tdsCode,
+      'contractorTypeCode': _contractorTypeCode,
+      'isActive': _isActive,
+    };
+    FormDraftService.instance.autoSave(
+      formId: 'erp_contractor',
+      entityId: widget.id,
+      data: data,
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    if (widget.isEdit) return;
+    final draft = await FormDraftService.instance.loadDraftInfo('erp_contractor');
+    if (draft != null && mounted) {
+      setState(() {
+        _draftInfo = draft;
+        final d = draft.data;
+        if ((d['name'] as String?)?.isNotEmpty == true) _nameCtrl.text = d['name'];
+        if ((d['mobile'] as String?)?.isNotEmpty == true) _mobileCtrl.text = d['mobile'];
+        if ((d['email'] as String?)?.isNotEmpty == true) _emailCtrl.text = d['email'];
+        if ((d['altMobile'] as String?)?.isNotEmpty == true) _altMobileCtrl.text = d['altMobile'];
+        if ((d['bank'] as String?)?.isNotEmpty == true) _bankCtrl.text = d['bank'];
+        if ((d['branch'] as String?)?.isNotEmpty == true) _branchCtrl.text = d['branch'];
+        if ((d['ifsc'] as String?)?.isNotEmpty == true) _ifscCtrl.text = d['ifsc'];
+        if ((d['account'] as String?)?.isNotEmpty == true) _accountCtrl.text = d['account'];
+        if ((d['payment'] as String?)?.isNotEmpty == true) _paymentCtrl.text = d['payment'];
+        if ((d['pan'] as String?)?.isNotEmpty == true) _panCtrl.text = d['pan'];
+        if ((d['gst'] as String?)?.isNotEmpty == true) _gstCtrl.text = d['gst'];
+        if (d['tdsCode'] != null) _tdsCode = d['tdsCode'];
+        if (d['contractorTypeCode'] != null) _contractorTypeCode = d['contractorTypeCode'];
+        if (d['isActive'] != null) _isActive = d['isActive'] == true;
       });
     }
+  }
+
+  void _discardDraft() {
+    FormDraftService.instance.clearDraft('erp_contractor', entityId: widget.id);
+    setState(() {
+      _draftInfo = null;
+      _nameCtrl.clear();
+      _mobileCtrl.clear();
+      _emailCtrl.clear();
+      _altMobileCtrl.clear();
+      _bankCtrl.clear();
+      _branchCtrl.clear();
+      _ifscCtrl.clear();
+      _accountCtrl.clear();
+      _paymentCtrl.clear();
+      _panCtrl.clear();
+      _gstCtrl.clear();
+      _tdsCode = null;
+      _contractorTypeCode = null;
+    });
   }
 
   Future<void> _loadContractor() async {
@@ -243,6 +330,7 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
       };
 
       final repo = context.read<WorkOrderRepository>();
+      await FormDraftService.instance.clearDraft('erp_contractor', entityId: widget.id);
       if (widget.isEdit) {
         await repo.updateContractor(widget.id!, body);
       } else {
@@ -366,6 +454,12 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           children: [
+            FormDraftBanner(
+              formId: 'erp_contractor',
+              entityId: widget.id,
+              draftInfo: _draftInfo,
+              onDiscard: _draftInfo != null ? _discardDraft : null,
+            ),
             _section(
               title: 'Vendor Details',
               child: Column(

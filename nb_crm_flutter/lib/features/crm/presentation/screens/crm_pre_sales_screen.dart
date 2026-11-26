@@ -11,10 +11,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/network/api_envelope.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
 import '../../../../core/tour/models/tour_models.dart';
 import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/utils/open_url.dart';
 import '../../../../core/widgets/click_to_call_dial_dialog.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/domain/permissions.dart';
@@ -10886,7 +10888,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   // ---------------------------------------------------------------------------
   // Dialog: Add Lead Dynamically
   // ---------------------------------------------------------------------------
-  void _showAddLeadDialog(BuildContext context, List<CrmColumnConfig> columns) {
+  Future<void> _showAddLeadDialog(BuildContext context, List<CrmColumnConfig> columns) async {
     // Exclude redundant source/flow keys so dynamic loop does not create duplicate Lead Source fields
     final formColumns = columns.where((col) {
       final k = col.columnKey.toLowerCase().replaceAll(' ', '_');
@@ -10914,6 +10916,58 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     bool allowDuplicate = false;
     bool sendWhatsapp = true;
 
+    const draftKey = 'crm_lead_create';
+    final draft = await FormDraftService.instance.loadDraftInfo(draftKey);
+    DateTime? draftTime;
+    if (draft != null) {
+      draftTime = draft.savedAt;
+      final d = draft.data;
+      if (d['selectedLeadSource'] != null) selectedLeadSource = d['selectedLeadSource'].toString();
+      if (d['selectedRefType'] != null) selectedRefType = d['selectedRefType'].toString();
+      if (d['selectedLoanType'] != null) selectedLoanType = d['selectedLoanType'].toString();
+      if (d['cpName'] != null) cpNameController.text = d['cpName'].toString();
+      if (d['cpPhone'] != null) cpPhoneController.text = d['cpPhone'].toString();
+      if (d['cpCountryCode'] != null) cpCountryCodeController.text = d['cpCountryCode'].toString();
+      if (d['phoneCountryCode'] != null) phoneCountryCodeController.text = d['phoneCountryCode'].toString();
+      if (d['refName'] != null) refNameController.text = d['refName'].toString();
+      final colValues = d['controllers'] as Map<String, dynamic>?;
+      if (colValues != null) {
+        for (final col in formColumns) {
+          if (colValues[col.columnKey] != null) {
+            controllers[col.columnKey]?.text = colValues[col.columnKey].toString();
+          }
+        }
+      }
+    }
+
+    void autoSave() {
+      final colValues = <String, String>{};
+      for (final col in formColumns) {
+        colValues[col.columnKey] = controllers[col.columnKey]?.text ?? '';
+      }
+      FormDraftService.instance.autoSave(
+        formId: draftKey,
+        data: {
+          'selectedLeadSource': selectedLeadSource,
+          'selectedRefType': selectedRefType,
+          'selectedLoanType': selectedLoanType,
+          'cpName': cpNameController.text,
+          'cpPhone': cpPhoneController.text,
+          'cpCountryCode': cpCountryCodeController.text,
+          'phoneCountryCode': phoneCountryCodeController.text,
+          'refName': refNameController.text,
+          'controllers': colValues,
+        },
+      );
+    }
+
+    for (final c in controllers.values) {
+      c.addListener(autoSave);
+    }
+    cpNameController.addListener(autoSave);
+    cpPhoneController.addListener(autoSave);
+    refNameController.addListener(autoSave);
+
     showDialog(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
@@ -10926,6 +10980,26 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (draftTime != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: FormDraftBanner(
+                        savedAt: draftTime!,
+                        onDiscard: () async {
+                          await FormDraftService.instance.clearDraft(draftKey);
+                          setDialogState(() {
+                            draftTime = null;
+                            for (final c in controllers.values) {
+                              c.clear();
+                            }
+                            cpNameController.clear();
+                            cpPhoneController.clear();
+                            refNameController.clear();
+                            selectedLeadSource = 'Walk-in';
+                          });
+                        },
+                      ),
+                    ),
                   // Unified Lead Source Selection with Channel Partner, Reference, etc.
                   Padding(
                     padding: const EdgeInsets.only(bottom: 16),
@@ -11453,6 +11527,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
             try {
               final created = await context.read<CrmRepository>().createLead(payload);
+              await FormDraftService.instance.clearDraft(draftKey);
               if (!context.mounted) return;
               context.read<CrmLeadsBloc>().add(const CrmLeadsRefreshRequested());
               ScaffoldMessenger.of(context).showSnackBar(

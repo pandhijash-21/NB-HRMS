@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../data/boq_repository.dart';
@@ -65,16 +67,101 @@ class _DprFormScreenState extends State<DprFormScreen> {
 
   int _resourceTab = 0; // 0 mat, 1 lab, 2 mac
   bool _saving = false;
+  FormDraftInfo? _draftInfo;
 
   static const _allTower = '__ALL__';
 
   @override
   void initState() {
     super.initState();
+    _remarksCtrl.addListener(_autoSaveDraft);
+    _consumedCtrl.addListener(_autoSaveDraft);
+    _completionCtrl.addListener(_autoSaveDraft);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final name = context.read<AuthBloc>().state.user?.name;
       if (name != null && _createdByCtrl.text.isEmpty) _createdByCtrl.text = name;
       _loadInitialData();
+    });
+  }
+
+  void _autoSaveDraft() {
+    if (_saving || _loadingInitial) return;
+    final data = {
+      'reportDate': _reportDate.toIso8601String(),
+      'projectId': _projectId,
+      'createdByName': _createdByCtrl.text.trim(),
+      'contractorId': _contractorId,
+      'activityId': _activityId,
+      'subtaskId': _subtaskId,
+      'towerId': _towerId,
+      'floorNo': _floorNo,
+      'unitId': _unitId,
+      'unitCode': _unitCode,
+      'consumed': _consumedCtrl.text.trim(),
+      'gradeCode': _gradeCode,
+      'remarks': _remarksCtrl.text.trim(),
+      'statusCode': _statusCode,
+      'completion': _completionCtrl.text.trim(),
+      'lines': _lines.map((l) => l.toJson()).toList(),
+    };
+    FormDraftService.instance.autoSave(
+      formId: 'erp_dpr',
+      data: data,
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    final draft = await FormDraftService.instance.loadDraftInfo('erp_dpr');
+    if (draft != null && mounted) {
+      setState(() {
+        _draftInfo = draft;
+        final d = draft.data;
+        if (d['reportDate'] != null) {
+          _reportDate = DateTime.tryParse(d['reportDate'].toString()) ?? _reportDate;
+        }
+        if (d['projectId'] != null) _projectId = d['projectId'];
+        if ((d['createdByName'] as String?)?.isNotEmpty == true) {
+          _createdByCtrl.text = d['createdByName'];
+        }
+        if (d['contractorId'] != null) _contractorId = d['contractorId'];
+        if (d['activityId'] != null) _activityId = d['activityId'];
+        if (d['subtaskId'] != null) _subtaskId = d['subtaskId'];
+        if (d['towerId'] != null) _towerId = d['towerId'];
+        if (d['floorNo'] != null) _floorNo = d['floorNo'] as int?;
+        if (d['unitId'] != null) _unitId = d['unitId'];
+        if (d['unitCode'] != null) _unitCode = d['unitCode'];
+        if ((d['consumed'] as String?)?.isNotEmpty == true) _consumedCtrl.text = d['consumed'];
+        if (d['gradeCode'] != null) _gradeCode = d['gradeCode'];
+        if ((d['remarks'] as String?)?.isNotEmpty == true) _remarksCtrl.text = d['remarks'];
+        if (d['statusCode'] != null) _statusCode = d['statusCode'];
+        if ((d['completion'] as String?)?.isNotEmpty == true) _completionCtrl.text = d['completion'];
+        if (d['lines'] is List) {
+          try {
+            _lines
+              ..clear()
+              ..addAll((d['lines'] as List).map((l) => ErpDprLine.fromJson(l as Map<String, dynamic>)));
+          } catch (_) {}
+        }
+      });
+    }
+  }
+
+  void _discardDraft() {
+    FormDraftService.instance.clearDraft('erp_dpr');
+    setState(() {
+      _draftInfo = null;
+      _lines.clear();
+      _projectId = null;
+      _contractorId = null;
+      _activityId = null;
+      _subtaskId = null;
+      _towerId = null;
+      _floorNo = null;
+      _unitId = null;
+      _unitCode = null;
+      _consumedCtrl.text = '0';
+      _remarksCtrl.clear();
+      _completionCtrl.clear();
     });
   }
 
@@ -101,6 +188,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
           _labour = res[5] as List<ErpLabour>;
           _loadingInitial = false;
         });
+        await _restoreDraftIfAny();
       }
     } catch (e) {
       if (mounted) {
@@ -324,6 +412,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
         'createdByName': _createdByCtrl.text.trim().isEmpty ? null : _createdByCtrl.text.trim(),
         'lines': _lines.map((l) => l.toJson()).toList(),
       });
+      await FormDraftService.instance.clearDraft('erp_dpr');
       if (!mounted) return;
       // Open printable Daily Report view once mandatory data is saved.
       context.go('/erp/dpr/${created.id}');
@@ -587,6 +676,11 @@ class _DprFormScreenState extends State<DprFormScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      FormDraftBanner(
+                        formId: 'erp_dpr',
+                        draftInfo: _draftInfo,
+                        onDiscard: _draftInfo != null ? _discardDraft : null,
+                      ),
                       _card(
                         isDark,
                         child: Wrap(

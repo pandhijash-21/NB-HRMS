@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../data/boq_repository.dart';
@@ -176,6 +178,7 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
   bool _loading = true;
   bool _saving = false;
   String? _error;
+  FormDraftInfo? _draftInfo;
 
   List<ErpProject> _projects = [];
   List<ErpActivity> _activities = [];
@@ -193,7 +196,97 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
   @override
   void initState() {
     super.initState();
+    _prNoCtrl.addListener(_autoSaveDraft);
     _bootstrap();
+  }
+
+  void _autoSaveDraft() {
+    if (_saving || _loading) return;
+    final data = {
+      'prNumber': _prNoCtrl.text.trim(),
+      'prDate': _prDate.toIso8601String(),
+      'requiredByDate': _requiredBy?.toIso8601String(),
+      'prTypeCode': _prTypeCode,
+      'priorityCode': _priorityCode,
+      'projectId': _projectId,
+      'activityId': _activityId,
+      'vendorId': _vendorId,
+      'storeId': _storeId,
+      'propertyId': _propertyId,
+      'lines': _lines.map((l) => l.toJson()).toList(),
+    };
+    FormDraftService.instance.autoSave(
+      formId: 'erp_purchase_request',
+      entityId: widget.id,
+      data: data,
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    if (widget.isEdit) return;
+    final draft = await FormDraftService.instance.loadDraftInfo('erp_purchase_request');
+    if (draft != null && mounted) {
+      setState(() {
+        _draftInfo = draft;
+        final d = draft.data;
+        if ((d['prNumber'] as String?)?.isNotEmpty == true) _prNoCtrl.text = d['prNumber'];
+        if (d['prDate'] != null) {
+          _prDate = DateTime.tryParse(d['prDate'].toString()) ?? _prDate;
+        }
+        if (d['requiredByDate'] != null) {
+          _requiredBy = DateTime.tryParse(d['requiredByDate'].toString());
+        }
+        if (d['prTypeCode'] != null) _prTypeCode = d['prTypeCode'];
+        if (d['priorityCode'] != null) _priorityCode = d['priorityCode'];
+        if (d['projectId'] != null) _projectId = d['projectId'];
+        if (d['activityId'] != null) _activityId = d['activityId'];
+        if (d['vendorId'] != null) _vendorId = d['vendorId'];
+        if (d['storeId'] != null) _storeId = d['storeId'];
+        if (d['propertyId'] != null) _propertyId = d['propertyId'];
+        if (d['lines'] is List && (d['lines'] as List).isNotEmpty) {
+          for (final l in _lines) {
+            l.dispose();
+          }
+          _lines.clear();
+          for (final raw in d['lines'] as List) {
+            final m = raw as Map<String, dynamic>;
+            final l = _PrLineDraft();
+            l.materialId = m['materialId'];
+            l.itemCode = m['itemCode'];
+            l.categoryCode = m['categoryCode'];
+            l.brandCode = m['brandCode'];
+            l.brand = m['brand'];
+            l.itemName = m['itemName'] ?? '';
+            l.unitCode = m['unitCode'];
+            l.sizeCode = m['sizeCode'];
+            l.size = m['size'];
+            if (m['qty'] != null) l.qtyCtrl.text = m['qty'].toString();
+            if (m['remark'] != null) l.remarkCtrl.text = m['remark'].toString();
+            l.qtyCtrl.addListener(_autoSaveDraft);
+            l.remarkCtrl.addListener(_autoSaveDraft);
+            _lines.add(l);
+          }
+        }
+      });
+    }
+  }
+
+  void _discardDraft() {
+    FormDraftService.instance.clearDraft('erp_purchase_request', entityId: widget.id);
+    setState(() {
+      _draftInfo = null;
+      _prNoCtrl.clear();
+      _projectId = null;
+      _activityId = null;
+      _vendorId = null;
+      _storeId = null;
+      _propertyId = null;
+      for (final l in _lines) {
+        l.dispose();
+      }
+      _lines.clear();
+      _lines.add(_PrLineDraft());
+    });
   }
 
   @override
@@ -231,6 +324,7 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
         _hydrate(pr);
       }
       if (!mounted) return;
+      await _restoreDraftIfAny();
       setState(() => _loading = false);
     } catch (e) {
       if (!mounted) return;
@@ -372,12 +466,14 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
         await repo.createRequest(body);
       }
       if (!mounted) return;
+      await FormDraftService.instance.clearDraft('erp_purchase_request', entityId: widget.id);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(submit ? 'Purchase request submitted for approval' : 'Purchase request saved')),
       );
       context.go('/erp/store/purchase-requests');
     } catch (e) {
       if (!mounted) return;
+      await FormDraftService.instance.clearDraft('erp_purchase_request', entityId: widget.id);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -404,6 +500,12 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                   children: [
+                    FormDraftBanner(
+                      formId: 'erp_purchase_request',
+                      entityId: widget.id,
+                      draftInfo: _draftInfo,
+                      onDiscard: _draftInfo != null ? _discardDraft : null,
+                    ),
                     if (_status != null)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),

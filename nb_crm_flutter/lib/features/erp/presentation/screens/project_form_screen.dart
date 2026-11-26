@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../../core/widgets/dropdown_with_add.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
@@ -87,6 +89,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
   final _docs = <_DocDraft>[];
   bool _saving = false;
   bool _hydrated = false;
+  FormDraftInfo? _draftInfo;
 
   List<Organization> _orgs = const [];
   List<Institute> _institutes = const [];
@@ -100,7 +103,165 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
   @override
   void initState() {
     super.initState();
+    _setupAutoSaveListeners();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadInitialData());
+  }
+
+  void _setupAutoSaveListeners() {
+    _projectId.addListener(_autoSaveDraft);
+    _name.addListener(_autoSaveDraft);
+    _rera.addListener(_autoSaveDraft);
+    _notes.addListener(_autoSaveDraft);
+    _projectArea.addListener(_autoSaveDraft);
+    _cost.addListener(_autoSaveDraft);
+    _address.addListener(_autoSaveDraft);
+    _landmark.addListener(_autoSaveDraft);
+    _pincode.addListener(_autoSaveDraft);
+    _plotArea.addListener(_autoSaveDraft);
+    _specNotes.addListener(_autoSaveDraft);
+  }
+
+  void _autoSaveDraft() {
+    if (_saving || _loadingInitial) return;
+    final data = {
+      'projectNo': _projectId.text.trim(),
+      'name': _name.text.trim(),
+      'organizationId': _organizationId,
+      'instituteId': _instituteId,
+      'categoryCode': _categoryCode,
+      'subCategoryCodes': _subCategoryCodes.toList(),
+      'structureCodes': _structureCodes.toList(),
+      'segmentCodes': _segmentCodes.toList(),
+      'reraNo': _rera.text.trim(),
+      'expectedCompletionDate': _completion?.toIso8601String(),
+      'notes': _notes.text.trim(),
+      'statusCode': _statusCode,
+      'ownerEmployeeId': _ownerEmployeeId,
+      'totalProjectArea': _projectArea.text.trim(),
+      'areaUnitCode': _areaUnitCode,
+      'estimatedCost': _cost.text.trim(),
+      'address': _address.text.trim(),
+      'landmark': _landmark.text.trim(),
+      'pincode': _pincode.text.trim(),
+      'plotArea': _plotArea.text.trim(),
+      'countryCode': _countryCode,
+      'stateCode': _stateCode,
+      'cityCode': _cityCode,
+      'areaCode': _areaCode,
+      'amenitiesCodes': _amenitiesCodes.toList(),
+      'livabilityCodes': _livabilityCodes.toList(),
+      'bankTieUpCodes': _bankTieUpCodes.toList(),
+      'devAuthorityCodes': _devAuthorityCodes.toList(),
+      'elecProviderCodes': _elecProviderCodes.toList(),
+      'specNotes': _specNotes.text.trim(),
+    };
+    FormDraftService.instance.autoSave(
+      formId: 'erp_project',
+      entityId: widget.projectId,
+      data: data,
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    if (_isEdit) return;
+    final draft = await FormDraftService.instance.loadDraftInfo('erp_project');
+    if (draft != null && mounted) {
+      setState(() {
+        _draftInfo = draft;
+        final d = draft.data;
+        if ((d['projectNo'] as String?)?.isNotEmpty == true) _projectId.text = d['projectNo'];
+        if ((d['name'] as String?)?.isNotEmpty == true) _name.text = d['name'];
+        if (d['organizationId'] != null) _organizationId = d['organizationId'];
+        if (d['instituteId'] != null) _instituteId = d['instituteId'];
+        if (d['categoryCode'] != null) _categoryCode = d['categoryCode'];
+        if (d['subCategoryCodes'] is List) {
+          _subCategoryCodes
+            ..clear()
+            ..addAll((d['subCategoryCodes'] as List).map((e) => e.toString()));
+        }
+        if (d['structureCodes'] is List) {
+          _structureCodes
+            ..clear()
+            ..addAll((d['structureCodes'] as List).map((e) => e.toString()));
+        }
+        if (d['segmentCodes'] is List) {
+          _segmentCodes
+            ..clear()
+            ..addAll((d['segmentCodes'] as List).map((e) => e.toString()));
+        }
+        if ((d['reraNo'] as String?)?.isNotEmpty == true) _rera.text = d['reraNo'];
+        if (d['expectedCompletionDate'] != null) {
+          _completion = DateTime.tryParse(d['expectedCompletionDate'].toString());
+        }
+        if ((d['notes'] as String?)?.isNotEmpty == true) _notes.text = d['notes'];
+        if (d['statusCode'] != null) _statusCode = d['statusCode'];
+        if (d['ownerEmployeeId'] != null) _ownerEmployeeId = d['ownerEmployeeId'] as int?;
+        if ((d['totalProjectArea'] as String?)?.isNotEmpty == true) _projectArea.text = d['totalProjectArea'];
+        if (d['areaUnitCode'] != null) _areaUnitCode = d['areaUnitCode'];
+        if ((d['estimatedCost'] as String?)?.isNotEmpty == true) _cost.text = d['estimatedCost'];
+        if ((d['address'] as String?)?.isNotEmpty == true) _address.text = d['address'];
+        if ((d['landmark'] as String?)?.isNotEmpty == true) _landmark.text = d['landmark'];
+        if ((d['pincode'] as String?)?.isNotEmpty == true) _pincode.text = d['pincode'];
+        if ((d['plotArea'] as String?)?.isNotEmpty == true) _plotArea.text = d['plotArea'];
+        if (d['countryCode'] != null) _countryCode = d['countryCode'];
+        if (d['stateCode'] != null) _stateCode = d['stateCode'];
+        if (d['cityCode'] != null) _cityCode = d['cityCode'];
+        if (d['areaCode'] != null) _areaCode = d['areaCode'];
+        if (d['amenitiesCodes'] is List) {
+          _amenitiesCodes
+            ..clear()
+            ..addAll((d['amenitiesCodes'] as List).map((e) => e.toString()));
+        }
+        if (d['livabilityCodes'] is List) {
+          _livabilityCodes
+            ..clear()
+            ..addAll((d['livabilityCodes'] as List).map((e) => e.toString()));
+        }
+        if (d['bankTieUpCodes'] is List) {
+          _bankTieUpCodes
+            ..clear()
+            ..addAll((d['bankTieUpCodes'] as List).map((e) => e.toString()));
+        }
+        if (d['devAuthorityCodes'] is List) {
+          _devAuthorityCodes
+            ..clear()
+            ..addAll((d['devAuthorityCodes'] as List).map((e) => e.toString()));
+        }
+        if (d['elecProviderCodes'] is List) {
+          _elecProviderCodes
+            ..clear()
+            ..addAll((d['elecProviderCodes'] as List).map((e) => e.toString()));
+        }
+        if ((d['specNotes'] as String?)?.isNotEmpty == true) _specNotes.text = d['specNotes'];
+      });
+    }
+  }
+
+  void _discardDraft() {
+    FormDraftService.instance.clearDraft('erp_project', entityId: widget.projectId);
+    setState(() {
+      _draftInfo = null;
+      _projectId.clear();
+      _name.clear();
+      _rera.clear();
+      _notes.clear();
+      _projectArea.text = '0.00';
+      _cost.text = '0';
+      _address.clear();
+      _landmark.clear();
+      _pincode.text = '0';
+      _plotArea.text = '0.00';
+      _specNotes.clear();
+      _subCategoryCodes.clear();
+      _structureCodes.clear();
+      _segmentCodes.clear();
+      _amenitiesCodes.clear();
+      _livabilityCodes.clear();
+      _bankTieUpCodes.clear();
+      _devAuthorityCodes.clear();
+      _elecProviderCodes.clear();
+      _completion = null;
+    });
   }
 
   void _ensureOwnerInList(List<ProjectEmployeeOption> owners, {int? preferId, String? preferName}) {
@@ -218,6 +379,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
             : null;
         _loadingInitial = false;
       });
+      await _restoreDraftIfAny();
     } catch (e) {
       if (mounted) {
         setState(() => _loadingInitial = false);
@@ -490,6 +652,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
       } else {
         await repo.create(body);
       }
+      await FormDraftService.instance.clearDraft('erp_project', entityId: widget.projectId);
       if (!mounted) return;
       context.go('/erp/projects');
     } catch (e) {
@@ -647,6 +810,12 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
           children: [
+            FormDraftBanner(
+              formId: 'erp_project',
+              entityId: widget.projectId,
+              draftInfo: _draftInfo,
+              onDiscard: _draftInfo != null ? _discardDraft : null,
+            ),
             _card(
               'Project Basic Details',
               [

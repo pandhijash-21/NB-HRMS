@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../../core/tour/models/tour_models.dart';
 import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -48,6 +50,71 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
   bool _uploadingDoc = false;
   String? _documentUrl;
   String? _documentName;
+  FormDraftInfo? _draftInfo;
+
+  @override
+  void initState() {
+    super.initState();
+    _reasonController.addListener(_autoSaveDraft);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreDraftIfAny());
+  }
+
+  void _autoSaveDraft() {
+    if (_submitting) return;
+    final data = {
+      'leaveTypeId': _leaveTypeId,
+      'fromDate': _fromDate?.toIso8601String(),
+      'toDate': _toDate?.toIso8601String(),
+      'isHalfDay': _isHalfDay,
+      'halfDaySession': _halfDaySession,
+      'reason': _reasonController.text.trim(),
+      'documentUrl': _documentUrl,
+      'documentName': _documentName,
+    };
+    FormDraftService.instance.autoSave(
+      formId: 'hrms_leave_apply',
+      data: data,
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    final draft = await FormDraftService.instance.loadDraftInfo('hrms_leave_apply');
+    if (draft != null && mounted) {
+      setState(() {
+        _draftInfo = draft;
+        final d = draft.data;
+        if (d['leaveTypeId'] != null) _leaveTypeId = d['leaveTypeId'];
+        if (d['fromDate'] != null) {
+          _fromDate = DateTime.tryParse(d['fromDate'].toString());
+        }
+        if (d['toDate'] != null) {
+          _toDate = DateTime.tryParse(d['toDate'].toString());
+        }
+        if (d['isHalfDay'] != null) _isHalfDay = d['isHalfDay'] == true;
+        if (d['halfDaySession'] != null) _halfDaySession = d['halfDaySession'];
+        if ((d['reason'] as String?)?.isNotEmpty == true) {
+          _reasonController.text = d['reason'];
+        }
+        if (d['documentUrl'] != null) _documentUrl = d['documentUrl'];
+        if (d['documentName'] != null) _documentName = d['documentName'];
+      });
+    }
+  }
+
+  void _discardDraft() {
+    FormDraftService.instance.clearDraft('hrms_leave_apply');
+    setState(() {
+      _draftInfo = null;
+      _leaveTypeId = null;
+      _fromDate = null;
+      _toDate = null;
+      _isHalfDay = false;
+      _halfDaySession = null;
+      _reasonController.clear();
+      _documentUrl = null;
+      _documentName = null;
+    });
+  }
 
   @override
   void dispose() {
@@ -165,6 +232,7 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
         'reason': _reasonController.text.trim(),
         if (_documentUrl != null) 'documentUrl': _documentUrl,
       });
+      await FormDraftService.instance.clearDraft('hrms_leave_apply');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Leave application submitted.')),
@@ -211,6 +279,11 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  FormDraftBanner(
+                    formId: 'hrms_leave_apply',
+                    draftInfo: _draftInfo,
+                    onDiscard: _draftInfo != null ? _discardDraft : null,
+                  ),
                   DropdownButtonFormField<String>(
                     initialValue: _leaveTypeId,
                     decoration: const InputDecoration(

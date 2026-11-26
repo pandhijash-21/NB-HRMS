@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../data/leave_repository.dart';
 import '../../domain/leave_models.dart';
 
@@ -280,6 +282,40 @@ Future<void> showApplyWfhDialog(
   final formKey = GlobalKey<FormState>();
   bool isSubmitting = false;
 
+  const draftKey = 'wfh_apply';
+  final draft = await FormDraftService.instance.loadDraftInfo(draftKey);
+  DateTime? draftTime;
+  if (draft != null) {
+    draftTime = draft.savedAt;
+    final d = draft.data;
+    if (d['reason'] != null) reasonCtrl.text = d['reason'].toString();
+    if (d['isHalfDay'] != null) isHalfDay = d['isHalfDay'] == true;
+    if (d['halfDaySession'] != null) halfDaySession = d['halfDaySession'].toString();
+    if (d['fromDate'] != null) {
+      final parsed = DateTime.tryParse(d['fromDate'].toString());
+      if (parsed != null) fromDate = parsed;
+    }
+    if (d['toDate'] != null) {
+      final parsed = DateTime.tryParse(d['toDate'].toString());
+      if (parsed != null) toDate = parsed;
+    }
+  }
+
+  void autoSave() {
+    FormDraftService.instance.autoSave(
+      formId: draftKey,
+      data: {
+        'reason': reasonCtrl.text,
+        'isHalfDay': isHalfDay,
+        'halfDaySession': halfDaySession,
+        'fromDate': fromDate.toIso8601String(),
+        'toDate': toDate.toIso8601String(),
+      },
+    );
+  }
+
+  reasonCtrl.addListener(autoSave);
+
   await showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -325,6 +361,24 @@ Future<void> showApplyWfhDialog(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (draftTime != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: FormDraftBanner(
+                            savedAt: draftTime!,
+                            onDiscard: () async {
+                              await FormDraftService.instance.clearDraft(draftKey);
+                              setDlgState(() {
+                                draftTime = null;
+                                reasonCtrl.clear();
+                                isHalfDay = false;
+                                halfDaySession = 'MORNING';
+                                fromDate = initialDate ?? DateTime.now();
+                                toDate = initialDate ?? DateTime.now();
+                              });
+                            },
+                          ),
+                        ),
                       Text(
                         'Submit your Work From Home request. HR approval is required before it is calculated in your attendance record.',
                         style: TextStyle(
@@ -773,6 +827,7 @@ Future<void> showApplyWfhDialog(
                             isHalfDay: isHalfDay,
                             halfDaySession: isHalfDay ? halfDaySession : null,
                           );
+                          await FormDraftService.instance.clearDraft(draftKey);
                           if (context.mounted) {
                             Navigator.pop(dlgCtx);
                             ScaffoldMessenger.of(context).showSnackBar(

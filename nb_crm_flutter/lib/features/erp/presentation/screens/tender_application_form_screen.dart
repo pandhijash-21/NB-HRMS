@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/project_repository.dart';
 import '../../data/tender_repository.dart';
@@ -44,10 +46,12 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
   bool _loadingActivities = false;
   bool _saving = false;
   String _status = 'APPROVED';
+  FormDraftInfo? _draftInfo;
 
   @override
   void initState() {
     super.initState();
+    _appNoCtrl.addListener(_autoSaveDraft);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final user = context.read<AuthBloc>().state.user;
@@ -55,6 +59,62 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
         _createdByCtrl.text = user!.name;
       }
       _loadInitialData();
+    });
+  }
+
+  void _autoSaveDraft() {
+    if (_saving || _loadingInitial) return;
+    final data = {
+      'applicationNo': _appNoCtrl.text.trim(),
+      'applicationDate': _applicationDate.toIso8601String(),
+      'projectId': _projectId,
+      'tenderId': _tenderId,
+      'activityKey': _activityKey,
+      'activityId': _activityId,
+      'activityName': _activityName,
+      'contractorId': _contractorId,
+      'createdByName': _createdByCtrl.text.trim(),
+    };
+    FormDraftService.instance.autoSave(
+      formId: 'erp_tender_application',
+      data: data,
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    final draft = await FormDraftService.instance.loadDraftInfo('erp_tender_application');
+    if (draft != null && mounted) {
+      setState(() {
+        _draftInfo = draft;
+        final d = draft.data;
+        if ((d['applicationNo'] as String?)?.isNotEmpty == true) _appNoCtrl.text = d['applicationNo'];
+        if (d['applicationDate'] != null) {
+          _applicationDate = DateTime.tryParse(d['applicationDate'].toString()) ?? _applicationDate;
+        }
+        if (d['projectId'] != null) _projectId = d['projectId'];
+        if (d['tenderId'] != null) _tenderId = d['tenderId'];
+        if (d['activityKey'] != null) _activityKey = d['activityKey'];
+        if (d['activityId'] != null) _activityId = d['activityId'];
+        if (d['activityName'] != null) _activityName = d['activityName'];
+        if (d['contractorId'] != null) _contractorId = d['contractorId'];
+        if ((d['createdByName'] as String?)?.isNotEmpty == true) {
+          _createdByCtrl.text = d['createdByName'];
+        }
+      });
+    }
+  }
+
+  void _discardDraft() {
+    FormDraftService.instance.clearDraft('erp_tender_application');
+    setState(() {
+      _draftInfo = null;
+      _appNoCtrl.clear();
+      _projectId = null;
+      _tenderId = null;
+      _activityKey = null;
+      _activityId = null;
+      _activityName = null;
+      _contractorId = null;
     });
   }
 
@@ -71,6 +131,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
         _contractors = contractors;
         _loadingInitial = false;
       });
+      await _restoreDraftIfAny();
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingInitial = false);
@@ -199,6 +260,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
         'contractorId': _contractorId,
         'status': _status,
       });
+      await FormDraftService.instance.clearDraft('erp_tender_application');
       if (mounted) {
         try {
           context.read<ErpTendersBloc>().add(const ErpTenderApplicationsRequested());
@@ -232,7 +294,14 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1100),
-                    child: Container(
+                    child: Column(
+                      children: [
+                        FormDraftBanner(
+                          formId: 'erp_tender_application',
+                          draftInfo: _draftInfo,
+                          onDiscard: _draftInfo != null ? _discardDraft : null,
+                        ),
+                        Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: isDark ? const Color(0xFF1E1B18) : Colors.white,
@@ -406,9 +475,11 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
                         },
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
+            ),
+          ),
             ),
             Container(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),

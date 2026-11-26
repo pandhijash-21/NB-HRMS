@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../data/boq_repository.dart';
 import '../../data/project_repository.dart';
 import '../../data/work_order_repository.dart';
@@ -34,12 +36,64 @@ class _BoqFormScreenState extends State<BoqFormScreen> {
   bool _loading = true;
   String? _error;
   bool _saving = false;
+  FormDraftInfo? _draftInfo;
 
   @override
   void initState() {
     super.initState();
+    _boqNoCtrl.addListener(_autoSaveDraft);
+    _titleCtrl.addListener(_autoSaveDraft);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
+    });
+  }
+
+  void _autoSaveDraft() {
+    if (_saving || _loading) return;
+    final data = {
+      'boqNo': _boqNoCtrl.text.trim(),
+      'title': _titleCtrl.text.trim(),
+      'rateSource': _rateSource,
+      'projectId': _projectId,
+      'tasks': _tasks.map((t) => t.toJson()).toList(),
+    };
+    FormDraftService.instance.autoSave(
+      formId: 'erp_boq',
+      entityId: widget.id,
+      data: data,
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    if (widget.isEdit) return;
+    final draft = await FormDraftService.instance.loadDraftInfo('erp_boq');
+    if (draft != null && mounted) {
+      setState(() {
+        _draftInfo = draft;
+        final d = draft.data;
+        if ((d['boqNo'] as String?)?.isNotEmpty == true) _boqNoCtrl.text = d['boqNo'];
+        if ((d['title'] as String?)?.isNotEmpty == true) _titleCtrl.text = d['title'];
+        if (d['rateSource'] != null) _rateSource = d['rateSource'];
+        if (d['projectId'] != null) _projectId = d['projectId'];
+        if (d['tasks'] is List) {
+          try {
+            _tasks = (d['tasks'] as List)
+                .map((t) => ErpBoqTask.fromJson(t as Map<String, dynamic>))
+                .toList();
+          } catch (_) {}
+        }
+      });
+    }
+  }
+
+  void _discardDraft() {
+    FormDraftService.instance.clearDraft('erp_boq', entityId: widget.id);
+    setState(() {
+      _draftInfo = null;
+      _boqNoCtrl.clear();
+      _titleCtrl.clear();
+      _projectId = null;
+      _tasks = [];
     });
   }
 
@@ -73,6 +127,7 @@ class _BoqFormScreenState extends State<BoqFormScreen> {
         _activities = activities;
         _loading = false;
       });
+      await _restoreDraftIfAny();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -112,6 +167,7 @@ class _BoqFormScreenState extends State<BoqFormScreen> {
         'tasks': _tasks.map((t) => t.toJson()).toList(),
       };
       final repo = context.read<BoqRepository>();
+      await FormDraftService.instance.clearDraft('erp_boq', entityId: widget.id);
       if (widget.isEdit) {
         await repo.update(widget.id!, body);
       } else {
@@ -160,6 +216,12 @@ class _BoqFormScreenState extends State<BoqFormScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            FormDraftBanner(
+              formId: 'erp_boq',
+              entityId: widget.id,
+              draftInfo: _draftInfo,
+              onDiscard: _draftInfo != null ? _discardDraft : null,
+            ),
             Text('Projects • BOQ • BOQ Form',
                 style: TextStyle(color: Theme.of(context).hintColor, fontSize: 13)),
             const SizedBox(height: 12),
@@ -228,7 +290,10 @@ class _BoqFormScreenState extends State<BoqFormScreen> {
               tasks: _tasks,
               configActivities: _activities,
               showTaskIds: widget.isEdit,
-              onChanged: (t) => setState(() => _tasks = t),
+              onChanged: (t) => setState(() {
+                _tasks = t;
+                _autoSaveDraft();
+              }),
             ),
           ],
         ),

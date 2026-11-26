@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/boq_repository.dart';
 import '../../data/project_repository.dart';
@@ -45,6 +47,7 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
   bool _hydrated = false;
   bool _saving = false;
   bool _adding = false;
+  FormDraftInfo? _draftInfo;
 
   List<ErpProject> _projects = [];
   List<ErpActivity> _activities = [];
@@ -55,12 +58,84 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
   @override
   void initState() {
     super.initState();
+    _tenderNoCtrl.addListener(_autoSaveDraft);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final name = context.read<AuthBloc>().state.user?.name;
       if (name != null && _createdByCtrl.text.isEmpty) {
         _createdByCtrl.text = name;
       }
       _loadInitialData();
+    });
+  }
+
+  void _autoSaveDraft() {
+    if (_saving || _loadingInitial) return;
+    final data = {
+      'tenderNo': _tenderNoCtrl.text.trim(),
+      'tenderDate': _tenderDate.toIso8601String(),
+      'startDate': _startDate?.toIso8601String(),
+      'endDate': _endDate?.toIso8601String(),
+      'projectId': _projectId,
+      'boqId': _boqId,
+      'activityId': _activityId,
+      'activityName': _activityName,
+      'createdByName': _createdByCtrl.text.trim(),
+      'lines': _lines.map((l) => l.toJson()).toList(),
+    };
+    FormDraftService.instance.autoSave(
+      formId: 'erp_tender',
+      entityId: widget.id,
+      data: data,
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    if (widget.isEdit) return;
+    final draft = await FormDraftService.instance.loadDraftInfo('erp_tender');
+    if (draft != null && mounted) {
+      setState(() {
+        _draftInfo = draft;
+        final d = draft.data;
+        if ((d['tenderNo'] as String?)?.isNotEmpty == true) _tenderNoCtrl.text = d['tenderNo'];
+        if (d['tenderDate'] != null) {
+          _tenderDate = DateTime.tryParse(d['tenderDate'].toString()) ?? _tenderDate;
+        }
+        if (d['startDate'] != null) {
+          _startDate = DateTime.tryParse(d['startDate'].toString());
+        }
+        if (d['endDate'] != null) {
+          _endDate = DateTime.tryParse(d['endDate'].toString());
+        }
+        if (d['projectId'] != null) _projectId = d['projectId'];
+        if (d['boqId'] != null) _boqId = d['boqId'];
+        if (d['activityId'] != null) _activityId = d['activityId'];
+        if (d['activityName'] != null) _activityName = d['activityName'];
+        if ((d['createdByName'] as String?)?.isNotEmpty == true) {
+          _createdByCtrl.text = d['createdByName'];
+        }
+        if (d['lines'] is List) {
+          try {
+            _lines = (d['lines'] as List)
+                .map((l) => ErpTenderLine.fromJson(l as Map<String, dynamic>))
+                .toList();
+          } catch (_) {}
+        }
+      });
+    }
+  }
+
+  void _discardDraft() {
+    FormDraftService.instance.clearDraft('erp_tender', entityId: widget.id);
+    setState(() {
+      _draftInfo = null;
+      _tenderNoCtrl.clear();
+      _projectId = null;
+      _boqId = null;
+      _activityId = null;
+      _activityName = null;
+      _lines = [];
+      _startDate = null;
+      _endDate = null;
     });
   }
 
@@ -89,6 +164,8 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
       final tender = res[3] as ErpTender?;
       if (tender != null && !_hydrated) {
         _hydrate(tender);
+      } else {
+        await _restoreDraftIfAny();
       }
     } catch (e) {
       if (mounted) {
@@ -259,6 +336,7 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
       };
 
       final repo = context.read<TenderRepository>();
+      await FormDraftService.instance.clearDraft('erp_tender', entityId: widget.id);
       if (widget.isEdit) {
         await repo.update(widget.id!, body);
       } else {
@@ -440,6 +518,12 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           children: [
+            FormDraftBanner(
+              formId: 'erp_tender',
+              entityId: widget.id,
+              draftInfo: _draftInfo,
+              onDiscard: _draftInfo != null ? _discardDraft : null,
+            ),
             _sectionCard(
               isDark: isDark,
               title: 'Tender details',

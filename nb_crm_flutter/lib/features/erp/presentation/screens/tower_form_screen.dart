@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../data/project_repository.dart';
 import '../../domain/structure_models.dart';
@@ -35,17 +37,88 @@ class _TowerFormScreenState extends State<TowerFormScreen> {
   String? _statusCode = 'ACTIVE';
   bool _saving = false;
   bool _hydrated = false;
+  FormDraftInfo? _draftInfo;
 
   bool get _isEdit => widget.towerId != null;
 
   @override
   void initState() {
     super.initState();
-    if (_isEdit) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+    _name.addListener(_autoSaveDraft);
+    _phase.addListener(_autoSaveDraft);
+    _basements.addListener(_autoSaveDraft);
+    _floors.addListener(_autoSaveDraft);
+    _flats.addListener(_autoSaveDraft);
+    _sequence.addListener(_autoSaveDraft);
+    _remarks.addListener(_autoSaveDraft);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isEdit) {
         _loadTower();
+      } else {
+        _restoreDraftIfAny();
+      }
+    });
+  }
+
+  void _autoSaveDraft() {
+    if (_saving) return;
+    final data = {
+      'name': _name.text.trim(),
+      'phase': _phase.text.trim(),
+      'basements': _basements.text.trim(),
+      'floors': _floors.text.trim(),
+      'flats': _flats.text.trim(),
+      'sequence': _sequence.text.trim(),
+      'remarks': _remarks.text.trim(),
+      'hasGround': _hasGround,
+      'statusCode': _statusCode,
+    };
+    FormDraftService.instance.autoSave(
+      formId: 'erp_tower_${widget.projectId}',
+      entityId: widget.towerId,
+      data: data,
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    if (_isEdit) return;
+    final draft = await FormDraftService.instance.loadDraftInfo(
+      'erp_tower_${widget.projectId}',
+    );
+    if (draft != null && mounted) {
+      setState(() {
+        _draftInfo = draft;
+        final d = draft.data;
+        if ((d['name'] as String?)?.isNotEmpty == true) _name.text = d['name'];
+        if ((d['phase'] as String?)?.isNotEmpty == true) _phase.text = d['phase'];
+        if ((d['basements'] as String?)?.isNotEmpty == true) _basements.text = d['basements'];
+        if ((d['floors'] as String?)?.isNotEmpty == true) _floors.text = d['floors'];
+        if ((d['flats'] as String?)?.isNotEmpty == true) _flats.text = d['flats'];
+        if ((d['sequence'] as String?)?.isNotEmpty == true) _sequence.text = d['sequence'];
+        if ((d['remarks'] as String?)?.isNotEmpty == true) _remarks.text = d['remarks'];
+        if (d['hasGround'] != null) _hasGround = d['hasGround'] == true;
+        if (d['statusCode'] != null) _statusCode = d['statusCode'];
       });
     }
+  }
+
+  void _discardDraft() {
+    FormDraftService.instance.clearDraft(
+      'erp_tower_${widget.projectId}',
+      entityId: widget.towerId,
+    );
+    setState(() {
+      _draftInfo = null;
+      _name.clear();
+      _phase.clear();
+      _basements.text = '0';
+      _floors.clear();
+      _flats.clear();
+      _sequence.text = '0';
+      _remarks.clear();
+      _hasGround = false;
+    });
   }
 
   Future<void> _loadTower() async {
@@ -146,6 +219,10 @@ class _TowerFormScreenState extends State<TowerFormScreen> {
       } else {
         await repo.createTower(widget.projectId, body);
       }
+      await FormDraftService.instance.clearDraft(
+        'erp_tower_${widget.projectId}',
+        entityId: widget.towerId,
+      );
       if (!mounted) return;
       context.go('/erp/structure/${widget.projectId}');
     } catch (e) {
@@ -197,6 +274,12 @@ class _TowerFormScreenState extends State<TowerFormScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
           children: [
+            FormDraftBanner(
+              formId: 'erp_tower_${widget.projectId}',
+              entityId: widget.towerId,
+              draftInfo: _draftInfo,
+              onDiscard: _draftInfo != null ? _discardDraft : null,
+            ),
             Container(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
               decoration: BoxDecoration(

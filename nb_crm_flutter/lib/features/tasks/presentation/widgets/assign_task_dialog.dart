@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/form_draft_service.dart';
 import '../../../../core/utils/platform_file_picker.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../domain/task_models.dart';
 import '../tasks_providers.dart';
@@ -41,6 +43,78 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
   PickedFileData? _file;
   bool _saving = false;
   final _subtasks = <_SubtaskDraft>[];
+  DateTime? _draftTime;
+
+  static const String _draftKey = 'assign_task_form';
+
+  @override
+  void initState() {
+    super.initState();
+    _title.addListener(_autoSaveDraft);
+    _description.addListener(_autoSaveDraft);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreDraftIfAny());
+  }
+
+  void _autoSaveDraft() {
+    if (!mounted || _saving) return;
+    FormDraftService.instance.autoSave(
+      formId: _draftKey,
+      data: {
+        'title': _title.text,
+        'description': _description.text,
+        'assigneeUserId': _assigneeUserId,
+        'extraApproverUserId': _extraApproverUserId,
+        'deadline': _deadline.toIso8601String(),
+        'subtasks': _subtasks.map((s) => s.titleText).toList(),
+      },
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    final draft = await FormDraftService.instance.loadDraftInfo(_draftKey);
+    if (draft != null && mounted) {
+      final d = draft.data;
+      setState(() {
+        _draftTime = draft.savedAt;
+        if (d['title'] != null) _title.text = d['title'].toString();
+        if (d['description'] != null) _description.text = d['description'].toString();
+        if (d['assigneeUserId'] != null) _assigneeUserId = d['assigneeUserId'].toString();
+        if (d['extraApproverUserId'] != null) _extraApproverUserId = d['extraApproverUserId'].toString();
+        if (d['deadline'] != null) {
+          final dt = DateTime.tryParse(d['deadline'].toString());
+          if (dt != null) _deadline = dt;
+        }
+        if (d['subtasks'] is List) {
+          for (final s in _subtasks) {
+            s.dispose();
+          }
+          _subtasks.clear();
+          for (final item in (d['subtasks'] as List)) {
+            final draftItem = _SubtaskDraft(title: item?.toString() ?? '');
+            draftItem.title.addListener(_autoSaveDraft);
+            _subtasks.add(draftItem);
+          }
+        }
+      });
+    }
+  }
+
+  Future<void> _discardDraft() async {
+    await FormDraftService.instance.clearDraft(_draftKey);
+    if (!mounted) return;
+    setState(() {
+      _draftTime = null;
+      _title.clear();
+      _description.clear();
+      _assigneeUserId = null;
+      _extraApproverUserId = null;
+      _deadline = DateTime.now().add(const Duration(days: 3));
+      for (final s in _subtasks) {
+        s.dispose();
+      }
+      _subtasks.clear();
+    });
+  }
 
   @override
   void dispose() {
@@ -53,7 +127,9 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
   }
 
   void _addSubtaskRow() {
-    setState(() => _subtasks.add(_SubtaskDraft()));
+    final draft = _SubtaskDraft();
+    draft.title.addListener(_autoSaveDraft);
+    setState(() => _subtasks.add(draft));
   }
 
   void _removeSubtask(int index) {
@@ -127,6 +203,7 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
       }
       ref.invalidate(myTasksProvider);
       ref.invalidate(taskSummaryProvider);
+      await FormDraftService.instance.clearDraft(_draftKey);
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -157,6 +234,14 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
         width: 460,
         child: Column(
           children: [
+            if (_draftTime != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: FormDraftBanner(
+                  savedAt: _draftTime!,
+                  onDiscard: _discardDraft,
+                ),
+              ),
             SearchableDropdown<TaskReportee>(
               label: 'Assign to *',
               value: _assigneeUserId,

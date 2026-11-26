@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/crm_repository.dart';
@@ -46,6 +48,75 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
   int? _selectedSalesId;
   String _selectedLeadSource = 'Walk IN';
   String _selectedRefType = 'B2B';
+  DateTime? _draftTime;
+
+  static const String _draftKey = 'crm_visitor_desk';
+
+  @override
+  void initState() {
+    super.initState();
+    _phoneController.addListener(_autoSaveDraft);
+    _nameController.addListener(_autoSaveDraft);
+    _cpNameController.addListener(_autoSaveDraft);
+    _refNameController.addListener(_autoSaveDraft);
+    _remarksController.addListener(_autoSaveDraft);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreDraftIfAny());
+  }
+
+  void _autoSaveDraft() {
+    if (!mounted) return;
+    FormDraftService.instance.autoSave(
+      formId: _draftKey,
+      data: {
+        'phone': _phoneController.text,
+        'name': _nameController.text,
+        'cpName': _cpNameController.text,
+        'refName': _refNameController.text,
+        'remarks': _remarksController.text,
+        'leadSource': _selectedLeadSource,
+        'refType': _selectedRefType,
+        'selectedSalesId': _selectedSalesId,
+      },
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    final draft = await FormDraftService.instance.loadDraftInfo(_draftKey);
+    if (draft != null && mounted) {
+      final d = draft.data;
+      setState(() {
+        _draftTime = draft.savedAt;
+        if (d['phone'] != null) _phoneController.text = d['phone'].toString();
+        if (d['name'] != null) _nameController.text = d['name'].toString();
+        if (d['cpName'] != null) _cpNameController.text = d['cpName'].toString();
+        if (d['refName'] != null) _refNameController.text = d['refName'].toString();
+        if (d['remarks'] != null) _remarksController.text = d['remarks'].toString();
+        if (d['leadSource'] != null) _selectedLeadSource = d['leadSource'].toString();
+        if (d['refType'] != null) _selectedRefType = d['refType'].toString();
+        if (d['selectedSalesId'] != null) _selectedSalesId = int.tryParse(d['selectedSalesId'].toString());
+      });
+      if (_phoneController.text.trim().length == 10) {
+        _handleLookup(context);
+      }
+    }
+  }
+
+  Future<void> _discardDraft() async {
+    await FormDraftService.instance.clearDraft(_draftKey);
+    if (!mounted) return;
+    setState(() {
+      _draftTime = null;
+      _phoneController.clear();
+      _nameController.clear();
+      _cpNameController.clear();
+      _refNameController.clear();
+      _remarksController.text = 'Visitor checked in at site reception.';
+      _selectedLeadSource = 'Walk IN';
+      _selectedRefType = 'B2B';
+      _selectedSalesId = null;
+    });
+    _resetLookup();
+  }
 
   @override
   void dispose() {
@@ -81,6 +152,8 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
     return BlocConsumer<CrmLeadsBloc, CrmLeadsState>(
       listener: (context, state) {
         if (state.actionSuccessMessage != null) {
+          FormDraftService.instance.clearDraft(_draftKey);
+          setState(() => _draftTime = null);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(state.actionSuccessMessage!),
@@ -281,6 +354,14 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
                           ),
                         ],
                       ),
+                      if (_draftTime != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 14),
+                          child: FormDraftBanner(
+                            savedAt: _draftTime!,
+                            onDiscard: _discardDraft,
+                          ),
+                        ),
                       const SizedBox(height: 18),
 
                       // Mobile Lookup Row

@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../data/project_repository.dart';
@@ -43,6 +45,7 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
   bool _hydrated = false;
   bool _saving = false;
   bool _loadingInitial = true;
+  FormDraftInfo? _draftInfo;
 
   List<ErpProject> _projects = [];
   List<ProjectEmployeeOption> _employees = [];
@@ -53,8 +56,80 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
   @override
   void initState() {
     super.initState();
+    _setupAutoSaveListeners();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _loadInitialData();
+    });
+  }
+
+  void _setupAutoSaveListeners() {
+    _woIdCtrl.addListener(_autoSaveDraft);
+    _tenderCtrl.addListener(_autoSaveDraft);
+  }
+
+  void _autoSaveDraft() {
+    if (_saving || _loadingInitial) return;
+    final data = {
+      'workOrderId': _woIdCtrl.text.trim(),
+      'orderDate': _orderDate.toIso8601String(),
+      'dueDate': _dueDate?.toIso8601String(),
+      'projectId': _projectId,
+      'tenderRef': _tenderCtrl.text.trim(),
+      'contractorId': _contractorId,
+      'categoryCode': _categoryCode,
+      'ownerEmployeeId': _ownerEmployeeId,
+      'approverEmployeeId': _approverEmployeeId,
+      'activities': _activities.map((a) => a.toJson()).toList(),
+    };
+    FormDraftService.instance.autoSave(
+      formId: 'erp_work_order',
+      entityId: widget.id,
+      data: data,
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    if (widget.isEdit) return;
+    final draft = await FormDraftService.instance.loadDraftInfo('erp_work_order');
+    if (draft != null && mounted) {
+      setState(() {
+        _draftInfo = draft;
+        final d = draft.data;
+        if ((d['workOrderId'] as String?)?.isNotEmpty == true) _woIdCtrl.text = d['workOrderId'];
+        if ((d['tenderRef'] as String?)?.isNotEmpty == true) _tenderCtrl.text = d['tenderRef'];
+        if (d['orderDate'] != null) {
+          _orderDate = DateTime.tryParse(d['orderDate'].toString()) ?? _orderDate;
+        }
+        if (d['dueDate'] != null) {
+          _dueDate = DateTime.tryParse(d['dueDate'].toString());
+        }
+        if (d['projectId'] != null) _projectId = d['projectId'];
+        if (d['contractorId'] != null) _contractorId = d['contractorId'];
+        if (d['categoryCode'] != null) _categoryCode = d['categoryCode'];
+        if (d['ownerEmployeeId'] != null) _ownerEmployeeId = d['ownerEmployeeId'] as int?;
+        if (d['approverEmployeeId'] != null) _approverEmployeeId = d['approverEmployeeId'] as int?;
+        if (d['activities'] is List) {
+          try {
+            _activities = (d['activities'] as List)
+                .map((a) => WorkOrderActivityGroup.fromJson(a as Map<String, dynamic>))
+                .toList();
+          } catch (_) {}
+        }
+      });
+    }
+  }
+
+  void _discardDraft() {
+    FormDraftService.instance.clearDraft('erp_work_order', entityId: widget.id);
+    setState(() {
+      _draftInfo = null;
+      _woIdCtrl.clear();
+      _tenderCtrl.clear();
+      _projectId = null;
+      _contractorId = null;
+      _categoryCode = null;
+      _activities = [];
+      _dueDate = null;
     });
   }
 
@@ -99,6 +174,7 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
           _hydrated = true;
         }
       });
+      await _restoreDraftIfAny();
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingInitial = false);
@@ -284,6 +360,7 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
         'activities': _activities.map((a) => a.toJson()).toList(),
       };
       final repo = context.read<WorkOrderRepository>();
+      await FormDraftService.instance.clearDraft('erp_work_order', entityId: widget.id);
       if (widget.isEdit) {
         await repo.update(widget.id!, body);
         if (mounted) {
@@ -353,6 +430,12 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
                     constraints: const BoxConstraints(maxWidth: 1100),
                     child: Column(
                       children: [
+                        FormDraftBanner(
+                          formId: 'erp_work_order',
+                          entityId: widget.id,
+                          draftInfo: _draftInfo,
+                          onDiscard: _draftInfo != null ? _discardDraft : null,
+                        ),
                         _sectionCard(
                           'Basic Details',
                           'Work order header — project, contractor, and dates',
@@ -500,7 +583,10 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
                             projectId: _projectId,
                             activities: _activities,
                             configActivities: _configActivities,
-                            onChanged: (groups) => setState(() => _activities = groups),
+                            onChanged: (groups) => setState(() {
+                              _activities = groups;
+                              _autoSaveDraft();
+                            }),
                           ),
                       ],
                     ),

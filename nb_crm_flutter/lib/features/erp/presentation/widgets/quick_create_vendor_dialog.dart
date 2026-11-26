@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/realtime/app_event_bus.dart';
+import '../../../../core/services/form_draft_service.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../data/work_order_repository.dart';
 import '../../domain/contractor_lookup_keys.dart';
@@ -32,6 +34,75 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
   var saving = false;
   String? error;
 
+  const draftKey = 'erp_quick_create_vendor';
+  final draft = await FormDraftService.instance.loadDraftInfo(draftKey);
+  DateTime? draftTime;
+  if (draft != null) {
+    draftTime = draft.savedAt;
+    final d = draft.data;
+    if (d['name'] != null) nameCtrl.text = d['name'].toString();
+    if (d['contactPerson'] != null) contactPersonCtrl.text = d['contactPerson'].toString();
+    if (d['mobile'] != null) mobileCtrl.text = d['mobile'].toString();
+    if (d['email'] != null) emailCtrl.text = d['email'].toString();
+    if (d['altMobile'] != null) altMobileCtrl.text = d['altMobile'].toString();
+    if (d['pan'] != null) panCtrl.text = d['pan'].toString();
+    if (d['gst'] != null) gstCtrl.text = d['gst'].toString();
+    if (d['address'] != null) addressCtrl.text = d['address'].toString();
+    if (d['city'] != null) cityCtrl.text = d['city'].toString();
+    if (d['state'] != null) stateCtrl.text = d['state'].toString();
+    if (d['pincode'] != null) pincodeCtrl.text = d['pincode'].toString();
+    if (d['bank'] != null) bankCtrl.text = d['bank'].toString();
+    if (d['branch'] != null) branchCtrl.text = d['branch'].toString();
+    if (d['ifsc'] != null) ifscCtrl.text = d['ifsc'].toString();
+    if (d['account'] != null) accountCtrl.text = d['account'].toString();
+    if (d['payment'] != null) paymentCtrl.text = d['payment'].toString();
+    if (d['tdsCode'] != null) tdsCode = d['tdsCode'].toString();
+    if (d['contractorTypeCode'] != null) contractorTypeCode = d['contractorTypeCode'].toString();
+  }
+
+  void autoSave() {
+    FormDraftService.instance.autoSave(
+      formId: draftKey,
+      data: {
+        'name': nameCtrl.text,
+        'contactPerson': contactPersonCtrl.text,
+        'mobile': mobileCtrl.text,
+        'email': emailCtrl.text,
+        'altMobile': altMobileCtrl.text,
+        'pan': panCtrl.text,
+        'gst': gstCtrl.text,
+        'address': addressCtrl.text,
+        'city': cityCtrl.text,
+        'state': stateCtrl.text,
+        'pincode': pincodeCtrl.text,
+        'bank': bankCtrl.text,
+        'branch': branchCtrl.text,
+        'ifsc': ifscCtrl.text,
+        'account': accountCtrl.text,
+        'payment': paymentCtrl.text,
+        'tdsCode': tdsCode,
+        'contractorTypeCode': contractorTypeCode,
+      },
+    );
+  }
+
+  nameCtrl.addListener(autoSave);
+  contactPersonCtrl.addListener(autoSave);
+  mobileCtrl.addListener(autoSave);
+  emailCtrl.addListener(autoSave);
+  altMobileCtrl.addListener(autoSave);
+  panCtrl.addListener(autoSave);
+  gstCtrl.addListener(autoSave);
+  addressCtrl.addListener(autoSave);
+  cityCtrl.addListener(autoSave);
+  stateCtrl.addListener(autoSave);
+  pincodeCtrl.addListener(autoSave);
+  bankCtrl.addListener(autoSave);
+  branchCtrl.addListener(autoSave);
+  ifscCtrl.addListener(autoSave);
+  accountCtrl.addListener(autoSave);
+  paymentCtrl.addListener(autoSave);
+
   final result = await showDialog<ErpContractor>(
     context: context,
     barrierDismissible: false,
@@ -56,6 +127,37 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (draftTime != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: FormDraftBanner(
+                            savedAt: draftTime!,
+                            onDiscard: () async {
+                              await FormDraftService.instance.clearDraft(draftKey);
+                              setLocal(() {
+                                draftTime = null;
+                                nameCtrl.clear();
+                                contactPersonCtrl.clear();
+                                mobileCtrl.clear();
+                                emailCtrl.clear();
+                                altMobileCtrl.clear();
+                                panCtrl.clear();
+                                gstCtrl.clear();
+                                addressCtrl.clear();
+                                cityCtrl.clear();
+                                stateCtrl.clear();
+                                pincodeCtrl.clear();
+                                bankCtrl.clear();
+                                branchCtrl.clear();
+                                ifscCtrl.clear();
+                                accountCtrl.clear();
+                                paymentCtrl.clear();
+                                tdsCode = null;
+                                contractorTypeCode = null;
+                              });
+                            },
+                          ),
+                        ),
                       Text(
                         'Creates a vendor in Configurations → Vendors with tax, address, and banking details.',
                         style: Theme.of(ctx).textTheme.bodySmall,
@@ -304,6 +406,7 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
                             entityId: created.id,
                             action: 'created',
                           );
+                          await FormDraftService.instance.clearDraft(draftKey);
                           if (ctx.mounted) Navigator.pop(ctx, created);
                         } catch (e) {
                           setLocal(() {

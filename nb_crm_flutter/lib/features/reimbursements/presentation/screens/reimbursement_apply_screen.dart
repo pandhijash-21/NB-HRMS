@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/services/form_draft_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/platform_file_picker.dart';
+import '../../../../core/widgets/form_draft_banner.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../auth/presentation/auth_providers.dart';
@@ -42,6 +44,80 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
   DateTime _claimDate = DateTime.now();
   EmployeeNameOption? _employee;
   bool _submitting = false;
+  DateTime? _draftTime;
+  Map<String, dynamic>? _pendingDraftData;
+
+  String get _draftKey => 'reimbursement_apply_${widget.onBehalf ? "on_behalf" : "self"}';
+
+  @override
+  void initState() {
+    super.initState();
+    _titleCtrl.addListener(_autoSaveDraft);
+    _descCtrl.addListener(_autoSaveDraft);
+    _amountCtrl.addListener(_autoSaveDraft);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreDraftIfAny());
+  }
+
+  void _autoSaveDraft() {
+    if (!mounted || _submitting) return;
+    final fieldMap = <String, dynamic>{};
+    for (final e in _fields.entries) {
+      fieldMap[e.key] = {
+        'text': e.value.ctrl.text,
+        'proofUrl': e.value.proofUrl,
+        'proofName': e.value.proofName,
+        'date': e.value.date?.toIso8601String(),
+      };
+    }
+    FormDraftService.instance.autoSave(
+      formId: _draftKey,
+      data: {
+        'title': _titleCtrl.text,
+        'description': _descCtrl.text,
+        'amount': _amountCtrl.text,
+        'typeId': _type?.id,
+        'claimDate': _claimDate.toIso8601String(),
+        'employeeId': _employee?.employeeId,
+        'fields': fieldMap,
+      },
+    );
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    final draft = await FormDraftService.instance.loadDraftInfo(_draftKey);
+    if (draft != null && mounted) {
+      final d = draft.data;
+      setState(() {
+        _draftTime = draft.savedAt;
+        _pendingDraftData = d;
+        if (d['title'] != null) _titleCtrl.text = d['title'].toString();
+        if (d['description'] != null) _descCtrl.text = d['description'].toString();
+        if (d['amount'] != null) _amountCtrl.text = d['amount'].toString();
+        if (d['claimDate'] != null) {
+          final dt = DateTime.tryParse(d['claimDate'].toString());
+          if (dt != null) _claimDate = dt;
+        }
+      });
+    }
+  }
+
+  Future<void> _discardDraft() async {
+    await FormDraftService.instance.clearDraft(_draftKey);
+    if (!mounted) return;
+    setState(() {
+      _draftTime = null;
+      _pendingDraftData = null;
+      _titleCtrl.clear();
+      _descCtrl.clear();
+      _amountCtrl.clear();
+      _claimDate = DateTime.now();
+      _type = null;
+      for (final f in _fields.values) {
+        f.dispose();
+      }
+      _fields.clear();
+    });
+  }
 
   @override
   void dispose() {
@@ -60,12 +136,15 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
     }
     _fields.clear();
     for (final f in t.fields) {
-      _fields[f.key] = _FieldState();
+      final st = _FieldState();
+      st.ctrl.addListener(_autoSaveDraft);
+      _fields[f.key] = st;
     }
     setState(() {
       _type = t;
       if (_titleCtrl.text.trim().isEmpty) _titleCtrl.text = t.name;
     });
+    _autoSaveDraft();
   }
 
   double? get _opening {
@@ -205,6 +284,7 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
         },
       };
       final claim = await ref.read(reimbursementsRepositoryProvider).apply(body);
+      await FormDraftService.instance.clearDraft(_draftKey);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -244,11 +324,47 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
         data: (types) {
+          if (_type == null && _pendingDraftData != null && _pendingDraftData!['typeId'] != null) {
+            final tId = _pendingDraftData!['typeId'];
+            final match = types.where((t) => t.id == tId).firstOrNull;
+            if (match != null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted || _type != null) return;
+                _selectType(match);
+                final fMap = _pendingDraftData?['fields'] as Map<String, dynamic>?;
+                if (fMap != null) {
+                  for (final f in match.fields) {
+                    final item = fMap[f.key] as Map<String, dynamic>?;
+                    if (item != null) {
+                      final st = _fields[f.key];
+                      if (st != null) {
+                        st.ctrl.text = item['text']?.toString() ?? '';
+                        st.proofUrl = item['proofUrl']?.toString();
+                        st.proofName = item['proofName']?.toString();
+                        if (item['date'] != null) {
+                          st.date = DateTime.tryParse(item['date'].toString());
+                        }
+                      }
+                    }
+                  }
+                  setState(() {});
+                }
+              });
+            }
+          }
           return Form(
             key: _formKey,
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                if (_draftTime != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: FormDraftBanner(
+                      savedAt: _draftTime!,
+                      onDiscard: _discardDraft,
+                    ),
+                  ),
                 if (widget.onBehalf) ...[
                   namesAsync!.when(
                     loading: () => const LinearProgressIndicator(),

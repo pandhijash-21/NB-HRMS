@@ -21,7 +21,7 @@
             android:layout_height="28dp"
             android:src="@drawable/nb_logo"
             android:scaleType="fitCenter"
-            android:contentDescription="NB Logo" />
+            android:contentDescription="@null" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -76,7 +76,8 @@
             android:textColor="#F8FAFC"
             android:textSize="13sp"
             android:textStyle="bold"
-            android:singleLine="true" />
+            android:maxLines="1"
+            android:ellipsize="end" />
 
         <TextView
             android:id="@+id/tv_employee_code"
@@ -126,11 +127,12 @@
                 android:layout_marginTop="2dp" />
         </LinearLayout>
 
-        <!-- Divider -->
-        <View
+        <!-- Divider (ImageView with solid color used instead of raw View for RemoteViews compatibility) -->
+        <ImageView
             android:layout_width="1dp"
             android:layout_height="26dp"
-            android:background="#334155" />
+            android:background="#334155"
+            android:contentDescription="@null" />
 
         <!-- Punch Out Stat -->
         <LinearLayout
@@ -161,16 +163,18 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Dynamic Action Button -->
-    <Button
+    <!-- Dynamic Action Button (TextView styled as button for reliable RemoteViews styling) -->
+    <TextView
         android:id="@+id/btn_action"
         android:layout_width="match_parent"
         android:layout_height="36dp"
         android:layout_marginTop="8dp"
+        android:gravity="center"
         android:text="Punch In Now"
         android:textColor="#FFFFFF"
         android:textSize="11.5sp"
         android:textStyle="bold"
-        android:background="@drawable/widget_btn_punch_in" />
+        android:background="@drawable/widget_btn_punch_in"
+        android:clickable="true" />
 
 </LinearLayout>

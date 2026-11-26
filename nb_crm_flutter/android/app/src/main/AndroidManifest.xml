@@ -59,7 +59,8 @@
 
         <!-- Android Home Screen Attendance Widget Provider -->
         <receiver
-            android:name=".AttendanceWidgetProvider"
+            android:name="com.nbdeveloper.nb_crm_flutter.AttendanceWidgetProvider"
+            android:label="@string/attendance_widget_name"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

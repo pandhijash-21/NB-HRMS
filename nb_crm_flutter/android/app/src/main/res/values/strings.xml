@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NBSince1946</string>
+    <string name="attendance_widget_name">NB Attendance</string>
+    <string name="attendance_widget_desc">Track work hours and quick punch in/out</string>
+</resources>

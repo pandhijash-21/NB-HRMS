@@ -1,5 +1,6 @@
 import { prisma } from '../../config/prisma';
 import { Prisma } from '@prisma/client';
+import { emitErpUpdate } from '../collaboration/socket';
 
 function str(v: unknown): string | null {
   if (v == null) return null;
@@ -173,7 +174,7 @@ export const projectService = {
 
     const documents = parseDocuments(body.documents);
 
-    return prisma.erpProject.create({
+    const row = await prisma.erpProject.create({
       data: {
         projectNo: data.projectNo,
         name: data.name,
@@ -223,6 +224,8 @@ export const projectService = {
       },
       include,
     });
+    emitErpUpdate({ module: 'projects', id: row.id, action: 'created' });
+    return row;
   },
 
   async update(id: string, body: Record<string, unknown>, actorId: string) {
@@ -265,7 +268,7 @@ export const projectService = {
         }
       }
 
-      return tx.erpProject.update({
+      const updated = await tx.erpProject.update({
         where: { id },
         data: {
           ...(data.name != null ? { name: data.name } : {}),
@@ -302,12 +305,15 @@ export const projectService = {
         },
         include,
       });
+      emitErpUpdate({ module: 'projects', id: updated.id, action: 'updated' });
+      return updated;
     });
   },
 
   async remove(id: string) {
     await this.getById(id);
     await prisma.erpProject.delete({ where: { id } });
+    emitErpUpdate({ module: 'projects', id, action: 'deleted' });
     return { id, deleted: true };
   },
 };

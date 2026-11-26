@@ -6,6 +6,7 @@ import '../../data/project_repository.dart';
 import '../../domain/structure_models.dart';
 import '../../domain/work_order_lookup_keys.dart';
 import '../../domain/work_order_models.dart';
+import 'quick_create_masters.dart';
 import 'work_order_location_picker.dart';
 
 class WorkDetailsEditor extends StatefulWidget {
@@ -28,6 +29,7 @@ class WorkDetailsEditor extends StatefulWidget {
 
 class _WorkDetailsEditorState extends State<WorkDetailsEditor> {
   String? _selectedActivityId;
+  late List<ErpActivity> _configActivities;
   List<ErpProjectTower> _towers = [];
   bool _loadingTowers = false;
   String? _towersError;
@@ -35,6 +37,7 @@ class _WorkDetailsEditorState extends State<WorkDetailsEditor> {
   @override
   void initState() {
     super.initState();
+    _configActivities = List<ErpActivity>.from(widget.configActivities);
     if (widget.projectId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _loadTowers(widget.projectId!);
@@ -45,6 +48,17 @@ class _WorkDetailsEditorState extends State<WorkDetailsEditor> {
   @override
   void didUpdateWidget(WorkDetailsEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.configActivities != oldWidget.configActivities) {
+      final ids = _configActivities.map((a) => a.id).toSet();
+      final fresh = List<ErpActivity>.from(widget.configActivities);
+      for (final a in fresh) {
+        ids.add(a.id);
+      }
+      for (final old in _configActivities) {
+        if (!fresh.any((f) => f.id == old.id)) fresh.add(old);
+      }
+      _configActivities = fresh;
+    }
     if (widget.projectId != oldWidget.projectId) {
       if (widget.projectId != null) {
         _loadTowers(widget.projectId!);
@@ -83,7 +97,7 @@ class _WorkDetailsEditorState extends State<WorkDetailsEditor> {
       _groups.fold(0, (sum, g) => sum + g.lines.fold(0, (s, l) => s + (l.amount ?? 0)));
 
   void _addActivity() {
-    final act = widget.configActivities.where((a) => a.id == _selectedActivityId).firstOrNull;
+    final act = _configActivities.where((a) => a.id == _selectedActivityId).firstOrNull;
     if (act == null) return;
     final lines = act.subtasks.isNotEmpty
         ? act.subtasks
@@ -219,23 +233,20 @@ class _WorkDetailsEditorState extends State<WorkDetailsEditor> {
             child: Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: _selectedActivityId,
-                    decoration: InputDecoration(
-                      labelText: 'Activity *',
-                      filled: true,
-                      fillColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    ),
-                    hint: const Text('Select activity'),
-                    items: widget.configActivities
-                        .where((a) => a.isActive)
-                        .map((a) => DropdownMenuItem(value: a.id, child: Text(a.name)))
-                        .toList(),
+                  child: ActivityDropdownWithCreate(
+                    value: _selectedActivityId,
+                    activities: _configActivities,
+                    includeNullOption: true,
+                    nullLabel: 'Select activity',
                     onChanged: (v) => setState(() => _selectedActivityId = v),
+                    onActivityCreated: (created) {
+                      setState(() {
+                        if (!_configActivities.any((a) => a.id == created.id)) {
+                          _configActivities = [..._configActivities, created];
+                        }
+                        _selectedActivityId = created.id;
+                      });
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),

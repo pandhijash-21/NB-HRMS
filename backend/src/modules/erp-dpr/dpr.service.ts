@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { buildDprDailyReportXlsx } from './dpr.export';
+import { emitErpUpdate } from '../collaboration/socket';
 
 function str(v: unknown): string | null {
   if (v == null) return null;
@@ -505,12 +506,14 @@ export const dprService = {
       return header.id;
     });
 
+    emitErpUpdate({ module: 'dpr', id, action: 'created', projectId });
     return this.getById(id);
   },
 
   async remove(id: string) {
     await this.getById(id);
     await prisma.erpDpr.delete({ where: { id } });
+    emitErpUpdate({ module: 'dpr', id, action: 'deleted' });
     return { ok: true };
   },
 

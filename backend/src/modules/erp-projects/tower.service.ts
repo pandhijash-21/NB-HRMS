@@ -1,5 +1,6 @@
 import { prisma } from '../../config/prisma';
 import { Prisma } from '@prisma/client';
+import { emitCrmUnitUpdate, emitErpUpdate } from '../collaboration/socket';
 
 function str(v: unknown): string | null {
   if (v == null) return null;
@@ -767,6 +768,8 @@ export const towerService = {
       }
     });
 
+    emitCrmUnitUpdate({ projectId, towerId });
+    emitErpUpdate({ module: 'projects', entityId: towerId, action: 'unit_updated' });
     return this.getById(projectId, towerId);
   },
 };

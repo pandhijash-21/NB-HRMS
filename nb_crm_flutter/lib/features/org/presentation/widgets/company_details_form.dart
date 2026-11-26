@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/widgets/dropdown_with_add.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
+import '../../data/org_repository.dart';
 import '../../domain/org_models.dart';
 
 /// Owns its [TextEditingController]s and disposes them safely on unmount.
@@ -291,6 +294,7 @@ Future<CompanyEditorResult?> showInstituteEditorDialog(
   Institute? existing,
   required List<Organization> organizations,
   String? organizationsError,
+  String? preselectedParentOrgId,
 }) {
   return showDialog<CompanyEditorResult>(
     context: context,
@@ -299,6 +303,7 @@ Future<CompanyEditorResult?> showInstituteEditorDialog(
       existing: existing,
       organizations: organizations,
       organizationsError: organizationsError,
+      preselectedParentOrgId: preselectedParentOrgId,
     ),
   );
 }
@@ -427,11 +432,13 @@ class _InstituteEditorDialog extends StatefulWidget {
     this.existing,
     required this.organizations,
     this.organizationsError,
+    this.preselectedParentOrgId,
   });
 
   final Institute? existing;
   final List<Organization> organizations;
   final String? organizationsError;
+  final String? preselectedParentOrgId;
 
   @override
   State<_InstituteEditorDialog> createState() => _InstituteEditorDialogState();
@@ -441,6 +448,7 @@ class _InstituteEditorDialogState extends State<_InstituteEditorDialog> {
   late final TextEditingController _codeCtrl;
   late final TextEditingController _nameCtrl;
   late final CompanyProfileFormController _profile;
+  late List<Organization> _orgList;
   late bool _isChild;
   String? _parentId;
   final _saving = false;
@@ -451,9 +459,11 @@ class _InstituteEditorDialogState extends State<_InstituteEditorDialog> {
     _codeCtrl = TextEditingController(text: widget.existing?.code ?? '');
     _nameCtrl = TextEditingController(text: widget.existing?.name ?? '');
     _profile = CompanyProfileFormController(initial: widget.existing?.profile);
-    _isChild = widget.existing?.isChildCompany ?? false;
-    _parentId =
-        widget.existing?.parentOrganizationId ?? widget.existing?.parentOrganization?.id;
+    _orgList = List<Organization>.from(widget.organizations);
+    _parentId = widget.existing?.parentOrganizationId ??
+        widget.existing?.parentOrganization?.id ??
+        widget.preselectedParentOrgId;
+    _isChild = widget.existing?.isChildCompany ?? (_parentId != null);
   }
 
   @override
@@ -517,7 +527,7 @@ class _InstituteEditorDialogState extends State<_InstituteEditorDialog> {
                         }),
               ),
               if (_isChild) ...[
-                if (widget.organizationsError != null)
+                if (widget.organizationsError != null && _orgList.isEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
@@ -525,37 +535,49 @@ class _InstituteEditorDialogState extends State<_InstituteEditorDialog> {
                       style: const TextStyle(color: Colors.red, fontSize: 12),
                     ),
                   )
-                else if (widget.organizations.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      'No organizations found. Create one under Configurations → Organizations first.',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  )
                 else
-                  DropdownButtonFormField<String>(
-                    initialValue: _parentId != null &&
-                            widget.organizations.any((o) => o.id == _parentId)
-                        ? _parentId
-                        : null,
-                    decoration: const InputDecoration(
-                      labelText: 'Parent organization *',
-                      border: OutlineInputBorder(),
-                      isDense: true,
+                  dropdownWithAddButton(
+                    tooltip: 'Add new parent organization',
+                    onAdd: () async {
+                      final createdRes = await showOrganizationEditorDialog(context);
+                      if (createdRes == null || !mounted) return;
+                      try {
+                        final created = await context
+                            .read<OrgRepository>()
+                            .createOrganization(createdRes.body);
+                        if (!mounted) return;
+                        setState(() {
+                          _orgList = [..._orgList, created];
+                          _parentId = created.id;
+                        });
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+                          );
+                        }
+                      }
+                    },
+                    child: DropdownButtonFormField<String>(
+                      key: ValueKey('parent-org-$_parentId-${_orgList.length}'),
+                      initialValue: _parentId != null &&
+                              _orgList.any((o) => o.id == _parentId)
+                          ? _parentId
+                          : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Parent organization *',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: [
+                        for (final o in _orgList)
+                          DropdownMenuItem(
+                            value: o.id,
+                            child: Text('${o.name} (${o.code})'),
+                          ),
+                      ],
+                      onChanged: _saving ? null : (v) => setState(() => _parentId = v),
                     ),
-                    items: [
-                      for (final o in widget.organizations)
-                        DropdownMenuItem(
-                          value: o.id,
-                          child: Text('${o.name} (${o.code})'),
-                        ),
-                    ],
-                    onChanged: _saving ? null : (v) => setState(() => _parentId = v),
                   ),
                 const SizedBox(height: 8),
               ],

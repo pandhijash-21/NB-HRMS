@@ -1,5 +1,5 @@
 import { prisma } from '../../config/prisma';
-import { emitPushNotify } from '../collaboration/socket';
+import { emitPushNotify, emitCrmUpdate } from '../collaboration/socket';
 import { sseService } from '../events/sse.service';
 
 export type CrmLeadNotifyReason =
@@ -124,6 +124,7 @@ export async function notifyNewOrAllocatedLead(opts: {
 
     const payload = { kind, title, body, path, leadId: opts.leadId };
     emitPushNotify(recipients, payload);
+    emitCrmUpdate({ leadId: opts.leadId, reason: opts.reason, scope: opts.scope });
     for (const userId of recipients) {
       try {
         sseService.toUser(userId, 'push_notify', payload);

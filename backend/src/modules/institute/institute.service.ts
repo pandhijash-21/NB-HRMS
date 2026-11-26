@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma';
+import { emitErpUpdate } from '../collaboration/socket';
 import { instituteMemberFilters, resolveInstituteRef } from './institute.util';
 import {
   assertRequiredCompanyFields,
@@ -167,6 +168,9 @@ export const instituteService = {
       } as Parameters<typeof prisma.institute.create>[0]['data'],
       include: parentInclude,
     });
+    try {
+      emitErpUpdate('organizations', row.id, 'create');
+    } catch (_) {}
     return mapInstitute(row);
   },
 

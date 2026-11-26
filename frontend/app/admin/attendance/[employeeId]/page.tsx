@@ -81,9 +81,31 @@ export default function AdminEmployeeAttendanceHistoryPage() {
         }
       );
       if (!res.ok) throw new Error("Failed to export report");
-      const blob = await res.blob();
+      
       const ext = format === "pdf" ? "pdf" : "xlsx";
-      const fileName = `attendance_${historyQ.data?.employee.employeeCode || employeeId}_${year}-${String(month).padStart(2, "0")}.${ext}`;
+      let fileName = "";
+      const xFilename = res.headers.get("x-filename");
+      const cd = res.headers.get("content-disposition");
+      if (xFilename && xFilename.trim()) {
+        try { fileName = decodeURIComponent(xFilename.trim()); } catch (_) { fileName = xFilename.trim(); }
+      } else if (cd && cd.includes("filename=")) {
+        const match = cd.match(/filename="?([^";]+)"?/);
+        if (match?.[1]) {
+          try { fileName = decodeURIComponent(match[1].trim()); } catch (_) { fileName = match[1].trim(); }
+        }
+      }
+
+      if (!fileName) {
+        const rawName = historyQ.data?.employee?.fullName || "Employee";
+        const empName = rawName.trim().replace(/[^\w\d-_]/g, "_").replace(/_+/g, "_");
+        const empCode = (historyQ.data?.employee?.employeeCode || employeeId || "").toString().trim().replace(/[^\w\d-_]/g, "_");
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const monthName = monthNames[month - 1] || `Month_${month}`;
+        const codePart = empCode ? `_${empCode}` : "";
+        fileName = `Attendance_Report_${empName}${codePart}_${monthName}_${year}.${ext}`;
+      }
+
+      const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

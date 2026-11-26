@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../../../core/network/app_config.dart';
+import '../../../core/realtime/app_event_bus.dart';
+import '../../crm/data/crm_repository.dart';
 import '../domain/collab_models.dart';
 
 class CollabSocket {
@@ -99,9 +101,57 @@ class CollabSocket {
         cb(userId, online);
       }
     });
+    socket.on('crm_update', (data) {
+      if (data is! Map) return;
+      final row = Map<String, dynamic>.from(data);
+      final leadId = row['leadId']?.toString() ?? '';
+      AppEventBus.instance.fireCrmLeadMutated(
+        leadId,
+        action: row['action']?.toString() ?? row['reason']?.toString(),
+        data: row,
+      );
+      CrmRepository.notifyLeadMutated();
+    });
+    socket.on('crm_unit_update', (data) {
+      if (data is! Map) return;
+      final row = Map<String, dynamic>.from(data);
+      AppEventBus.instance.fireCrmUnitStatusChanged(
+        unitId: row['unitId']?.toString() ?? '',
+        projectId: row['projectId']?.toString() ?? '',
+        status: row['status']?.toString() ?? 'AVAILABLE',
+        data: row,
+      );
+    });
+    socket.on('erp_update', (data) {
+      if (data is! Map) return;
+      final row = Map<String, dynamic>.from(data);
+      AppEventBus.instance.fireErpMutated(
+        module: row['module']?.toString() ?? 'erp',
+        entityId: row['id']?.toString() ?? row['entityId']?.toString(),
+        action: row['action']?.toString(),
+        data: row,
+      );
+    });
     socket.on('push_notify', (data) {
       if (data is! Map) return;
       final row = Map<String, dynamic>.from(data);
+      final kind = row['kind']?.toString() ?? '';
+      if (kind == 'crm_lead') {
+        final leadId = row['leadId']?.toString() ?? '';
+        AppEventBus.instance.fireCrmLeadMutated(
+          leadId,
+          action: 'push_notify',
+          data: row,
+        );
+        CrmRepository.notifyLeadMutated();
+      } else if (kind == 'erp_purchase' || kind.startsWith('erp_')) {
+        AppEventBus.instance.fireErpMutated(
+          module: kind.replaceFirst('erp_', ''),
+          entityId: row['id']?.toString(),
+          action: 'push_notify',
+          data: row,
+        );
+      }
       for (final cb in List.of(_pushNotify)) {
         cb(row);
       }

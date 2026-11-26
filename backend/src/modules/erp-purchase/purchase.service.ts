@@ -8,6 +8,7 @@ import {
   buildPurchaseOrderXlsx,
 } from './purchase.export';
 import { quotationService } from './quotation.service';
+import { emitErpUpdate } from '../collaboration/socket';
 
 const str = (v: unknown) => {
   if (v == null) return null;
@@ -444,6 +445,7 @@ export const purchaseService = {
       },
       include: prInclude,
     });
+    emitErpUpdate({ module: 'purchase', id: row.id, action: 'created' });
     return serializePr(row);
   },
 
@@ -547,6 +549,7 @@ export const purchaseService = {
       },
       include: prInclude,
     });
+    emitErpUpdate({ module: 'purchase', id: row.id, action: 'submitted' });
     return serializePr(row);
   },
 
@@ -569,6 +572,7 @@ export const purchaseService = {
       },
       include: prInclude,
     });
+    emitErpUpdate({ module: 'purchase', id: row.id, action: 'approved' });
     return serializePr(row);
   },
 
@@ -591,6 +595,7 @@ export const purchaseService = {
       },
       include: prInclude,
     });
+    emitErpUpdate({ module: 'purchase', id: row.id, action: 'rejected' });
     return serializePr(row);
   },
 
@@ -600,6 +605,7 @@ export const purchaseService = {
       throw new Error('Cannot delete pending or approved purchase requests');
     }
     await prisma.erpPurchaseRequest.delete({ where: { id } });
+    emitErpUpdate({ module: 'purchase', id, action: 'deleted' });
     return { id, deleted: true };
   },
 };

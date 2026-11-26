@@ -703,7 +703,10 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                 dropdownWithAddButton(
                   tooltip: 'Add institute',
                   onAdd: () async {
-                    final created = await showQuickCreateInstituteDialog(context);
+                    final created = await showQuickCreateInstituteDialog(
+                      context,
+                      preselectedParentOrgId: _organizationId,
+                    );
                     if (created == null || !mounted) return;
                     setState(() {
                       _institutes = [..._institutes, created];
@@ -932,6 +935,9 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                 label: 'State',
                 value: _stateCode,
                 required: true,
+                parentCategory: 'PROJECT_COUNTRY',
+                parentCode: _countryCode,
+                parentLabel: _countryCode,
                 onChanged: (v) => setState(() => _stateCode = v),
               ),
               lookupDropdown(
@@ -940,6 +946,9 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                 label: 'City',
                 value: _cityCode,
                 required: true,
+                parentCategory: 'PROJECT_STATE',
+                parentCode: _stateCode,
+                parentLabel: _stateCode,
                 onChanged: (v) => setState(() => _cityCode = v),
               ),
               lookupDropdown(
@@ -948,6 +957,9 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                 label: 'Area',
                 value: _areaCode,
                 required: true,
+                parentCategory: 'PROJECT_CITY',
+                parentCode: _cityCode,
+                parentLabel: _cityCode,
                 onChanged: (v) => setState(() => _areaCode = v),
               ),
               TextFormField(

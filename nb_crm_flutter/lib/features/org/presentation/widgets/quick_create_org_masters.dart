@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/realtime/app_event_bus.dart';
 import '../../../../core/widgets/dropdown_with_add.dart';
 import '../../data/org_repository.dart';
 import '../../domain/org_models.dart';
@@ -97,7 +98,10 @@ Future<Designation?> showQuickCreateDesignationDialog(BuildContext context) asyn
 }
 
 /// Quick-add institute using the full Configurations editor dialog.
-Future<Institute?> showQuickCreateInstituteDialog(BuildContext context) async {
+Future<Institute?> showQuickCreateInstituteDialog(
+  BuildContext context, {
+  String? preselectedParentOrgId,
+}) async {
   final repo = context.read<OrgRepository>();
   List<Organization> orgs = const [];
   String? orgsError;
@@ -117,11 +121,18 @@ Future<Institute?> showQuickCreateInstituteDialog(BuildContext context) async {
     context,
     organizations: orgs,
     organizationsError: orgsError,
+    preselectedParentOrgId: preselectedParentOrgId,
   );
   if (result == null || !context.mounted) return null;
 
   try {
-    return await repo.createInstitute(result.body);
+    final created = await repo.createInstitute(result.body);
+    AppEventBus.instance.fireErpMutated(
+      module: 'organizations',
+      entityId: created.id,
+      action: 'created',
+    );
+    return created;
   } catch (e) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -137,7 +148,13 @@ Future<Organization?> showQuickCreateOrganizationDialog(BuildContext context) as
   final result = await showOrganizationEditorDialog(context);
   if (result == null || !context.mounted) return null;
   try {
-    return await context.read<OrgRepository>().createOrganization(result.body);
+    final created = await context.read<OrgRepository>().createOrganization(result.body);
+    AppEventBus.instance.fireErpMutated(
+      module: 'organizations',
+      entityId: created.id,
+      action: 'created',
+    );
+    return created;
   } catch (e) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

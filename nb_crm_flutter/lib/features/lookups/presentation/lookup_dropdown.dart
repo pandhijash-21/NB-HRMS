@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/realtime/app_event_bus.dart';
 import '../data/lookup_repository.dart';
 import '../domain/lookup_models.dart';
 import 'quick_create_lookup_dialog.dart';
@@ -34,6 +37,9 @@ class _LookupContextWrapper extends StatefulWidget {
     this.onQuickCreated,
     this.quickCreateSelectsLabel = false,
     this.enableQuickCreate = true,
+    this.parentCategory,
+    this.parentCode,
+    this.parentLabel,
   });
 
   final String category;
@@ -43,6 +49,9 @@ class _LookupContextWrapper extends StatefulWidget {
   final ValueChanged<String>? onQuickCreated;
   final bool quickCreateSelectsLabel;
   final bool enableQuickCreate;
+  final String? parentCategory;
+  final String? parentCode;
+  final String? parentLabel;
 
   @override
   State<_LookupContextWrapper> createState() => _LookupContextWrapperState();
@@ -52,6 +61,7 @@ class _LookupContextWrapperState extends State<_LookupContextWrapper> {
   List<LookupOption>? _options;
   bool _isLoading = false;
   bool _creating = false;
+  StreamSubscription<ErpRealtimeEvent>? _busSub;
 
   bool get _showQuickCreate =>
       widget.enableQuickCreate && lookupQuickCreateAllowed(widget.category);
@@ -60,6 +70,21 @@ class _LookupContextWrapperState extends State<_LookupContextWrapper> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    _busSub = AppEventBus.instance.on<ErpRealtimeEvent>().listen((e) {
+      if (e.module == 'lookups' || e.module == 'erp') {
+        if (e.entityId == null ||
+            e.entityId == widget.category ||
+            e.entityId == 'all') {
+          if (mounted) _load(force: true);
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _busSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load({bool force = false}) async {
@@ -96,6 +121,9 @@ class _LookupContextWrapperState extends State<_LookupContextWrapper> {
       final created = await showQuickCreateLookupDialog(
         context,
         category: widget.category,
+        parentCategory: widget.parentCategory,
+        parentCode: widget.parentCode,
+        parentLabel: widget.parentLabel,
       );
       if (!mounted || created == null) return;
       await _load(force: true);
@@ -144,11 +172,17 @@ Widget lookupDropdown({
   required ValueChanged<String> onChanged,
   List<LookupOption> fallback = const [],
   bool required = false,
+  String? parentCategory,
+  String? parentCode,
+  String? parentLabel,
 }) {
   return _LookupContextWrapper(
     category: category,
     fallback: fallback,
     onQuickCreated: onChanged,
+    parentCategory: parentCategory,
+    parentCode: parentCode,
+    parentLabel: parentLabel,
     builder: (ctx, options, isLoading) {
       if (isLoading && options.isEmpty) {
         return Padding(
@@ -192,9 +226,16 @@ Widget lookupMultiCheckbox({
   required String label,
   required Set<String> selected,
   required ValueChanged<Set<String>> onChanged,
+  String? parentCategory,
+  String? parentCode,
+  String? parentLabel,
 }) {
   return _LookupContextWrapper(
     category: category,
+    parentCategory: parentCategory,
+    parentCode: parentCode,
+    parentLabel: parentLabel,
+    onQuickCreated: (newCode) => onChanged(Set<String>.from(selected)..add(newCode)),
     builder: (ctx, options, isLoading) {
       if (isLoading && options.isEmpty) {
         return InputDecorator(
@@ -246,9 +287,16 @@ Widget lookupCheckboxGroup({
   required ValueChanged<Set<String>> onChanged,
   bool required = false,
   String? errorText,
+  String? parentCategory,
+  String? parentCode,
+  String? parentLabel,
 }) {
   return _LookupContextWrapper(
     category: category,
+    parentCategory: parentCategory,
+    parentCode: parentCode,
+    parentLabel: parentLabel,
+    onQuickCreated: (newCode) => onChanged(Set<String>.from(selected)..add(newCode)),
     builder: (ctx, options, isLoading) {
       if (isLoading && options.isEmpty) {
         return InputDecorator(
@@ -551,11 +599,17 @@ Widget lookupNullableDropdown({
   required String? value,
   required ValueChanged<String?> onChanged,
   List<LookupOption> fallback = const [],
+  String? parentCategory,
+  String? parentCode,
+  String? parentLabel,
 }) {
   if (context != null || ref == null) {
     return _LookupContextWrapper(
       category: category,
       fallback: fallback,
+      parentCategory: parentCategory,
+      parentCode: parentCode,
+      parentLabel: parentLabel,
       onQuickCreated: (code) => onChanged(code),
       builder: (ctx, options, isLoading) {
         return _LookupNullableCodeDropdown(

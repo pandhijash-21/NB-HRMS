@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma';
+import { emitErpUpdate } from '../collaboration/socket';
 
 export const LOOKUP_CATEGORIES = [
   { key: 'ORGANIZATION', label: 'Organization', description: 'Employer organizations (e.g. Gandhinagar University)' },
@@ -111,7 +112,7 @@ export const lookupService = {
     });
     if (clash) throw new Error('An option with this code already exists in this category');
 
-    return prisma.systemLookup.create({
+    const row = await prisma.systemLookup.create({
       data: {
         category,
         code,
@@ -119,6 +120,10 @@ export const lookupService = {
         sortOrder: data.sortOrder ?? 0,
       },
     });
+    try {
+      emitErpUpdate('lookups', category, 'create');
+    } catch (_) {}
+    return row;
   },
 
   async update(
@@ -140,7 +145,7 @@ export const lookupService = {
       if (clash) throw new Error('An option with this code already exists in this category');
     }
 
-    return prisma.systemLookup.update({
+    const row = await prisma.systemLookup.update({
       where: { id },
       data: {
         ...(code !== undefined ? { code } : {}),
@@ -149,12 +154,19 @@ export const lookupService = {
         ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
       },
     });
+    try {
+      emitErpUpdate('lookups', current.category, 'update');
+    } catch (_) {}
+    return row;
   },
 
   async remove(id: string) {
     const current = await prisma.systemLookup.findUnique({ where: { id } });
     if (!current) throw new Error('Lookup option not found');
     await prisma.systemLookup.delete({ where: { id } });
+    try {
+      emitErpUpdate('lookups', current.category, 'delete');
+    } catch (_) {}
     return { deleted: true, id };
   },
 };

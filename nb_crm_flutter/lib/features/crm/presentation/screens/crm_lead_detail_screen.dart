@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/realtime/app_event_bus.dart';
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../widgets/crm_send_whatsapp_dialog.dart';
@@ -80,12 +82,36 @@ class _CrmLeadDetailScreenState extends State<CrmLeadDetailScreen> {
   CrmLead? _lead;
   bool _isLoading = true;
   String? _errorMessage;
+  StreamSubscription<CrmLeadRealtimeEvent>? _sub;
 
   @override
   void initState() {
     super.initState();
     _lead = widget.initialLead;
     _fetchLeadDetails();
+    _sub = AppEventBus.instance.on<CrmLeadRealtimeEvent>().listen((event) {
+      if (event.leadId.isEmpty || event.leadId == widget.leadId) {
+        _silentRefreshLeadDetails();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _silentRefreshLeadDetails() async {
+    try {
+      final repo = context.read<CrmRepository>();
+      final lead = await repo.getLeadById(widget.leadId);
+      if (mounted) {
+        setState(() {
+          _lead = lead;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchLeadDetails() async {

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/load_status.dart';
+import '../../../../core/realtime/app_event_bus.dart';
 import '../../data/work_order_repository.dart';
 import '../../domain/work_order_models.dart';
 
@@ -17,6 +19,10 @@ abstract class ErpWorkOrdersEvent extends Equatable {
 
 class ErpWorkOrdersListRequested extends ErpWorkOrdersEvent {
   const ErpWorkOrdersListRequested();
+}
+
+class ErpWorkOrdersSilentRefreshRequested extends ErpWorkOrdersEvent {
+  const ErpWorkOrdersSilentRefreshRequested();
 }
 
 class ErpWorkOrderDetailRequested extends ErpWorkOrdersEvent {
@@ -239,6 +245,7 @@ class ErpWorkOrdersBloc extends Bloc<ErpWorkOrdersEvent, ErpWorkOrdersState> {
       : _workOrderRepository = workOrderRepository,
         super(const ErpWorkOrdersState()) {
     on<ErpWorkOrdersListRequested>(_onListRequested);
+    on<ErpWorkOrdersSilentRefreshRequested>(_onSilentRefresh);
     on<ErpWorkOrderDetailRequested>(_onDetailRequested);
     on<ErpWorkOrderCreated>(_onCreated);
     on<ErpWorkOrderUpdated>(_onUpdated);
@@ -256,9 +263,32 @@ class ErpWorkOrdersBloc extends Bloc<ErpWorkOrdersEvent, ErpWorkOrdersState> {
     on<ErpContractorUpdated>(_onContractorUpdated);
     on<ErpContractorToggled>(_onContractorToggled);
     on<ErpContractorDeleted>(_onContractorDeleted);
+
+    _erpSub = AppEventBus.instance.on<ErpRealtimeEvent>().listen((e) {
+      if (e.module == 'work_orders' || e.module == 'erp') {
+        add(const ErpWorkOrdersSilentRefreshRequested());
+      }
+    });
   }
 
   final WorkOrderRepository _workOrderRepository;
+  StreamSubscription<ErpRealtimeEvent>? _erpSub;
+
+  @override
+  Future<void> close() {
+    _erpSub?.cancel();
+    return super.close();
+  }
+
+  Future<void> _onSilentRefresh(
+    ErpWorkOrdersSilentRefreshRequested event,
+    Emitter<ErpWorkOrdersState> emit,
+  ) async {
+    try {
+      final workOrders = await _workOrderRepository.list();
+      emit(state.copyWith(status: LoadStatus.success, workOrders: workOrders));
+    } catch (_) {}
+  }
 
   Future<void> _onListRequested(
     ErpWorkOrdersListRequested event,

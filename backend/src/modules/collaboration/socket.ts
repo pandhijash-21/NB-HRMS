@@ -91,6 +91,32 @@ export function emitPermissionsUpdated(payload: { roleId?: string; moduleKey?: s
   io.emit('permissions_updated', { ...payload, at: Date.now() });
 }
 
+export function emitCrmUpdate(payload: Record<string, unknown>) {
+  const io = ioRef;
+  if (!io) return;
+  io.emit('crm_update', { ...payload, at: Date.now() });
+}
+
+export function emitCrmUnitUpdate(payload: Record<string, unknown>) {
+  const io = ioRef;
+  if (!io) return;
+  io.emit('crm_unit_update', { ...payload, at: Date.now() });
+}
+
+export function emitErpUpdate(
+  moduleOrPayload: string | Record<string, unknown>,
+  entityId?: string | number,
+  action: string = 'updated',
+) {
+  const io = ioRef;
+  if (!io) return;
+  const payload =
+    typeof moduleOrPayload === 'string'
+      ? { module: moduleOrPayload, entityId: String(entityId ?? ''), action, at: Date.now() }
+      : { ...moduleOrPayload, at: Date.now() };
+  io.emit('erp_update', payload);
+}
+
 export function emitMeetingModeration(opts: {
   meetingId: string;
   action: string;

@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
+import { emitErpUpdate } from '../collaboration/socket';
 
 function str(v: unknown): string | null {
   if (v == null) return null;
@@ -156,7 +157,7 @@ export const storeInwardService = {
     const location = str(body.location);
     if (!name) throw new Error('Store name is required');
     if (!location) throw new Error('Store location is required');
-    return prisma.erpStoreMaster.create({
+    const row = await prisma.erpStoreMaster.create({
       data: {
         name,
         location,
@@ -167,6 +168,10 @@ export const storeInwardService = {
         property: { select: { id: true, name: true, city: true, locality: true } },
       },
     });
+    try {
+      emitErpUpdate('stores', row.id, 'create');
+    } catch (_) {}
+    return row;
   },
 
   async updateStore(id: string, body: Record<string, unknown>) {
@@ -187,24 +192,36 @@ export const storeInwardService = {
         : { disconnect: true };
     }
     if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
-    return prisma.erpStoreMaster.update({
+    const updated = await prisma.erpStoreMaster.update({
       where: { id },
       data,
       include: {
         property: { select: { id: true, name: true, city: true, locality: true } },
       },
     });
+    try {
+      emitErpUpdate('stores', id, 'update');
+    } catch (_) {}
+    return updated;
   },
 
   async removeStore(id: string) {
     const used = await prisma.erpStoreInward.count({ where: { storeId: id } });
     if (used > 0) {
-      return prisma.erpStoreMaster.update({
+      const updated = await prisma.erpStoreMaster.update({
         where: { id },
         data: { isActive: false },
       });
+      try {
+        emitErpUpdate('stores', id, 'update');
+      } catch (_) {}
+      return updated;
     }
-    return prisma.erpStoreMaster.delete({ where: { id } });
+    const res = await prisma.erpStoreMaster.delete({ where: { id } });
+    try {
+      emitErpUpdate('stores', id, 'delete');
+    } catch (_) {}
+    return res;
   },
 
   // ── Purchase orders (stub for Purchase menu) ─────────────────────────────

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/realtime/app_event_bus.dart';
 import '../data/lookup_repository.dart';
 import '../domain/lookup_models.dart';
 
@@ -27,6 +28,9 @@ Future<LookupOption?> showQuickCreateLookupDialog(
   BuildContext context, {
   required String category,
   String? title,
+  String? parentCategory,
+  String? parentCode,
+  String? parentLabel,
 }) async {
   final labelCtrl = TextEditingController();
   final codeCtrl = TextEditingController();
@@ -40,17 +44,53 @@ Future<LookupOption?> showQuickCreateLookupDialog(
     builder: (ctx) {
       return StatefulBuilder(
         builder: (ctx, setLocal) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
           return AlertDialog(
             title: Text(title ?? 'Add $category option'),
             content: SizedBox(
-              width: 420,
+              width: 440,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
                     'Creates a new option under Configurations → $category.',
                     style: Theme.of(ctx).textTheme.bodySmall,
                   ),
+                  if (parentCode != null && parentCode.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isDark ? Colors.white24 : const Color(0xFFBFDBFE),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.account_tree_outlined,
+                            size: 16,
+                            color: isDark ? Colors.lightBlueAccent : const Color(0xFF2563EB),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Linked under: ${parentLabel ?? parentCode} ($parentCode)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white : const Color(0xFF1E40AF),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 14),
                   TextField(
                     controller: labelCtrl,
@@ -115,6 +155,11 @@ Future<LookupOption?> showQuickCreateLookupDialog(
                             label: label,
                           );
                           repo.invalidateCategory(category);
+                          AppEventBus.instance.fireErpMutated(
+                            module: 'lookups',
+                            entityId: category,
+                            action: 'created',
+                          );
                           if (ctx.mounted) Navigator.pop(ctx, created);
                         } catch (e) {
                           setLocal(() {

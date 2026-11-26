@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/realtime/app_event_bus.dart';
 import '../../../../core/widgets/dropdown_with_add.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../data/boq_repository.dart';
@@ -23,9 +24,20 @@ InputDecoration _dec(String label, {bool required = false}) {
 Future<ErpActivity?> showQuickCreateActivityDialog(BuildContext context) async {
   final formKey = GlobalKey<FormState>();
   final nameCtrl = TextEditingController();
-  final subCtrl = TextEditingController();
+  final descCtrl = TextEditingController();
+  final subtasks = <Map<String, TextEditingController>>[];
   var saving = false;
   String? error;
+
+  void addSubtask() {
+    subtasks.add({
+      'name': TextEditingController(),
+      'desc': TextEditingController(),
+    });
+  }
+
+  // Start with 1 empty sub-activity field
+  addSubtask();
 
   final result = await showDialog<ErpActivity>(
     context: context,
@@ -33,36 +45,119 @@ Future<ErpActivity?> showQuickCreateActivityDialog(BuildContext context) async {
     builder: (ctx) {
       return StatefulBuilder(
         builder: (ctx, setLocal) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
           return AlertDialog(
             title: const Text('Add activity'),
             content: SizedBox(
-              width: 420,
+              width: 500,
               child: Form(
                 key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Creates an activity under Configurations → Activities.',
-                      style: Theme.of(ctx).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 14),
-                    TextFormField(
-                      controller: nameCtrl,
-                      decoration: _dec('Activity name', required: true),
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'Required' : null,
-                    ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: subCtrl,
-                      decoration: _dec('First sub-activity (optional)'),
-                    ),
-                    if (error != null) ...[
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Creates an activity with nested sub-activities under Configurations → Activities.',
+                        style: Theme.of(ctx).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 14),
+                      TextFormField(
+                        controller: nameCtrl,
+                        decoration: _dec('Activity name', required: true),
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
                       const SizedBox(height: 10),
-                      Text(error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                      TextFormField(
+                        controller: descCtrl,
+                        decoration: _dec('Description (optional)'),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Sub-activities / Tasks',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white70 : const Color(0xFF475569),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () {
+                              setLocal(() => addSubtask());
+                            },
+                            icon: const Icon(Icons.add_circle_outline, size: 16),
+                            label: const Text('Add Sub-activity', style: TextStyle(fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      for (int i = 0; i < subtasks.length; i++) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: TextFormField(
+                                  controller: subtasks[i]['name'],
+                                  decoration: InputDecoration(
+                                    labelText: 'Sub-activity ${i + 1}',
+                                    hintText: 'e.g. Excavation',
+                                    isDense: true,
+                                    border: const OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 2,
+                                child: TextFormField(
+                                  controller: subtasks[i]['desc'],
+                                  decoration: const InputDecoration(
+                                    labelText: 'Notes',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                              if (subtasks.length > 1) ...[
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
+                                  tooltip: 'Remove',
+                                  onPressed: () {
+                                    setLocal(() {
+                                      subtasks[i]['name']?.dispose();
+                                      subtasks[i]['desc']?.dispose();
+                                      subtasks.removeAt(i);
+                                    });
+                                  },
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (error != null) ...[
+                        const SizedBox(height: 10),
+                        Text(error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -81,16 +176,31 @@ Future<ErpActivity?> showQuickCreateActivityDialog(BuildContext context) async {
                           error = null;
                         });
                         try {
-                          final sub = subCtrl.text.trim();
+                          final subtaskPayload = <Map<String, dynamic>>[];
+                          for (final st in subtasks) {
+                            final n = st['name']?.text.trim() ?? '';
+                            if (n.isNotEmpty) {
+                              subtaskPayload.add({
+                                'name': n,
+                                'description': st['desc']?.text.trim().isNotEmpty == true
+                                    ? st['desc']?.text.trim()
+                                    : null,
+                              });
+                            }
+                          }
+
                           final created =
                               await ctx.read<WorkOrderRepository>().createActivity({
                             'name': nameCtrl.text.trim(),
-                            'subtasks': sub.isEmpty
-                                ? <Map<String, dynamic>>[]
-                                : [
-                                    {'name': sub},
-                                  ],
+                            if (descCtrl.text.trim().isNotEmpty)
+                              'description': descCtrl.text.trim(),
+                            'subtasks': subtaskPayload,
                           });
+                          AppEventBus.instance.fireErpMutated(
+                            module: 'activities',
+                            entityId: created.id,
+                            action: 'created',
+                          );
                           if (ctx.mounted) Navigator.pop(ctx, created);
                         } catch (e) {
                           setLocal(() {
@@ -114,7 +224,11 @@ Future<ErpActivity?> showQuickCreateActivityDialog(BuildContext context) async {
     },
   );
   nameCtrl.dispose();
-  subCtrl.dispose();
+  descCtrl.dispose();
+  for (final st in subtasks) {
+    st['name']?.dispose();
+    st['desc']?.dispose();
+  }
   return result;
 }
 
@@ -173,6 +287,7 @@ class ActivityDropdownWithCreate extends StatelessWidget {
         final created = await showQuickCreateActivityDialog(context);
         if (created == null) return;
         onActivityCreated(created);
+        onChanged(created.id);
       },
       child: DropdownButtonFormField<String?>(
         key: ValueKey('activity-dd-$value-${activities.length}'),
@@ -199,9 +314,12 @@ class ActivityDropdownWithCreate extends StatelessWidget {
 Future<ErpMaterial?> showQuickCreateMaterialDialog(BuildContext context) async {
   final formKey = GlobalKey<FormState>();
   final nameCtrl = TextEditingController();
+  final itemCodeCtrl = TextEditingController();
   final brandCtrl = TextEditingController();
   final sizeCtrl = TextEditingController();
+  final descCtrl = TextEditingController();
   final qtyCtrl = TextEditingController(text: '0');
+  String? categoryCode;
   String? unitCode;
   var saving = false;
   String? error;
@@ -215,7 +333,7 @@ Future<ErpMaterial?> showQuickCreateMaterialDialog(BuildContext context) async {
           return AlertDialog(
             title: const Text('Add material'),
             content: SizedBox(
-              width: 440,
+              width: 480,
               child: Form(
                 key: formKey,
                 child: SingleChildScrollView(
@@ -223,39 +341,59 @@ Future<ErpMaterial?> showQuickCreateMaterialDialog(BuildContext context) async {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Creates a material under Configurations → Materials.',
+                        'Creates a material under Configurations → Materials with category and unit tracking.',
                         style: Theme.of(ctx).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 14),
                       TextFormField(
                         controller: nameCtrl,
-                        decoration: _dec('Name', required: true),
+                        decoration: _dec('Material name', required: true),
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Required' : null,
                       ),
                       const SizedBox(height: 10),
                       TextFormField(
+                        controller: itemCodeCtrl,
+                        decoration: _dec('Item code (optional, e.g. MAT-001)'),
+                        textCapitalization: TextCapitalization.characters,
+                      ),
+                      const SizedBox(height: 10),
+                      lookupDropdown(
+                        context: ctx,
+                        category: 'INVENTORY_CATEGORY',
+                        label: 'Category',
+                        value: categoryCode,
+                        onChanged: (v) => setLocal(() => categoryCode = v),
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
                         controller: brandCtrl,
-                        decoration: _dec('Brand'),
+                        decoration: _dec('Brand (e.g. UltraTech, Tata Steel)'),
                       ),
                       const SizedBox(height: 10),
                       lookupDropdown(
                         context: ctx,
                         category: kWoMeasurementUnit,
-                        label: 'Unit',
+                        label: 'Unit of Measure (UoM)',
                         value: unitCode,
                         onChanged: (v) => setLocal(() => unitCode = v),
                       ),
                       const SizedBox(height: 10),
                       TextFormField(
                         controller: sizeCtrl,
-                        decoration: _dec('Size'),
+                        decoration: _dec('Size / Dimensions (e.g. 10mm, 50kg)'),
                       ),
                       const SizedBox(height: 10),
                       TextFormField(
                         controller: qtyCtrl,
-                        decoration: _dec('Qty on hand'),
+                        decoration: _dec('Initial Qty on hand'),
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: descCtrl,
+                        decoration: _dec('Specifications / Description (optional)'),
+                        maxLines: 2,
                       ),
                       if (error != null) ...[
                         const SizedBox(height: 10),
@@ -283,6 +421,10 @@ Future<ErpMaterial?> showQuickCreateMaterialDialog(BuildContext context) async {
                         try {
                           final created = await ctx.read<BoqRepository>().createMaterial({
                             'name': nameCtrl.text.trim(),
+                            if (itemCodeCtrl.text.trim().isNotEmpty)
+                              'itemCode': itemCodeCtrl.text.trim().toUpperCase(),
+                            if (categoryCode != null && categoryCode!.isNotEmpty)
+                              'categoryCode': categoryCode,
                             'brand': brandCtrl.text.trim().isEmpty
                                 ? null
                                 : brandCtrl.text.trim(),
@@ -290,8 +432,15 @@ Future<ErpMaterial?> showQuickCreateMaterialDialog(BuildContext context) async {
                             'size': sizeCtrl.text.trim().isEmpty
                                 ? null
                                 : sizeCtrl.text.trim(),
+                            if (descCtrl.text.trim().isNotEmpty)
+                              'description': descCtrl.text.trim(),
                             'qtyOnHand': double.tryParse(qtyCtrl.text) ?? 0,
                           });
+                          AppEventBus.instance.fireErpMutated(
+                            module: 'materials',
+                            entityId: created.id,
+                            action: 'created',
+                          );
                           if (ctx.mounted) Navigator.pop(ctx, created);
                         } catch (e) {
                           setLocal(() {
@@ -315,8 +464,10 @@ Future<ErpMaterial?> showQuickCreateMaterialDialog(BuildContext context) async {
     },
   );
   nameCtrl.dispose();
+  itemCodeCtrl.dispose();
   brandCtrl.dispose();
   sizeCtrl.dispose();
+  descCtrl.dispose();
   qtyCtrl.dispose();
   return result;
 }
@@ -384,6 +535,7 @@ class MaterialDropdownWithCreate extends StatelessWidget {
         final created = await showQuickCreateMaterialDialog(context);
         if (created == null) return;
         onMaterialCreated(created);
+        onChanged(created.id);
       },
       child: DropdownButtonFormField<String?>(
         key: ValueKey('material-dd-$value-${materials.length}'),
@@ -502,6 +654,11 @@ Future<ErpMachine?> showQuickCreateMachineDialog(BuildContext context) async {
                                 : sizeCtrl.text.trim(),
                             'qtyOnHand': double.tryParse(qtyCtrl.text) ?? 0,
                           });
+                          AppEventBus.instance.fireErpMutated(
+                            module: 'machines',
+                            entityId: created.id,
+                            action: 'created',
+                          );
                           if (ctx.mounted) Navigator.pop(ctx, created);
                         } catch (e) {
                           setLocal(() {
@@ -590,6 +747,7 @@ class MachineDropdownWithCreate extends StatelessWidget {
         final created = await showQuickCreateMachineDialog(context);
         if (created == null) return;
         onMachineCreated(created);
+        onChanged(created.id);
       },
       child: DropdownButtonFormField<String?>(
         key: ValueKey('machine-dd-$value-${machines.length}'),
@@ -688,6 +846,11 @@ Future<ErpLabour?> showQuickCreateLabourDialog(BuildContext context) async {
                             'unitCode': unitCode,
                             'defaultRate': double.tryParse(rateCtrl.text),
                           });
+                          AppEventBus.instance.fireErpMutated(
+                            module: 'labour',
+                            entityId: created.id,
+                            action: 'created',
+                          );
                           if (ctx.mounted) Navigator.pop(ctx, created);
                         } catch (e) {
                           setLocal(() {
@@ -759,6 +922,7 @@ class LabourDropdownWithCreate extends StatelessWidget {
         final created = await showQuickCreateLabourDialog(context);
         if (created == null) return;
         onLabourCreated(created);
+        onChanged(created.id);
       },
       child: DropdownButtonFormField<String?>(
         key: ValueKey('labour-dd-$value-${labour.length}'),
@@ -851,6 +1015,11 @@ Future<ErpStoreMaster?> showQuickCreateStoreDialog(BuildContext context) async {
                             },
                             fromConfig: true,
                           );
+                          AppEventBus.instance.fireErpMutated(
+                            module: 'stores',
+                            entityId: created.id,
+                            action: 'created',
+                          );
                           if (ctx.mounted) Navigator.pop(ctx, created);
                         } catch (e) {
                           setLocal(() {
@@ -934,6 +1103,7 @@ class StoreDropdownWithCreate extends StatelessWidget {
         final created = await showQuickCreateStoreDialog(context);
         if (created == null) return;
         onStoreCreated(created);
+        onChanged(created.id);
       },
       child: DropdownButtonFormField<String?>(
         key: ValueKey('store-dd-$value-${stores.length}'),

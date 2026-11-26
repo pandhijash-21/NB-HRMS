@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/realtime/app_event_bus.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../data/work_order_repository.dart';
 import '../../domain/contractor_lookup_keys.dart';
@@ -11,9 +12,16 @@ import '../../domain/work_order_models.dart';
 Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
   final formKey = GlobalKey<FormState>();
   final nameCtrl = TextEditingController();
+  final contactPersonCtrl = TextEditingController();
   final mobileCtrl = TextEditingController();
   final emailCtrl = TextEditingController();
   final altMobileCtrl = TextEditingController();
+  final panCtrl = TextEditingController();
+  final gstCtrl = TextEditingController();
+  final addressCtrl = TextEditingController();
+  final cityCtrl = TextEditingController();
+  final stateCtrl = TextEditingController();
+  final pincodeCtrl = TextEditingController();
   final bankCtrl = TextEditingController();
   final branchCtrl = TextEditingController();
   final ifscCtrl = TextEditingController();
@@ -41,7 +49,7 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
           return AlertDialog(
             title: const Text('Add vendor'),
             content: SizedBox(
-              width: 520,
+              width: 560,
               child: Form(
                 key: formKey,
                 child: SingleChildScrollView(
@@ -49,15 +57,20 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Creates a vendor in Configurations → Vendors so you can keep working on this form.',
+                        'Creates a vendor in Configurations → Vendors with tax, address, and banking details.',
                         style: Theme.of(ctx).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 14),
                       TextFormField(
                         controller: nameCtrl,
-                        decoration: dec('Vendor name', required: true),
+                        decoration: dec('Vendor / Company name', required: true),
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: contactPersonCtrl,
+                        decoration: dec('Contact person name'),
                       ),
                       const SizedBox(height: 10),
                       TextFormField(
@@ -88,6 +101,26 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
                         ],
                       ),
                       const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: panCtrl,
+                              decoration: dec('PAN No.'),
+                              textCapitalization: TextCapitalization.characters,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextFormField(
+                              controller: gstCtrl,
+                              decoration: dec('GSTIN'),
+                              textCapitalization: TextCapitalization.characters,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
                       lookupDropdown(
                         context: ctx,
                         category: kContractorType,
@@ -105,24 +138,71 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
                       ),
                       const SizedBox(height: 10),
                       TextFormField(
-                        controller: bankCtrl,
-                        decoration: dec('Bank name'),
+                        controller: addressCtrl,
+                        decoration: dec('Address'),
                       ),
                       const SizedBox(height: 10),
-                      TextFormField(
-                        controller: branchCtrl,
-                        decoration: dec('Branch'),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: cityCtrl,
+                              decoration: dec('City'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextFormField(
+                              controller: stateCtrl,
+                              decoration: dec('State'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextFormField(
+                              controller: pincodeCtrl,
+                              decoration: dec('Pincode'),
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 10),
-                      TextFormField(
-                        controller: ifscCtrl,
-                        decoration: dec('IFSC'),
-                        textCapitalization: TextCapitalization.characters,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: bankCtrl,
+                              decoration: dec('Bank name'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextFormField(
+                              controller: branchCtrl,
+                              decoration: dec('Branch'),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 10),
-                      TextFormField(
-                        controller: accountCtrl,
-                        decoration: dec('Account no'),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: ifscCtrl,
+                              decoration: dec('IFSC'),
+                              textCapitalization: TextCapitalization.characters,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextFormField(
+                              controller: accountCtrl,
+                              decoration: dec('Account no'),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 10),
                       TextFormField(
@@ -156,6 +236,8 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
                           final created =
                               await ctx.read<WorkOrderRepository>().createContractor({
                             'name': nameCtrl.text.trim(),
+                            if (contactPersonCtrl.text.trim().isNotEmpty)
+                              'contactPerson': contactPersonCtrl.text.trim(),
                             'mobileNo': mobileCtrl.text.trim(),
                             'email': emailCtrl.text.trim().isEmpty
                                 ? null
@@ -181,14 +263,47 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
                             'isActive': true,
                             'contacts': [
                               {
-                                'name': nameCtrl.text.trim(),
+                                'name': contactPersonCtrl.text.trim().isNotEmpty
+                                    ? contactPersonCtrl.text.trim()
+                                    : nameCtrl.text.trim(),
                                 'mobileNo': mobileCtrl.text.trim(),
                                 'email': emailCtrl.text.trim().isEmpty
                                     ? null
                                     : emailCtrl.text.trim(),
                               },
                             ],
+                            'locations': [
+                              if (addressCtrl.text.trim().isNotEmpty ||
+                                  cityCtrl.text.trim().isNotEmpty ||
+                                  panCtrl.text.trim().isNotEmpty ||
+                                  gstCtrl.text.trim().isNotEmpty)
+                                {
+                                  'address1': addressCtrl.text.trim().isNotEmpty
+                                      ? addressCtrl.text.trim()
+                                      : null,
+                                  'cityCode': cityCtrl.text.trim().isNotEmpty
+                                      ? cityCtrl.text.trim()
+                                      : null,
+                                  'stateCode': stateCtrl.text.trim().isNotEmpty
+                                      ? stateCtrl.text.trim()
+                                      : null,
+                                  'postCode': pincodeCtrl.text.trim().isNotEmpty
+                                      ? pincodeCtrl.text.trim()
+                                      : null,
+                                  'panNo': panCtrl.text.trim().isNotEmpty
+                                      ? panCtrl.text.trim()
+                                      : null,
+                                  'gstNo': gstCtrl.text.trim().isNotEmpty
+                                      ? gstCtrl.text.trim()
+                                      : null,
+                                },
+                            ],
                           });
+                          AppEventBus.instance.fireErpMutated(
+                            module: 'contractors',
+                            entityId: created.id,
+                            action: 'created',
+                          );
                           if (ctx.mounted) Navigator.pop(ctx, created);
                         } catch (e) {
                           setLocal(() {
@@ -214,9 +329,16 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
 
   for (final c in [
     nameCtrl,
+    contactPersonCtrl,
     mobileCtrl,
     emailCtrl,
     altMobileCtrl,
+    panCtrl,
+    gstCtrl,
+    addressCtrl,
+    cityCtrl,
+    stateCtrl,
+    pincodeCtrl,
     bankCtrl,
     branchCtrl,
     ifscCtrl,
@@ -310,6 +432,7 @@ class VendorDropdownWithCreate extends StatelessWidget {
                     final created = await showQuickCreateVendorDialog(context);
                     if (created == null) return;
                     onVendorCreated(created);
+                    onChanged(created.id);
                   },
             icon: const Icon(Icons.add_circle_outline),
           ),

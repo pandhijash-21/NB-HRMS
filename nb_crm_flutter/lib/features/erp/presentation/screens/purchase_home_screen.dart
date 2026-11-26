@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/realtime/app_event_bus.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../data/purchase_repository.dart';
 import '../../domain/purchase_models.dart';
@@ -25,18 +27,40 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
   List<ErpPurchaseRequest> _approved = [];
   bool _loading = true;
   String? _error;
+  StreamSubscription<ErpRealtimeEvent>? _erpSub;
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
     _load();
+    _erpSub = AppEventBus.instance.on<ErpRealtimeEvent>().listen((event) {
+      if (event.module == 'purchase' || event.module == 'erp') {
+        _silentReload();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _erpSub?.cancel();
     _tabs.dispose();
     super.dispose();
+  }
+
+  Future<void> _silentReload() async {
+    try {
+      final repo = context.read<PurchaseRepository>();
+      final settings = await repo.getSettings();
+      final pending = await repo.listRequests(status: 'PENDING');
+      final approved = await repo.listRequests(status: 'APPROVED');
+      if (!mounted) return;
+      setState(() {
+        _settings = settings;
+        _pending = pending;
+        _approved = approved;
+      });
+    } catch (_) {}
   }
 
   Future<void> _load() async {

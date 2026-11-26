@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/realtime/app_event_bus.dart';
 import '../../../erp/domain/project_models.dart';
 import '../../../erp/domain/structure_models.dart';
 import '../../../erp/presentation/project_providers.dart';
@@ -33,17 +35,46 @@ class _CrmVirtualBuildingScreenState
   String _statusFilter = 'ALL';
   String _searchQuery = '';
   final TextEditingController _searchCtrl = TextEditingController();
+  StreamSubscription<CrmUnitRealtimeEvent>? _unitSub;
+  StreamSubscription<ErpRealtimeEvent>? _erpSub;
 
   @override
   void initState() {
     super.initState();
     _loadProjects();
+    _unitSub = AppEventBus.instance.on<CrmUnitRealtimeEvent>().listen((event) {
+      if (_selectedProject?.id == event.projectId) {
+        _fetchVirtualBuildingSilently();
+      }
+    });
+    _erpSub = AppEventBus.instance.on<ErpRealtimeEvent>().listen((event) {
+      if (event.module == 'projects' || event.module == 'units') {
+        _fetchVirtualBuildingSilently();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _unitSub?.cancel();
+    _erpSub?.cancel();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchVirtualBuildingSilently() async {
+    if (_selectedProject == null || _selectedTower == null) return;
+    try {
+      final crmRepo = ref.read(crmRepositoryProvider);
+      final data = await crmRepo.getVirtualBuilding(
+        projectId: _selectedProject!.id,
+        towerId: _selectedTower!.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _buildingData = data;
+      });
+    } catch (_) {}
   }
 
   Future<void> _loadProjects() async {

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/load_status.dart';
+import '../../../../core/realtime/app_event_bus.dart';
 import '../../data/boq_repository.dart';
 import '../../domain/boq_models.dart';
 import '../../domain/resource_models.dart';
@@ -18,6 +20,14 @@ abstract class ErpBoqEvent extends Equatable {
 
 class ErpBoqListRequested extends ErpBoqEvent {
   const ErpBoqListRequested({this.projectId});
+  final String? projectId;
+
+  @override
+  List<Object?> get props => [projectId];
+}
+
+class ErpBoqSilentRefreshRequested extends ErpBoqEvent {
+  const ErpBoqSilentRefreshRequested({this.projectId});
   final String? projectId;
 
   @override
@@ -262,6 +272,7 @@ class ErpBoqBloc extends Bloc<ErpBoqEvent, ErpBoqState> {
       : _boqRepository = boqRepository,
         super(const ErpBoqState()) {
     on<ErpBoqListRequested>(_onListRequested);
+    on<ErpBoqSilentRefreshRequested>(_onSilentRefresh);
     on<ErpBoqDetailRequested>(_onDetailRequested);
     on<ErpBoqCreated>(_onBoqCreated);
     on<ErpBoqUpdated>(_onBoqUpdated);
@@ -278,9 +289,32 @@ class ErpBoqBloc extends Bloc<ErpBoqEvent, ErpBoqState> {
     on<ErpBoqMachineDeleted>(_onMachineDeleted);
     on<ErpBoqLabourCreated>(_onLabourCreated);
     on<ErpBoqLabourDeleted>(_onLabourDeleted);
+
+    _erpSub = AppEventBus.instance.on<ErpRealtimeEvent>().listen((e) {
+      if (e.module == 'boq' || e.module == 'erp' || e.module == 'materials' || e.module == 'machines') {
+        add(const ErpBoqSilentRefreshRequested());
+      }
+    });
   }
 
   final BoqRepository _boqRepository;
+  StreamSubscription<ErpRealtimeEvent>? _erpSub;
+
+  @override
+  Future<void> close() {
+    _erpSub?.cancel();
+    return super.close();
+  }
+
+  Future<void> _onSilentRefresh(
+    ErpBoqSilentRefreshRequested event,
+    Emitter<ErpBoqState> emit,
+  ) async {
+    try {
+      final boqs = await _boqRepository.list(projectId: event.projectId);
+      emit(state.copyWith(status: LoadStatus.success, boqs: boqs));
+    } catch (_) {}
+  }
 
   Future<void> _onListRequested(
     ErpBoqListRequested event,

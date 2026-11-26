@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
+import { emitErpUpdate } from '../collaboration/socket';
 
 function str(v: unknown): string | null {
   if (v == null) return null;
@@ -221,6 +222,9 @@ export const resourceService = {
         },
       });
     }
+    try {
+      emitErpUpdate('materials', row.id, 'create');
+    } catch (_) {}
     return row;
   },
 
@@ -237,7 +241,7 @@ export const resourceService = {
     }
     const brandCode = body.brandCode !== undefined ? str(body.brandCode) : undefined;
     const sizeCode = body.sizeCode !== undefined ? str(body.sizeCode) : undefined;
-    return prisma.erpMaterial.update({
+    const updated = await prisma.erpMaterial.update({
       where: { id },
       data: {
         ...(body.itemCode !== undefined ? { itemCode: str(body.itemCode) } : {}),
@@ -264,6 +268,10 @@ export const resourceService = {
       },
       include: { activity: true, subtask: true },
     });
+    try {
+      emitErpUpdate('materials', id, 'update');
+    } catch (_) {}
+    return updated;
   },
 
   async addMaterialStock(id: string, body: Record<string, unknown>, userId?: string) {
@@ -436,12 +444,15 @@ export const resourceService = {
         },
       });
     }
+    try {
+      emitErpUpdate('machines', row.id, 'create');
+    } catch (_) {}
     return row;
   },
 
   async updateMachine(id: string, body: Record<string, unknown>) {
     await prisma.erpMachine.findUniqueOrThrow({ where: { id } });
-    return prisma.erpMachine.update({
+    const updated = await prisma.erpMachine.update({
       where: { id },
       data: {
         ...(body.brand !== undefined ? { brand: str(body.brand) } : {}),
@@ -454,6 +465,10 @@ export const resourceService = {
       },
       include: { activity: true, subtask: true },
     });
+    try {
+      emitErpUpdate('machines', id, 'update');
+    } catch (_) {}
+    return updated;
   },
 
   async addMachineStock(id: string, body: Record<string, unknown>, userId?: string) {
@@ -679,7 +694,7 @@ export const resourceService = {
   async createLabour(body: Record<string, unknown>) {
     const name = str(body.name);
     if (!name) throw new Error('Labour name is required');
-    return prisma.erpLabour.create({
+    const row = await prisma.erpLabour.create({
       data: {
         name,
         unitCode: str(body.unitCode),
@@ -690,11 +705,15 @@ export const resourceService = {
       },
       include: { activity: true, subtask: true },
     });
+    try {
+      emitErpUpdate('labour', row.id, 'create');
+    } catch (_) {}
+    return row;
   },
 
   async updateLabour(id: string, body: Record<string, unknown>) {
     await prisma.erpLabour.findUniqueOrThrow({ where: { id } });
-    return prisma.erpLabour.update({
+    const updated = await prisma.erpLabour.update({
       where: { id },
       data: {
         ...(body.name != null ? { name: str(body.name) ?? undefined } : {}),
@@ -708,6 +727,10 @@ export const resourceService = {
       },
       include: { activity: true, subtask: true },
     });
+    try {
+      emitErpUpdate('labour', id, 'update');
+    } catch (_) {}
+    return updated;
   },
 
   async removeLabour(id: string) {

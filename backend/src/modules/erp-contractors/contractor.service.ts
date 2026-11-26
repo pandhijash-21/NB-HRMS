@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma';
+import { emitErpUpdate } from '../collaboration/socket';
 
 function str(v: unknown): string | null {
   if (v == null) return null;
@@ -236,6 +237,9 @@ export const contractorService = {
 
     const created = await prisma.erpContractor.create({ data: header });
     await replaceChildren(created.id, locations, contacts, documents);
+    try {
+      emitErpUpdate('contractors', created.id, 'create');
+    } catch (_) {}
     return this.getById(created.id);
   },
 
@@ -251,21 +255,31 @@ export const contractorService = {
         parseDocuments(body.documents),
       );
     }
+    try {
+      emitErpUpdate('contractors', id, 'update');
+    } catch (_) {}
     return this.getById(id);
   },
 
   async toggleActive(id: string) {
     const row = await this.getById(id);
-    return prisma.erpContractor.update({
+    const updated = await prisma.erpContractor.update({
       where: { id },
       data: { isActive: !row.isActive },
       include: includeDetail,
     });
+    try {
+      emitErpUpdate('contractors', id, 'update');
+    } catch (_) {}
+    return updated;
   },
 
   async remove(id: string) {
     await this.getById(id);
     await prisma.erpContractor.delete({ where: { id } });
+    try {
+      emitErpUpdate('contractors', id, 'delete');
+    } catch (_) {}
     return { ok: true };
   },
 };

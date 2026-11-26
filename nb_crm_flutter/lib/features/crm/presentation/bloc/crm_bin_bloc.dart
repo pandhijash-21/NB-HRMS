@@ -130,9 +130,21 @@ class CrmBinBloc extends Bloc<CrmBinEvent, CrmBinState> {
     on<CrmBinLeadPermanentlyDeleted>(_onLeadPermanentlyDeleted);
     on<CrmBinBulkRestored>(_onBulkRestored);
     on<CrmBinBulkPermanentlyDeleted>(_onBulkPermanentlyDeleted);
+
+    CrmRepository.leadMutationNotifier.addListener(_onLeadMutationNotified);
   }
 
   final CrmRepository _crmRepository;
+
+  void _onLeadMutationNotified() {
+    add(const CrmBinRefreshRequested());
+  }
+
+  @override
+  Future<void> close() {
+    CrmRepository.leadMutationNotifier.removeListener(_onLeadMutationNotified);
+    return super.close();
+  }
 
   Future<void> _fetchData(Emitter<CrmBinState> emit, {required String module}) async {
     try {

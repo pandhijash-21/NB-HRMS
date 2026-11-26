@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/network/dio_client.dart';
+import '../../../core/realtime/app_event_bus.dart';
 import '../domain/crm_models.dart';
 import '../domain/hub_partner_model.dart';
 
@@ -12,8 +13,9 @@ class CrmRepository {
   static final ValueNotifier<String> crmScopeNotifier = ValueNotifier<String>('NB_DEVELOPER');
   static final ValueNotifier<int> leadMutationNotifier = ValueNotifier<int>(0);
 
-  static void notifyLeadMutated() {
+  static void notifyLeadMutated([String? leadId]) {
     leadMutationNotifier.value = leadMutationNotifier.value + 1;
+    AppEventBus.instance.fireCrmLeadMutated(leadId ?? '', action: 'mutation');
   }
 
   CrmRepository({required DioClient dioClient}) : _dio = dioClient {

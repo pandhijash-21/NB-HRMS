@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/load_status.dart';
+import '../../../../core/realtime/app_event_bus.dart';
 import '../../data/project_repository.dart';
 import '../../domain/project_models.dart';
 
@@ -17,6 +19,14 @@ abstract class ErpProjectsEvent extends Equatable {
 
 class ErpProjectsLoadRequested extends ErpProjectsEvent {
   const ErpProjectsLoadRequested({this.includeInactive = false});
+  final bool includeInactive;
+
+  @override
+  List<Object?> get props => [includeInactive];
+}
+
+class ErpProjectsSilentRefreshRequested extends ErpProjectsEvent {
+  const ErpProjectsSilentRefreshRequested({this.includeInactive = false});
   final bool includeInactive;
 
   @override
@@ -130,14 +140,45 @@ class ErpProjectsBloc extends Bloc<ErpProjectsEvent, ErpProjectsState> {
       : _projectRepository = projectRepository,
         super(const ErpProjectsState()) {
     on<ErpProjectsLoadRequested>(_onLoadRequested);
+    on<ErpProjectsSilentRefreshRequested>(_onSilentRefresh);
     on<ErpProjectDetailRequested>(_onDetailRequested);
     on<ErpProjectNextNumberRequested>(_onNextNumberRequested);
     on<ErpProjectCreated>(_onProjectCreated);
     on<ErpProjectUpdated>(_onProjectUpdated);
     on<ErpProjectDeleted>(_onProjectDeleted);
+
+    _erpSub = AppEventBus.instance.on<ErpRealtimeEvent>().listen((e) {
+      if (e.module == 'projects' || e.module == 'erp') {
+        add(const ErpProjectsSilentRefreshRequested());
+      }
+    });
   }
 
   final ProjectRepository _projectRepository;
+  StreamSubscription<ErpRealtimeEvent>? _erpSub;
+
+  @override
+  Future<void> close() {
+    _erpSub?.cancel();
+    return super.close();
+  }
+
+  Future<void> _onSilentRefresh(
+    ErpProjectsSilentRefreshRequested event,
+    Emitter<ErpProjectsState> emit,
+  ) async {
+    try {
+      final results = await Future.wait([
+        _projectRepository.list(includeInactive: event.includeInactive),
+        _projectRepository.listEmployees(),
+      ]);
+      emit(state.copyWith(
+        status: LoadStatus.success,
+        projects: results[0] as List<ErpProject>,
+        employees: results[1] as List<ProjectEmployeeOption>,
+      ));
+    } catch (_) {}
+  }
 
   Future<void> _onLoadRequested(
     ErpProjectsLoadRequested event,

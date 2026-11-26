@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma';
+import { emitErpUpdate } from '../collaboration/socket';
 import {
   assertRequiredCompanyFields,
   companyProfileToPrismaData,
@@ -133,6 +134,11 @@ export const organizationService = {
       update: { label: name, isActive: true },
       create: { category: 'ORGANIZATION', code, label: name, sortOrder: data.sortOrder ?? 0 },
     });
+
+    try {
+      emitErpUpdate('organizations', row.id, 'create');
+      emitErpUpdate('lookups', 'ORGANIZATION', 'create');
+    } catch (_) {}
 
     return mapOrg(row);
   },

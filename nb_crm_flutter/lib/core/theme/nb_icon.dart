@@ -35,6 +35,7 @@ class NbIcon extends StatelessWidget {
     }
     // ignore: non_const_argument_for_const_parameter
     return IconData(
+      // ignore: non_const_argument_for_const_parameter
       icon.codePoint,
       fontFamily: fontFamily,
       matchTextDirection: icon.matchTextDirection,

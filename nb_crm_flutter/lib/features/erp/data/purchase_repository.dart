@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 
 import '../../../core/network/dio_client.dart';
+import '../../../core/realtime/app_event_bus.dart';
 import '../domain/purchase_models.dart';
 
 class PurchaseRepository {
@@ -64,44 +65,54 @@ class PurchaseRepository {
     );
   }
 
-  Future<ErpPurchaseRequest> createRequest(Map<String, dynamic> body) {
-    return _dio.postEnvelope(
+  Future<ErpPurchaseRequest> createRequest(Map<String, dynamic> body) async {
+    final res = await _dio.postEnvelope(
       'erp/purchase/requests',
       data: body,
       parse: (raw) => ErpPurchaseRequest.fromJson(Map<String, dynamic>.from(raw as Map)),
     );
+    AppEventBus.instance.fireErpMutated(module: 'purchase', entityId: res.id, action: 'created');
+    return res;
   }
 
-  Future<ErpPurchaseRequest> updateRequest(String id, Map<String, dynamic> body) {
-    return _dio.patchEnvelope(
+  Future<ErpPurchaseRequest> updateRequest(String id, Map<String, dynamic> body) async {
+    final res = await _dio.patchEnvelope(
       'erp/purchase/requests/$id',
       data: body,
       parse: (raw) => ErpPurchaseRequest.fromJson(Map<String, dynamic>.from(raw as Map)),
     );
+    AppEventBus.instance.fireErpMutated(module: 'purchase', entityId: id, action: 'updated');
+    return res;
   }
 
-  Future<ErpPurchaseRequest> submitRequest(String id) {
-    return _dio.postEnvelope(
+  Future<ErpPurchaseRequest> submitRequest(String id) async {
+    final res = await _dio.postEnvelope(
       'erp/purchase/requests/$id/submit',
       data: const {},
       parse: (raw) => ErpPurchaseRequest.fromJson(Map<String, dynamic>.from(raw as Map)),
     );
+    AppEventBus.instance.fireErpMutated(module: 'purchase', entityId: id, action: 'submitted');
+    return res;
   }
 
-  Future<ErpPurchaseRequest> approveRequest(String id) {
-    return _dio.postEnvelope(
+  Future<ErpPurchaseRequest> approveRequest(String id) async {
+    final res = await _dio.postEnvelope(
       'erp/purchase/requests/$id/approve',
       data: const {},
       parse: (raw) => ErpPurchaseRequest.fromJson(Map<String, dynamic>.from(raw as Map)),
     );
+    AppEventBus.instance.fireErpMutated(module: 'purchase', entityId: id, action: 'approved');
+    return res;
   }
 
-  Future<ErpPurchaseRequest> rejectRequest(String id, {String? reason}) {
-    return _dio.postEnvelope(
+  Future<ErpPurchaseRequest> rejectRequest(String id, {String? reason}) async {
+    final res = await _dio.postEnvelope(
       'erp/purchase/requests/$id/reject',
       data: {'reason': reason},
       parse: (raw) => ErpPurchaseRequest.fromJson(Map<String, dynamic>.from(raw as Map)),
     );
+    AppEventBus.instance.fireErpMutated(module: 'purchase', entityId: id, action: 'rejected');
+    return res;
   }
 
   Future<List<ErpPurchaseQuotation>> listQuotations(String purchaseRequestId) {

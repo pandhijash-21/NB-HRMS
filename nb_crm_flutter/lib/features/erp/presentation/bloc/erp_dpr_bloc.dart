@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/load_status.dart';
+import '../../../../core/realtime/app_event_bus.dart';
 import '../../data/dpr_repository.dart';
 import '../../domain/dpr_models.dart';
 
@@ -17,6 +19,14 @@ abstract class ErpDprEvent extends Equatable {
 
 class ErpDprListRequested extends ErpDprEvent {
   const ErpDprListRequested({this.projectId});
+  final String? projectId;
+
+  @override
+  List<Object?> get props => [projectId];
+}
+
+class ErpDprSilentRefreshRequested extends ErpDprEvent {
+  const ErpDprSilentRefreshRequested({this.projectId});
   final String? projectId;
 
   @override
@@ -128,13 +138,37 @@ class ErpDprBloc extends Bloc<ErpDprEvent, ErpDprState> {
       : _dprRepository = dprRepository,
         super(const ErpDprState()) {
     on<ErpDprListRequested>(_onListRequested);
+    on<ErpDprSilentRefreshRequested>(_onSilentRefresh);
     on<ErpDprDetailRequested>(_onDetailRequested);
     on<ErpDprCreated>(_onDprCreated);
     on<ErpDprDeleted>(_onDprDeleted);
     on<ErpDprContractorResourcesRequested>(_onContractorResourcesRequested);
+
+    _erpSub = AppEventBus.instance.on<ErpRealtimeEvent>().listen((e) {
+      if (e.module == 'dpr' || e.module == 'erp') {
+        add(const ErpDprSilentRefreshRequested());
+      }
+    });
   }
 
   final DprRepository _dprRepository;
+  StreamSubscription<ErpRealtimeEvent>? _erpSub;
+
+  @override
+  Future<void> close() {
+    _erpSub?.cancel();
+    return super.close();
+  }
+
+  Future<void> _onSilentRefresh(
+    ErpDprSilentRefreshRequested event,
+    Emitter<ErpDprState> emit,
+  ) async {
+    try {
+      final dprs = await _dprRepository.list(projectId: event.projectId);
+      emit(state.copyWith(status: LoadStatus.success, dprs: dprs));
+    } catch (_) {}
+  }
 
   Future<void> _onListRequested(
     ErpDprListRequested event,

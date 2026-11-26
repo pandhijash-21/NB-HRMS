@@ -96,9 +96,21 @@ class CrmDashboardBloc extends Bloc<CrmDashboardEvent, CrmDashboardState> {
     on<CrmDashboardLoadRequested>(_onLoad);
     on<CrmDashboardRefreshRequested>(_onRefresh);
     on<CrmDashboardFollowUpCompleted>(_onFollowUpCompleted);
+
+    CrmRepository.leadMutationNotifier.addListener(_onLeadMutationNotified);
   }
 
   final CrmRepository _crmRepository;
+
+  void _onLeadMutationNotified() {
+    add(const CrmDashboardRefreshRequested());
+  }
+
+  @override
+  Future<void> close() {
+    CrmRepository.leadMutationNotifier.removeListener(_onLeadMutationNotified);
+    return super.close();
+  }
 
   Future<void> _fetchData(Emitter<CrmDashboardState> emit) async {
     try {

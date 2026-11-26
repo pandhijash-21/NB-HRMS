@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma';
+import { emitErpUpdate } from '../collaboration/socket';
 
 function str(v: unknown): string | null {
   if (v == null) return null;
@@ -50,7 +51,7 @@ export const activityService = {
     const name = str(body.name);
     if (!name) throw new Error('Activity name is required');
     const subtasks = Array.isArray(body.subtasks) ? body.subtasks : [];
-    return prisma.erpActivity.create({
+    const row = await prisma.erpActivity.create({
       data: {
         name,
         isActive: body.isActive !== false,
@@ -73,6 +74,10 @@ export const activityService = {
       },
       include: { subtasks: true },
     });
+    try {
+      emitErpUpdate('activities', row.id, 'create');
+    } catch (_) {}
+    return row;
   },
 
   async update(id: string, body: Record<string, unknown>) {
@@ -108,25 +113,36 @@ export const activityService = {
       });
     }
 
-    return prisma.erpActivity.update({
+    const updated = await prisma.erpActivity.update({
       where: { id },
       data,
       include: { subtasks: { orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] } },
     });
+    try {
+      emitErpUpdate('activities', id, 'update');
+    } catch (_) {}
+    return updated;
   },
 
   async toggleActive(id: string) {
     const row = await this.getById(id);
-    return prisma.erpActivity.update({
+    const updated = await prisma.erpActivity.update({
       where: { id },
       data: { isActive: !row.isActive },
       include: { subtasks: true },
     });
+    try {
+      emitErpUpdate('activities', id, 'update');
+    } catch (_) {}
+    return updated;
   },
 
   async remove(id: string) {
     await this.getById(id);
     await prisma.erpActivity.delete({ where: { id } });
+    try {
+      emitErpUpdate('activities', id, 'delete');
+    } catch (_) {}
     return { ok: true };
   },
 };

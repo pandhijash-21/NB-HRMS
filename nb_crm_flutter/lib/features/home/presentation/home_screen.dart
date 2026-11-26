@@ -145,6 +145,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String? _punchInIso;
   String? _punchOutIso;
   bool _punchLoading = true;
+  Timer? _punchPeriodicTimer;
 
   @override
   void initState() {
@@ -154,6 +155,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _loadBirthdays();
       _loadTodayPunch();
       _promptEmergencyIfNeeded();
+    });
+    _punchPeriodicTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) _loadTodayPunch();
     });
   }
 
@@ -241,6 +245,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   void dispose() {
+    _punchPeriodicTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -505,6 +510,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       punchInIso: _punchInIso,
       punchOutIso: _punchOutIso,
       onPunchIn: () => context.go('/attendance'),
+      onPunchOut: () => context.go('/attendance'),
     );
 
     final filteredModules = modules.where((m) {
@@ -523,7 +529,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       height: 52,
       child: Row(
         children: [
-          NbIcon(
+          const NbIcon(
             Icons.search_rounded,
             color: _HomeC.mute,
             size: 22,
@@ -562,7 +568,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           if (_searchQuery.isNotEmpty)
             IconButton(
-              icon: NbIcon(
+              icon: const NbIcon(
                 Icons.clear_rounded,
                 color: _HomeC.mute,
                 size: 20,
@@ -737,6 +743,7 @@ class _GreetingsCard extends StatefulWidget {
     required this.punchInIso,
     required this.punchOutIso,
     required this.onPunchIn,
+    this.onPunchOut,
   });
 
   final String name;
@@ -745,6 +752,7 @@ class _GreetingsCard extends StatefulWidget {
   final String? punchInIso;
   final String? punchOutIso;
   final VoidCallback onPunchIn;
+  final VoidCallback? onPunchOut;
 
   @override
   State<_GreetingsCard> createState() => _GreetingsCardState();
@@ -776,10 +784,25 @@ class _GreetingsCardState extends State<_GreetingsCard> {
     final timeStr = DateFormat('hh:mm:ss a').format(_now);
     final dateStr = DateFormat('EEE, d MMM yyyy').format(_now);
     final punchedIn = widget.punchInIso != null && widget.punchInIso!.isNotEmpty;
+    final punchedOut = widget.punchOutIso != null &&
+        widget.punchOutIso!.isNotEmpty &&
+        widget.punchOutIso != widget.punchInIso;
     final punchInLabel = punchedIn ? '${formatIsoTime(widget.punchInIso)} IST' : '—';
-    final punchOutLabel = (widget.punchOutIso != null && widget.punchOutIso!.isNotEmpty)
-        ? '${formatIsoTime(widget.punchOutIso)} IST'
-        : '—';
+    final punchOutLabel = punchedOut ? '${formatIsoTime(widget.punchOutIso)} IST' : '—';
+
+    // Calculate elapsed time from punch-in to enable punch-out after 20 minutes (implementation gap)
+    int punchOutRemainingSec = 0;
+    bool isPunchOutEnabled = true;
+    if (punchedIn && !punchedOut) {
+      final inTime = DateTime.tryParse(widget.punchInIso!);
+      if (inTime != null) {
+        final elapsed = _now.difference(inTime.toLocal());
+        const minGapSec = 20 * 60; // 20 minutes implementation gap
+        punchOutRemainingSec = minGapSec - elapsed.inSeconds;
+        isPunchOutEnabled = punchOutRemainingSec <= 0;
+        if (punchOutRemainingSec < 0) punchOutRemainingSec = 0;
+      }
+    }
 
     final tone = _HomeTone.of(context);
     return Container(
@@ -852,6 +875,16 @@ class _GreetingsCardState extends State<_GreetingsCard> {
                           if (!punchedIn) ...[
                             const SizedBox(height: 10),
                             _PunchInButton(onPressed: widget.onPunchIn),
+                          ] else if (!punchedOut) ...[
+                            const SizedBox(height: 10),
+                            _PunchOutButton(
+                              onPressed: widget.onPunchOut ?? widget.onPunchIn,
+                              isEnabled: isPunchOutEnabled,
+                              remainingSeconds: punchOutRemainingSec,
+                            ),
+                          ] else ...[
+                            const SizedBox(height: 10),
+                            const _PunchedOutBadge(),
                           ],
                         ],
                       )
@@ -867,6 +900,16 @@ class _GreetingsCardState extends State<_GreetingsCard> {
                           if (!punchedIn) ...[
                             const SizedBox(width: 14),
                             _PunchInButton(onPressed: widget.onPunchIn),
+                          ] else if (!punchedOut) ...[
+                            const SizedBox(width: 14),
+                            _PunchOutButton(
+                              onPressed: widget.onPunchOut ?? widget.onPunchIn,
+                              isEnabled: isPunchOutEnabled,
+                              remainingSeconds: punchOutRemainingSec,
+                            ),
+                          ] else ...[
+                            const SizedBox(width: 14),
+                            const _PunchedOutBadge(),
                           ],
                         ],
                       ),
@@ -977,6 +1020,106 @@ class _PunchInButton extends StatelessWidget {
       label: Text(
         'Punch in now',
         style: GoogleFonts.sourceSans3(fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+class _PunchOutButton extends StatelessWidget {
+  const _PunchOutButton({
+    required this.onPressed,
+    required this.isEnabled,
+    required this.remainingSeconds,
+  });
+
+  final VoidCallback onPressed;
+  final bool isEnabled;
+  final int remainingSeconds;
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = _HomeTone.of(context);
+    final waitMinutes = (remainingSeconds / 60).ceil();
+
+    final label = isEnabled
+        ? 'Punch out now'
+        : 'Punch out in ${waitMinutes > 1 ? "${waitMinutes}m" : "${remainingSeconds}s"}';
+
+    final button = FilledButton.icon(
+      onPressed: isEnabled
+          ? onPressed
+          : () {
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Please wait $waitMinutes minute(s) before punching out (minimum 20 minutes gap required after punch-in).',
+                  ),
+                  backgroundColor: Colors.orange.shade800,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            },
+      style: FilledButton.styleFrom(
+        backgroundColor: isEnabled
+            ? (tone.isDark ? const Color(0xFFE11D48) : const Color(0xFFDC2626))
+            : (tone.isDark ? Colors.white12 : Colors.black12),
+        foregroundColor: isEnabled
+            ? Colors.white
+            : (tone.isDark ? Colors.white38 : Colors.black38),
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      icon: Icon(
+        isEnabled ? Icons.logout_rounded : Icons.timer_outlined,
+        size: 18,
+      ),
+      label: Text(
+        label,
+        style: GoogleFonts.sourceSans3(
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
+
+    if (!isEnabled) {
+      return Tooltip(
+        message: 'Punch out enabled after 20 minutes of punch in ($waitMinutes min remaining)',
+        child: button,
+      );
+    }
+    return button;
+  }
+}
+
+class _PunchedOutBadge extends StatelessWidget {
+  const _PunchedOutBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        color: const Color(0xFF10B981).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 17),
+          const SizedBox(width: 8),
+          Text(
+            'Shift Completed',
+            style: GoogleFonts.sourceSans3(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: const Color(0xFF10B981),
+            ),
+          ),
+        ],
       ),
     );
   }

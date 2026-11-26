@@ -95,11 +95,33 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _checkingLocation = true);
-    final location = await LocationAccessGate.ensureReadyForLogin();
-    if (!mounted) return;
-    setState(() => _checkingLocation = false);
+    final LocationAccessResult location;
+    try {
+      location = await LocationAccessGate.ensureReadyForLogin();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _checkingLocation = false);
+      authBloc.add(const AuthClearErrorRequested());
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Location Error'),
+          content: const Text('Unable to verify location. Please check your GPS/browser settings and try again.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    } finally {
+      if (mounted) setState(() => _checkingLocation = false);
+    }
 
     if (!location.allowed) {
+      if (!mounted) return;
       await showDialog<void>(
         context: context,
         barrierDismissible: false,

@@ -26,8 +26,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         _storage = secureStorage,
         _gate = unauthorizedGate,
         super(const AuthState.unknown()) {
-    _gate.bind(() async {
-      add(const AuthUnauthorizedKicked());
+    _gate.bind(({reason}) async {
+      add(AuthUnauthorizedKicked(reason: reason));
     });
 
     on<AuthBootstrapRequested>(_onBootstrap);
@@ -124,6 +124,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthLoginRequested event,
     Emitter<AuthState> emit,
   ) async {
+    _stopSessionWatch();
+    WebLiveTrackingService.stop();
     emit(state.copyWith(isSubmitting: true, clearError: true, clearInfo: true));
 
     try {
@@ -364,6 +366,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthUnauthorizedKicked event,
     Emitter<AuthState> emit,
   ) async {
+    // If login is currently in progress, NEVER kick out or interrupt!
+    if (state.isSubmitting) return;
     if (state.status != AuthStatus.authenticated) return;
     final wasOnTrip = state.user?.onTrip == true;
     WebLiveTrackingService.stop(preventRestart: true);
@@ -373,10 +377,25 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     await _repo.releaseSessionRemote();
     await _repo.clearSession();
 
+    final String message;
+    if (wasOnTrip) {
+      message = 'Your session ended during a trip. Sign in again — location tracking will resume.';
+    } else if (event.reason != null && event.reason!.trim().isNotEmpty) {
+      final r = event.reason!.trim();
+      if (r.toLowerCase().contains('another device') ||
+          r.toLowerCase().contains('displaced')) {
+        message = 'You were signed out because this account signed in on another device or browser.';
+      } else if (r.toLowerCase().contains('expired')) {
+        message = 'Your session has expired. Please log in again.';
+      } else {
+        message = r;
+      }
+    } else {
+      message = 'Your session has expired. Please log in again.';
+    }
+
     emit(AuthState.unauthenticated(
-      infoMessage: wasOnTrip
-          ? 'Your session ended during a trip. Sign in again — location tracking will resume.'
-          : 'You were signed out because this account signed in on another device or browser.',
+      infoMessage: message,
     ));
   }
 

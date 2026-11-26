@@ -67,6 +67,178 @@ class _AdminAttendanceReportScreenState extends State<AdminAttendanceReportScree
 
   String _exportFormat = 'excel';
 
+  Future<bool?> _promptSingleOrSeparate(String format) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final extLabel = format.toUpperCase();
+    final count = _selectedEmployeeIds.length;
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.download_rounded, color: _accent, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Download Attendance Reports',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : _ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You selected $count employees. How would you like to download their attendance reports?',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Option 1: Combined Single Report
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => Navigator.of(ctx).pop(false),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                    ),
+                    color: isDark ? Colors.white.withValues(alpha: 0.03) : const Color(0xFFF8FAFC),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.description_outlined, color: Colors.blue, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Combined Single Report',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13.5,
+                                color: isDark ? Colors.white : _ink,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              format == 'excel'
+                                  ? 'One Excel workbook with a master summary and individual employee tabs'
+                                  : 'One consolidated PDF document containing all selected employees',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 20),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Option 2: Separate Reports in ZIP
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => Navigator.of(ctx).pop(true),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _accent.withValues(alpha: 0.4),
+                      width: 1.5,
+                    ),
+                    color: _accent.withValues(alpha: 0.04),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: _accent.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.folder_zip_outlined, color: _accent, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Separate Reports (ZIP Archive)',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13.5,
+                                color: isDark ? Colors.white : _ink,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Individual $extLabel files with employee names in file name, bundled in a ZIP',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: _accent, size: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _export([String? formatOverride]) async {
     final format = formatOverride ?? _exportFormat;
     setState(() => _exportFormat = format);
@@ -88,33 +260,37 @@ class _AdminAttendanceReportScreenState extends State<AdminAttendanceReportScree
       return;
     }
 
+    bool separate = false;
+    if (_mode == 'EMPLOYEE_WISE' && _selectedEmployeeIds.length > 1) {
+      final choice = await _promptSingleOrSeparate(format);
+      if (choice == null) return;
+      if (!mounted) return;
+      separate = choice;
+    }
+
     setState(() => _exporting = true);
     try {
-      final bytes = await context.read<AttendanceRepository>().exportAttendanceReport(
+      final result = await context.read<AttendanceRepository>().exportAttendanceReport(
             mode: _mode,
             year: _year,
             month: _month,
             fields: fields,
             employeeIds: _mode == 'EMPLOYEE_WISE' ? _selectedEmployeeIds.toList() : null,
             format: format,
+            separate: separate,
           );
       if (!mounted) return;
-      final tag = '$_year-${_month.toString().padLeft(2, '0')}';
-      final ext = format == 'pdf' ? 'pdf' : 'xlsx';
-      final mime = format == 'pdf'
-          ? 'application/pdf'
-          : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      final name = _mode == 'DAY_WISE_MONTHLY'
-          ? 'attendance_daywise_$tag.$ext'
-          : 'attendance_employee_$tag.$ext';
       await downloadBytes(
-        bytes,
-        name,
-        mimeType: mime,
+        result.bytes,
+        result.fileName,
+        mimeType: result.mimeType,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Downloaded $name'), backgroundColor: Colors.green.shade700),
+        SnackBar(
+          content: Text('Downloaded ${result.fileName}'),
+          backgroundColor: Colors.green.shade700,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -241,7 +417,7 @@ class _AdminAttendanceReportScreenState extends State<AdminAttendanceReportScree
                                     Expanded(
                                       flex: 3,
                                       child: DropdownButtonFormField<int>(
-                                        value: _month,
+                                        initialValue: _month,
                                         decoration: _inputDeco('Month', isDark),
                                         items: List.generate(12, (i) {
                                           final m = i + 1;
@@ -258,7 +434,7 @@ class _AdminAttendanceReportScreenState extends State<AdminAttendanceReportScree
                                     Expanded(
                                       flex: 2,
                                       child: DropdownButtonFormField<int>(
-                                        value: _year,
+                                        initialValue: _year,
                                         decoration: _inputDeco('Year', isDark),
                                         items: List.generate(6, (i) {
                                           final y = DateTime.now().year - 3 + i;

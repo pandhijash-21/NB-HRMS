@@ -288,10 +288,15 @@ Future<void> showApplyWfhDialog(
         builder: (ctx, setDlgState) {
           final daysDiff = toDate.difference(fromDate).inDays + 1;
           final workingDays = isHalfDay ? 0.5 : (daysDiff < 1 ? 1 : daysDiff);
+          final screenWidth = MediaQuery.of(ctx).size.width;
+          final dialogWidth = (screenWidth * 0.92).clamp(340.0, 720.0);
 
           return AlertDialog(
             backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            titlePadding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+            contentPadding: const EdgeInsets.fromLTRB(28, 18, 28, 0),
+            actionsPadding: const EdgeInsets.fromLTRB(28, 16, 28, 24),
             title: Row(
               children: [
                 Container(
@@ -312,7 +317,7 @@ Future<void> showApplyWfhDialog(
               ],
             ),
             content: SizedBox(
-              width: 500,
+              width: dialogWidth,
               child: Form(
                 key: formKey,
                 child: SingleChildScrollView(
@@ -600,52 +605,112 @@ Future<void> showApplyWfhDialog(
                           ],
                         ),
                       ],
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: accentColor.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: accentColor.withValues(alpha: 0.2)),
-                        ),
-                        child: Row(
+                      const SizedBox(height: 14),
+                      if (dialogWidth >= 560)
+                        Row(
                           children: [
-                            const Icon(Icons.info_outline_rounded, size: 16, color: accentColor),
-                            const SizedBox(width: 8),
-                            Text(
-                              isHalfDay
-                                  ? 'Duration: 0.5 Day (${halfDaySession == 'MORNING' ? 'Morning' : 'Afternoon'})'
-                                  : 'Duration: $workingDays calendar day${workingDays > 1 ? 's' : ''}',
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w700,
-                                color: accentColor,
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                                decoration: BoxDecoration(
+                                  color: accentColor.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: accentColor.withValues(alpha: 0.2)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.info_outline_rounded, size: 17, color: accentColor),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        isHalfDay
+                                            ? 'Duration: 0.5 Day (${halfDaySession == 'MORNING' ? 'Morning' : 'Afternoon'})'
+                                            : 'Duration: $workingDays calendar day${workingDays > 1 ? 's' : ''}',
+                                        style: const TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: accentColor,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withValues(alpha: isDark ? 0.15 : 0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.amber.shade600.withValues(alpha: 0.4)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.gavel_rounded, size: 17, color: Colors.amber.shade700),
+                                    const SizedBox(width: 8),
+                                    const Expanded(
+                                      child: Text(
+                                        'HR approval required before calculating into attendance.',
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: isDark ? 0.15 : 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.amber.shade600.withValues(alpha: 0.4)),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.gavel_rounded, size: 16, color: Colors.amber.shade700),
-                            const SizedBox(width: 8),
-                            const Expanded(
-                              child: Text(
-                                'HR must approve your WFH request before it is calculated into your attendance.',
-                                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                        )
+                      else ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: accentColor.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: accentColor.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info_outline_rounded, size: 16, color: accentColor),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  isHalfDay
+                                      ? 'Duration: 0.5 Day (${halfDaySession == 'MORNING' ? 'Morning' : 'Afternoon'})'
+                                      : 'Duration: $workingDays calendar day${workingDays > 1 ? 's' : ''}',
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: accentColor,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: isDark ? 0.15 : 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.amber.shade600.withValues(alpha: 0.4)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.gavel_rounded, size: 16, color: Colors.amber.shade700),
+                              const SizedBox(width: 8),
+                              const Expanded(
+                                child: Text(
+                                  'HR must approve your WFH request before it is calculated into your attendance.',
+                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 18),
                       const Text(
                         'Reason for WFH *',
@@ -654,7 +719,7 @@ Future<void> showApplyWfhDialog(
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: reasonCtrl,
-                        maxLines: 3,
+                        maxLines: 4,
                         decoration: InputDecoration(
                           hintText: 'Enter reason (e.g. Project delivery, personal emergency, etc.)...',
                           hintStyle: TextStyle(

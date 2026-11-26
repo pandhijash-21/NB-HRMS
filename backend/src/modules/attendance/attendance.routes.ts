@@ -240,6 +240,7 @@ attendanceRouter.post(
       const year = Number(req.body?.year);
       const month = Number(req.body?.month);
       const format = String(req.body?.format || 'excel').toLowerCase();
+      const separate = Boolean(req.body?.separate ?? req.query.separate);
       const fields = Array.isArray(req.body?.fields) ? req.body.fields.map(String) : undefined;
       const employeeIds = Array.isArray(req.body?.employeeIds)
         ? req.body.employeeIds.map((n: any) => Number(n)).filter((n: number) => n > 0)
@@ -254,9 +255,12 @@ attendanceRouter.post(
         employeeIds,
         fields,
         format: format === 'pdf' ? 'pdf' : 'excel',
+        separate,
       });
       res.setHeader('Content-Type', mimeType);
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('x-filename', fileName);
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, x-filename');
       return res.send(buffer);
     } catch (e: any) {
       return res.status(400).json(fail(e.message));
@@ -286,6 +290,8 @@ attendanceRouter.get(
       });
       res.setHeader('Content-Type', mimeType);
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('x-filename', fileName);
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, x-filename');
       return res.send(buffer);
     } catch (e: any) {
       return res.status(400).json(fail(e.message));

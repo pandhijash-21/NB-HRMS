@@ -10,13 +10,33 @@ import '../services/branding_config.dart';
 
 /// Mutable hook so [DioClient] can notify auth without circular construction.
 class UnauthorizedGate {
-  Future<void> Function()? _handler;
+  final List<Future<void> Function({String? reason})> _handlers = [];
+  DateTime? _lastNotifiedAt;
 
-  void bind(Future<void> Function() handler) => _handler = handler;
+  void bind(Future<void> Function({String? reason}) handler) {
+    if (!_handlers.contains(handler)) {
+      _handlers.add(handler);
+    }
+  }
 
-  Future<void> notify() async {
-    final h = _handler;
-    if (h != null) await h();
+  void unbind(Future<void> Function({String? reason}) handler) {
+    _handlers.remove(handler);
+  }
+
+  Future<void> notify({String? reason}) async {
+    final now = DateTime.now();
+    // Debounce notifications within 2 seconds so burst 401s don't trigger repeated kick logic
+    if (_lastNotifiedAt != null &&
+        now.difference(_lastNotifiedAt!).inMilliseconds < 2000) {
+      return;
+    }
+    _lastNotifiedAt = now;
+    final copy = List<Future<void> Function({String? reason})>.from(_handlers);
+    for (final h in copy) {
+      try {
+        await h(reason: reason);
+      } catch (_) {}
+    }
   }
 }
 
@@ -107,9 +127,34 @@ class DioClient {
               error.response!.data = await unwrapTransportBody(error.response!.data);
             } catch (_) {}
           }
-          final isLogin = path.contains('auth/login');
-          if (status == 401 && !isLogin) {
-            await unauthorizedGate.notify();
+          final isAuthPublic = path.contains('auth/login') ||
+              path.contains('auth/forgot-password') ||
+              path.contains('auth/release-session');
+          if (status == 401 && !isAuthPublic) {
+            // Check if the 401 was for the CURRENT active session.
+            // If the request was made with an obsolete, stale or null token, do NOT kick the active session!
+            final reqAuth = error.requestOptions.headers['Authorization']?.toString();
+            final reqToken = reqAuth != null && reqAuth.startsWith('Bearer ')
+                ? reqAuth.substring(7).trim()
+                : null;
+            final currentToken = (await readToken())?.trim();
+
+            if (currentToken != null && currentToken.isNotEmpty) {
+              if (reqToken != null && reqToken == currentToken) {
+                // Extract server error message if available
+                String? serverMessage;
+                final resData = error.response?.data;
+                if (resData is Map) {
+                  serverMessage = resData['error']?.toString() ??
+                      resData['message']?.toString();
+                }
+                await unauthorizedGate.notify(reason: serverMessage);
+              } else {
+                AppLogger.network.w(
+                  'Ignored 401 on $path because request token does not match current active token',
+                );
+              }
+            }
           }
           handler.next(error);
         },

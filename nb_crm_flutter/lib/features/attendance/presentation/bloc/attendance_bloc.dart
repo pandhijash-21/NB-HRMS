@@ -194,7 +194,10 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
         from: _formatDate(from),
         to: _formatDate(to),
       );
-      final dayFuture = _attendanceRepository.getMyDay(date: selectedDate).catchError((_) => null);
+      final dayFuture = _attendanceRepository
+          .getMyDay(date: selectedDate)
+          .then<AttendanceMyDay?>((v) => v)
+          .catchError((_) => null);
 
       final cal = await calFuture;
       AttendanceMyDay? dayDetail;

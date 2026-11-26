@@ -6,6 +6,9 @@ import { notifyAdminsWebAttendance } from './webAttendanceNotify';
 import {
   buildAttendanceExcel,
   buildAttendancePdf,
+  buildAttendanceZip,
+  getEmployeeReportFileName,
+  getBatchReportFileName,
   type EmployeeAttendanceExportData,
 } from './attendance.export';
 
@@ -1832,6 +1835,7 @@ export const attendanceService = {
     employeeIds?: number[];
     fields?: string[];
     format?: 'excel' | 'pdf';
+    separate?: boolean;
   }): Promise<{ buffer: Buffer; fileName: string; mimeType: string }> {
     const mode = params.mode;
     if (mode !== 'DAY_WISE_MONTHLY' && mode !== 'EMPLOYEE_WISE') {
@@ -1958,20 +1962,48 @@ export const attendanceService = {
       employees: exportEmployees,
     };
 
-    const isSingleEmp = mode === 'EMPLOYEE_WISE' && exportEmployees.length === 1;
-    const empSlug = isSingleEmp ? `_${exportEmployees[0].employee.fullName.replace(/\s+/g, '_')}` : '';
     const format = String(params.format || 'excel').toLowerCase();
+    const separate = Boolean(params.separate);
 
+    // If multiple employees and separate is requested, export individual reports and bundle in ZIP
+    if (exportEmployees.length > 1 && separate) {
+      const files: Array<{ fileName: string; buffer: Buffer }> = [];
+
+      for (const emp of exportEmployees) {
+        const singleInput = {
+          mode: 'EMPLOYEE_WISE' as const,
+          year: params.year,
+          month: params.month,
+          employees: [emp],
+        };
+
+        if (format === 'pdf') {
+          const { buffer, fileName } = await buildAttendancePdf(singleInput);
+          files.push({ fileName, buffer });
+        } else {
+          const { buffer, fileName } = await buildAttendanceExcel(singleInput);
+          files.push({ fileName, buffer });
+        }
+      }
+
+      const zipBuffer = await buildAttendanceZip(files);
+      const zipFileName = getBatchReportFileName(params.year, params.month, 'zip', 'zip');
+      return {
+        buffer: zipBuffer,
+        fileName: zipFileName,
+        mimeType: 'application/zip',
+      };
+    }
+
+    // Single combined report (or single employee report)
     if (format === 'pdf') {
-      const { buffer, fileName: generatedName } = await buildAttendancePdf(exportInput);
-      const fileName = `attendance_report_${params.year}-${String(params.month).padStart(2, '0')}${empSlug}.pdf`;
-      return { buffer, fileName: generatedName || fileName, mimeType: 'application/pdf' };
+      const { buffer, fileName } = await buildAttendancePdf(exportInput);
+      return { buffer, fileName, mimeType: 'application/pdf' };
     } else {
-      const { buffer, fileName: generatedName } = buildAttendanceExcel(exportInput);
-      const fileName = `attendance_report_${params.year}-${String(params.month).padStart(2, '0')}${empSlug}.xlsx`;
+      const { buffer, fileName } = await buildAttendanceExcel(exportInput);
       return {
         buffer,
-        fileName: generatedName || fileName,
+        fileName,
         mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       };
     }

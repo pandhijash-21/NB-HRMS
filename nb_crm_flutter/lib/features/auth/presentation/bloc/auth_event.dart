@@ -51,7 +51,8 @@ class AuthPermissionsRefreshRequested extends AuthEvent {
 
 /// Fired when the unauthorized gate receives a 401 from backend.
 class AuthUnauthorizedKicked extends AuthEvent {
-  const AuthUnauthorizedKicked();
+  const AuthUnauthorizedKicked({this.reason});
+  final String? reason;
 }
 
 /// Fired when user taps logout, or when switching local/live backends.

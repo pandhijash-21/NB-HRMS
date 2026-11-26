@@ -372,13 +372,14 @@ class AttendanceRepository {
     );
   }
 
-  Future<Uint8List> exportAttendanceReport({
+  Future<AttendanceExportResult> exportAttendanceReport({
     required String mode,
     required int year,
     required int month,
     List<String>? fields,
     List<int>? employeeIds,
     String format = 'excel',
+    bool separate = false,
   }) async {
     final response = await _dio.dio.post<List<int>>(
       'attendance/admin/report/export',
@@ -389,13 +390,24 @@ class AttendanceRepository {
         if (fields != null) 'fields': fields,
         if (employeeIds != null && employeeIds.isNotEmpty) 'employeeIds': employeeIds,
         'format': format,
+        'separate': separate,
       },
       options: Options(responseType: ResponseType.bytes),
     );
-    return Uint8List.fromList(response.data ?? []);
+    final ext = separate ? 'zip' : (format == 'pdf' ? 'pdf' : 'xlsx');
+    final mime = separate
+        ? 'application/zip'
+        : (format == 'pdf'
+            ? 'application/pdf'
+            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    return _parseExportResponse(
+      response,
+      fallbackName: 'Attendance_Report_$year-${month.toString().padLeft(2, '0')}.$ext',
+      fallbackMime: mime,
+    );
   }
 
-  Future<Uint8List> exportSingleEmployeeReport({
+  Future<AttendanceExportResult> exportSingleEmployeeReport({
     required int employeeId,
     required int year,
     required int month,
@@ -410,6 +422,53 @@ class AttendanceRepository {
       },
       options: Options(responseType: ResponseType.bytes),
     );
-    return Uint8List.fromList(response.data ?? []);
+    final ext = format == 'pdf' ? 'pdf' : 'xlsx';
+    final mime = format == 'pdf'
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    return _parseExportResponse(
+      response,
+      fallbackName: 'Attendance_Report_Employee_${employeeId}_$year-${month.toString().padLeft(2, '0')}.$ext',
+      fallbackMime: mime,
+    );
   }
+
+  AttendanceExportResult _parseExportResponse(
+    Response<List<int>> response, {
+    required String fallbackName,
+    required String fallbackMime,
+  }) {
+    String fileName = fallbackName;
+    final xName = response.headers.value('x-filename');
+    if (xName != null && xName.trim().isNotEmpty) {
+      fileName = Uri.decodeComponent(xName.trim());
+    } else {
+      final cd = response.headers.value('content-disposition');
+      if (cd != null) {
+        final match = RegExp(r'filename="?([^";]+)"?').firstMatch(cd);
+        if (match != null && match.group(1) != null) {
+          fileName = Uri.decodeComponent(match.group(1)!.trim());
+        }
+      }
+    }
+
+    final mimeType = response.headers.value('content-type') ?? fallbackMime;
+    return AttendanceExportResult(
+      bytes: Uint8List.fromList(response.data ?? []),
+      fileName: fileName,
+      mimeType: mimeType,
+    );
+  }
+}
+
+class AttendanceExportResult {
+  const AttendanceExportResult({
+    required this.bytes,
+    required this.fileName,
+    required this.mimeType,
+  });
+
+  final Uint8List bytes;
+  final String fileName;
+  final String mimeType;
 }

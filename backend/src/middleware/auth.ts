@@ -43,15 +43,26 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       await connectRedis();
       const sessionToken = await redis.get(`session:${userId}`);
       if (!sessionToken || sessionToken !== token) {
-        // Mid-trip: accept a still-valid JWT and reclaim Redis so token refresh
-        // / re-login does not kick the employee off while the trip is open.
-        const onTrip = await employeeHasOpenTrip(decoded.employeeId);
-        if (onTrip) {
-          await redis.set(`session:${userId}`, token, { EX: SESSION_TTL });
-        } else {
-          return res.status(401).json(
-            fail('Session expired or logged in from another device. Please log in again.'),
-          );
+        // In-flight grace period: check if token matches the recently superseded session (within 30s)
+        const prevSessionToken = await redis.get(`prev_session:${userId}`);
+        const inGracePeriod = Boolean(prevSessionToken && prevSessionToken === token);
+
+        if (!inGracePeriod) {
+          // Mid-trip: accept a still-valid JWT and reclaim Redis so token refresh
+          // / re-login does not kick the employee off while the trip is open.
+          const onTrip = await employeeHasOpenTrip(decoded.employeeId);
+          if (onTrip) {
+            await redis.set(`session:${userId}`, token, { EX: SESSION_TTL });
+          } else {
+            const isDisplaced = Boolean(sessionToken && sessionToken !== token);
+            return res.status(401).json(
+              fail(
+                isDisplaced
+                  ? 'Session displaced by another sign-in. Please log in again.'
+                  : 'Session expired. Please log in again.',
+              ),
+            );
+          }
         }
       } else {
         // Sliding expiration window: extend active session TTL by 8 hours

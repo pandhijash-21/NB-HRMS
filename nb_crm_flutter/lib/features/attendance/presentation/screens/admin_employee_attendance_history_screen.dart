@@ -74,23 +74,17 @@ class AdminEmployeeAttendanceHistoryScreen extends ConsumerWidget {
                   SnackBar(content: Text('Generating ${format.toUpperCase()} report…')),
                 );
                 final repo = ref.read(attendanceRepositoryProvider);
-                final bytes = await repo.exportSingleEmployeeReport(
+                final result = await repo.exportSingleEmployeeReport(
                   employeeId: employeeId,
                   year: month.year,
                   month: month.month,
                   format: format,
                 );
-                final ext = format == 'pdf' ? 'pdf' : 'xlsx';
-                final mime = format == 'pdf'
-                    ? 'application/pdf'
-                    : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-                final fileName =
-                    'attendance_employee_${employeeId}_${month.year}-${month.month.toString().padLeft(2, '0')}.$ext';
-                await downloadBytes(bytes, fileName, mimeType: mime);
+                await downloadBytes(result.bytes, result.fileName, mimeType: result.mimeType);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Downloaded $fileName'),
+                      content: Text('Downloaded ${result.fileName}'),
                       backgroundColor: Colors.green.shade700,
                     ),
                   );

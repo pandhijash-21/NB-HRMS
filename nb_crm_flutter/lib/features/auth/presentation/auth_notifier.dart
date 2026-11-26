@@ -87,7 +87,10 @@ class AuthNotifier extends Notifier<AuthState> {
   AuthState build() {
     final gate = ref.read(unauthorizedGateProvider);
     gate.bind(_handleUnauthorized);
-    ref.onDispose(_stopSessionWatch);
+    ref.onDispose(() {
+      gate.unbind(_handleUnauthorized);
+      _stopSessionWatch();
+    });
 
     // After the frame (not Future/Timer) so restore does not write while the
     // tree is building, and widget tests are not left with a pending Timer.
@@ -196,10 +199,11 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
-  /// Polls auth/me so a displaced device is kicked even when idle and permissions stay fresh.
+  /// Polls auth/me periodically so a displaced device is kicked even when idle and permissions stay fresh.
   void _startSessionWatch() {
     _stopSessionWatch();
-    _sessionWatch = Timer.periodic(const Duration(seconds: 5), (_) async {
+    // 30s matches AuthBloc — 5s caused needless backend load and race conditions.
+    _sessionWatch = Timer.periodic(const Duration(seconds: 30), (_) async {
       await refreshPermissions();
     });
   }
@@ -271,9 +275,9 @@ class AuthNotifier extends Notifier<AuthState> {
     await WebLiveTrackingService.start();
   }
 
-  Future<void> _handleUnauthorized() async {
-    // Ignore late 401s after user already signed out / while restoring.
-    if (state.status != AuthStatus.authenticated) return;
+  Future<void> _handleUnauthorized({String? reason}) async {
+    // Ignore late 401s after user already signed out / while restoring or submitting.
+    if (state.status != AuthStatus.authenticated || state.isSubmitting) return;
     final repo = ref.read(authRepositoryProvider);
     WebLiveTrackingService.stop(preventRestart: true);
     unawaited(stopBackgroundTracking());
@@ -282,10 +286,26 @@ class AuthNotifier extends Notifier<AuthState> {
     await repo.releaseSessionRemote();
     await repo.clearSession();
     final wasOnTrip = state.user?.onTrip == true;
+
+    final String message;
+    if (wasOnTrip) {
+      message = 'Your session ended during a trip. Sign in again — location tracking will resume.';
+    } else if (reason != null && reason.trim().isNotEmpty) {
+      final r = reason.trim();
+      if (r.toLowerCase().contains('another device') ||
+          r.toLowerCase().contains('displaced')) {
+        message = 'You were signed out because this account signed in on another device or browser.';
+      } else if (r.toLowerCase().contains('expired')) {
+        message = 'Your session has expired. Please log in again.';
+      } else {
+        message = r;
+      }
+    } else {
+      message = 'Your session has expired. Please log in again.';
+    }
+
     state = AuthState.unauthenticated(
-      infoMessage: wasOnTrip
-          ? 'Your session ended during a trip. Sign in again — location tracking will resume.'
-          : 'You were signed out because this account signed in on another device or browser.',
+      infoMessage: message,
     );
   }
 

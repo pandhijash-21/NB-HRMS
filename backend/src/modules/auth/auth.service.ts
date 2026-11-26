@@ -62,6 +62,11 @@ async function resolveEnabledModules(subOrg?: string | null, isSuperAdmin = fals
 
 async function storeSession(userId: string, roleId: string, token: string) {
   await connectRedis();
+  // Preserve previous session token for 30s to absorb in-flight client requests during re-login or refresh
+  const prevToken = await redis.get(`session:${userId}`);
+  if (prevToken && prevToken !== token) {
+    await redis.set(`prev_session:${userId}`, prevToken, { EX: 30 });
+  }
   // Overwrite any previous session — only one active login per user (all roles).
   await redis.set(`session:${userId}`, token, { EX: SESSION_TTL });
   await redis.sAdd(`role_users:${roleId}`, userId);
@@ -72,6 +77,7 @@ async function deleteSession(userId: string, roleId?: string) {
   try {
     await connectRedis();
     await redis.del(`session:${userId}`);
+    await redis.del(`prev_session:${userId}`);
     if (roleId) await redis.sRem(`role_users:${roleId}`, userId);
   } catch (err) {
     console.warn('Redis session delete skipped:', err);

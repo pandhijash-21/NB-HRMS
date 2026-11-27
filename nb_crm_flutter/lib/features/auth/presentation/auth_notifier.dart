@@ -204,8 +204,8 @@ class AuthNotifier extends Notifier<AuthState> {
   /// Polls auth/me periodically so a displaced device is kicked even when idle and permissions stay fresh.
   void _startSessionWatch() {
     _stopSessionWatch();
-    // 30s matches AuthBloc — 5s caused needless backend load and race conditions.
-    _sessionWatch = Timer.periodic(const Duration(seconds: 30), (_) async {
+    // 8s ensures any displaced session (secondary login on another device) is promptly kicked out
+    _sessionWatch = Timer.periodic(const Duration(seconds: 8), (_) async {
       await refreshPermissions();
     });
   }
@@ -236,14 +236,43 @@ class AuthNotifier extends Notifier<AuthState> {
 
   Future<void> _bootstrap() async {
     final repo = ref.read(authRepositoryProvider);
+    final storage = ref.read(secureStorageProvider);
     final restored = await repo.restoreSession();
+    final rememberMe = await storage.readRememberMe();
+
     if (restored == null) {
       // Login goes through AuthBloc; do not wipe a session it already restored.
       if (state.isAuthenticated) return;
+      if (rememberMe) {
+        final creds = await storage.readRememberedCredentials();
+        if (creds != null &&
+            creds.identifier.isNotEmpty &&
+            creds.password.isNotEmpty) {
+          final ok = await login(
+            identifier: creds.identifier,
+            password: creds.password,
+            rememberMe: true,
+          );
+          if (ok) return;
+        }
+      }
       state = const AuthState.unauthenticated();
       return;
     }
     if (isJwtExpired(restored.token)) {
+      if (rememberMe) {
+        final creds = await storage.readRememberedCredentials();
+        if (creds != null &&
+            creds.identifier.isNotEmpty &&
+            creds.password.isNotEmpty) {
+          final ok = await login(
+            identifier: creds.identifier,
+            password: creds.password,
+            rememberMe: true,
+          );
+          if (ok) return;
+        }
+      }
       await repo.clearSession();
       unawaited(WidgetSyncService.clearWidget());
       state = const AuthState.unauthenticated(
@@ -301,6 +330,16 @@ class AuthNotifier extends Notifier<AuthState> {
     } catch (_) {}
     await repo.clearSession();
     unawaited(WidgetSyncService.clearWidget());
+
+    final isDisplaced = reason != null &&
+        (reason.toLowerCase().contains('another device') ||
+         reason.toLowerCase().contains('displaced'));
+    if (isDisplaced) {
+      try {
+        await ref.read(secureStorageProvider).clearRememberedCredentials();
+      } catch (_) {}
+    }
+
     final wasOnTrip = state.user?.onTrip == true;
 
     final String message;
@@ -330,14 +369,17 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<bool> login({
     required String identifier,
     required String password,
+    bool rememberMe = false,
   }) async {
     state = state.copyWith(isSubmitting: true, clearError: true, clearInfo: true);
     final repo = ref.read(authRepositoryProvider);
+    final storage = ref.read(secureStorageProvider);
 
     try {
       final result = await repo.login(
         identifier: identifier,
         password: password,
+        rememberMe: rememberMe,
       );
 
       if (result.token.isEmpty) {
@@ -356,6 +398,15 @@ class AuthNotifier extends Notifier<AuthState> {
         needsEmailVerification: result.needsEmailVerification,
         needsEmergencyContact: result.needsEmergencyContact,
       );
+
+      if (rememberMe && !result.isFirstLogin) {
+        await storage.writeRememberedCredentials(
+          identifier: identifier.trim(),
+          password: password,
+        );
+      } else if (!rememberMe) {
+        await storage.clearRememberedCredentials();
+      }
 
       state = AuthState(
         status: AuthStatus.authenticated,
@@ -496,6 +547,7 @@ class AuthNotifier extends Notifier<AuthState> {
     }
     WebLiveTrackingService.stop(preventRestart: true);
     _stopSessionWatch();
+    await ref.read(secureStorageProvider).clearRememberedCredentials();
     await repo.clearSession();
     WebLiveTrackingService.stop(preventRestart: true);
     unawaited(WidgetSyncService.clearWidget());

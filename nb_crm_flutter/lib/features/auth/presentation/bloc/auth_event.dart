@@ -16,11 +16,13 @@ class AuthLoginRequested extends AuthEvent {
     required this.identifier,
     required this.password,
     this.portal,
+    this.rememberMe = false,
   });
 
   final String identifier;
   final String password;
   final String? portal;
+  final bool rememberMe;
 }
 
 /// Fired when user requests password change.

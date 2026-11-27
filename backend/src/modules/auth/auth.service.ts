@@ -32,6 +32,7 @@ import {
 } from './permissions-map';
 import { parseModules } from '../platform/platform.service';
 import { familyService } from '../personal-education/family.service';
+import { sseService } from '../events/sse.service';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
 
@@ -60,17 +61,24 @@ async function resolveEnabledModules(subOrg?: string | null, isSuperAdmin = fals
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function storeSession(userId: string, roleId: string, token: string) {
+async function storeSession(
+  userId: string,
+  roleId: string,
+  token: string,
+  ttl: number = SESSION_TTL,
+  isNewLogin: boolean = false,
+) {
   await connectRedis();
-  // Preserve previous session token for 30s to absorb in-flight client requests during re-login or refresh
-  const prevToken = await redis.get(`session:${userId}`);
-  if (prevToken && prevToken !== token) {
-    await redis.set(`prev_session:${userId}`, prevToken, { EX: 30 });
+  if (isNewLogin) {
+    // A fresh login terminates ALL previous sessions immediately — NO grace period!
+    await redis.del(`prev_session:${userId}`);
   }
-  // Overwrite any previous session — only one active login per user (all roles).
-  await redis.set(`session:${userId}`, token, { EX: SESSION_TTL });
-  await redis.sAdd(`role_users:${roleId}`, userId);
-  await redis.expire(`role_users:${roleId}`, SESSION_TTL);
+  // Overwrite any previous session — strictly only one active login per user (all roles).
+  await redis.set(`session:${userId}`, token, { EX: ttl });
+  if (roleId) {
+    await redis.sAdd(`role_users:${roleId}`, userId);
+    await redis.expire(`role_users:${roleId}`, ttl);
+  }
 }
 
 async function deleteSession(userId: string, roleId?: string) {
@@ -416,6 +424,10 @@ export const authService = {
 
     const enabledModules = await resolveEnabledModules(scopeSubOrg, isUserSuperAdmin);
 
+    const rememberMe = Boolean(input.rememberMe);
+    const sessionTtl = rememberMe ? 30 * 24 * 60 * 60 : SESSION_TTL; // 30 days for Remember Me vs 8 hours default
+    const jwtExpiresIn = rememberMe ? '30d' : '8h';
+
     // 4. Sign JWT
     const token = jwt.sign(
       {
@@ -429,14 +441,21 @@ export const authService = {
         employeeViewScope,
         permissions,
         enabledModules,
+        rememberMe,
       },
       env.JWT_SECRET,
-      { expiresIn: '8h' }
+      { expiresIn: jwtExpiresIn }
     );
 
-    // 5. Record exclusive session in Redis (replaces any previous device).
+    // 5. Record exclusive session in Redis (replaces and invalidates any previous device immediately).
     try {
-      await storeSession(user.id, user.roleId, token);
+      await storeSession(user.id, user.roleId, token, sessionTtl, true);
+      // Proactively notify previous active device over SSE if connected
+      try {
+        sseService.toUser(user.id, 'session:displaced', {
+          reason: 'Session displaced by another sign-in. Please log in again.',
+        });
+      } catch (_) {}
     } catch (err) {
       console.error('Failed to store login session in Redis:', err);
       return {
@@ -732,27 +751,35 @@ export const authService = {
       user.employeeId != null && (await hasOpenTrip(user.employeeId));
 
     // Keep trip sessions alive: refresh JWT + Redis on every /me so the
-    // employee is not auto-kicked mid-trip when the original 8h JWT expires.
+    // employee is not auto-kicked mid-trip when the original JWT expires.
     let refreshedToken: string | undefined;
     if (onTrip) {
       try {
-        refreshedToken = jwt.sign(
-          {
-            sub: user.id,
-            employeeId: user.employeeId ?? null,
-            roleId: dbUser?.roleId ?? user.roleId,
-            roleName: effectiveRoleName,
-            companyAdminGranted,
-            subOrganization,
-            organizationId,
-            employeeViewScope,
-            permissions,
-            enabledModules,
-          },
-          env.JWT_SECRET,
-          { expiresIn: '8h' },
-        );
-        await storeSession(user.id, dbUser?.roleId ?? user.roleId, refreshedToken);
+        const currentSession = await redis.get(`session:${user.id}`);
+        // CRITICAL: Only refresh if this user's session is STILL the active session in Redis!
+        // If displaced by another login, do NOT overwrite Redis or mint a new token!
+        if (currentSession && (user.token == null || currentSession === user.token)) {
+          const isRememberMe = Boolean(user.rememberMe);
+          const tripTtl = isRememberMe ? 30 * 24 * 60 * 60 : SESSION_TTL;
+          refreshedToken = jwt.sign(
+            {
+              sub: user.id,
+              employeeId: user.employeeId ?? null,
+              roleId: dbUser?.roleId ?? user.roleId,
+              roleName: effectiveRoleName,
+              companyAdminGranted,
+              subOrganization,
+              organizationId,
+              employeeViewScope,
+              permissions,
+              enabledModules,
+              rememberMe: isRememberMe,
+            },
+            env.JWT_SECRET,
+            { expiresIn: isRememberMe ? '30d' : '8h' },
+          );
+          await redis.set(`session:${user.id}`, refreshedToken, { EX: tripTtl });
+        }
       } catch (err) {
         console.warn('Trip session refresh skipped:', err);
         refreshedToken = undefined;

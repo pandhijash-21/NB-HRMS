@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/logging/app_logger.dart';
 import '../../../../core/network/api_envelope.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/services/background_tracking_service.dart';
@@ -61,8 +62,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   void _startSessionWatch() {
     _stopSessionWatch();
-    // 30s is enough for lockout / role changes — 5s caused needless network + rebuilds.
-    _sessionWatch = Timer.periodic(const Duration(seconds: 30), (_) {
+    // 8s ensures any displaced session (secondary login on another device) is promptly kicked out
+    _sessionWatch = Timer.periodic(const Duration(seconds: 8), (_) {
       add(const AuthPermissionsRefreshRequested());
     });
   }
@@ -73,12 +74,38 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     try {
       final restored = await _repo.restoreSession();
+      final rememberMe = await _storage.readRememberMe();
+
       if (restored == null) {
+        if (rememberMe) {
+          final creds = await _storage.readRememberedCredentials();
+          if (creds != null && creds.identifier.isNotEmpty && creds.password.isNotEmpty) {
+            AppLogger.auth.i('Remember Me is active. Seamlessly auto-authenticating.');
+            add(AuthLoginRequested(
+              identifier: creds.identifier,
+              password: creds.password,
+              rememberMe: true,
+            ));
+            return;
+          }
+        }
         emit(const AuthState.unauthenticated());
         return;
       }
 
       if (isJwtExpired(restored.token)) {
+        if (rememberMe) {
+          final creds = await _storage.readRememberedCredentials();
+          if (creds != null && creds.identifier.isNotEmpty && creds.password.isNotEmpty) {
+            AppLogger.auth.i('Session token expired, but Remember Me is active. Seamlessly auto-authenticating.');
+            add(AuthLoginRequested(
+              identifier: creds.identifier,
+              password: creds.password,
+              rememberMe: true,
+            ));
+            return;
+          }
+        }
         await _repo.clearSession();
         unawaited(WidgetSyncService.clearWidget());
         emit(const AuthState.unauthenticated(
@@ -143,6 +170,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         identifier: event.identifier,
         password: event.password,
         portal: event.portal,
+        rememberMe: event.rememberMe,
       );
 
       if (result.token.isEmpty) {
@@ -161,6 +189,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         needsEmailVerification: result.needsEmailVerification,
         needsEmergencyContact: result.needsEmergencyContact,
       );
+
+      if (event.rememberMe && !result.isFirstLogin) {
+        await _storage.writeRememberedCredentials(
+          identifier: event.identifier.trim(),
+          password: event.password,
+        );
+      } else if (!event.rememberMe) {
+        await _storage.clearRememberedCredentials();
+      }
 
       emit(AuthState(
         status: AuthStatus.authenticated,
@@ -394,6 +431,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     WebLiveTrackingService.stop(preventRestart: true);
     unawaited(stopBackgroundTracking());
     _stopSessionWatch();
+    final isDisplaced = event.reason != null &&
+        (event.reason!.toLowerCase().contains('another device') ||
+         event.reason!.toLowerCase().contains('displaced'));
+
     // Release Redis so an open trip cannot permanently block re-login (strict timeout)
     try {
       await _repo.releaseSessionRemote().timeout(
@@ -403,6 +444,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     } catch (_) {}
     await _repo.clearSession();
     unawaited(WidgetSyncService.clearWidget());
+
+    // If kicked because another device signed in, clear remembered credentials so this device stays signed out
+    if (isDisplaced) {
+      await _storage.clearRememberedCredentials();
+    }
 
     final String message;
     if (wasOnTrip) {
@@ -445,6 +491,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     WebLiveTrackingService.stop(preventRestart: true);
     unawaited(stopBackgroundTracking());
     _stopSessionWatch();
+    await _storage.clearRememberedCredentials();
     await _repo.clearSession();
     WebLiveTrackingService.stop(preventRestart: true);
     unawaited(WidgetSyncService.clearWidget());

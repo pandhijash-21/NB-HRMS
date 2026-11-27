@@ -14,17 +14,7 @@ import {
 
 const SESSION_TTL = 8 * 60 * 60;
 
-async function employeeHasOpenTrip(employeeId: unknown): Promise<boolean> {
-  const id = typeof employeeId === 'number' ? employeeId : Number(employeeId);
-  if (!Number.isFinite(id) || id <= 0) return false;
-  const trip = await prisma.trip.findFirst({
-    where: { employeeId: id, endTime: null },
-    select: { id: true },
-  });
-  return trip != null;
-}
-
-/** One active JWT per user id — newer login overwrites Redis and kicks older devices. */
+/** One active JWT per user id — newer login overwrites Redis and kicks older devices immediately. */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   const bearer = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
@@ -43,30 +33,19 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       await connectRedis();
       const sessionToken = await redis.get(`session:${userId}`);
       if (!sessionToken || sessionToken !== token) {
-        // In-flight grace period: check if token matches the recently superseded session (within 30s)
-        const prevSessionToken = await redis.get(`prev_session:${userId}`);
-        const inGracePeriod = Boolean(prevSessionToken && prevSessionToken === token);
-
-        if (!inGracePeriod) {
-          // Mid-trip: accept a still-valid JWT and reclaim Redis so token refresh
-          // / re-login does not kick the employee off while the trip is open.
-          const onTrip = await employeeHasOpenTrip(decoded.employeeId);
-          if (onTrip) {
-            await redis.set(`session:${userId}`, token, { EX: SESSION_TTL });
-          } else {
-            const isDisplaced = Boolean(sessionToken && sessionToken !== token);
-            return res.status(401).json(
-              fail(
-                isDisplaced
-                  ? 'Session displaced by another sign-in. Please log in again.'
-                  : 'Session expired. Please log in again.',
-              ),
-            );
-          }
-        }
+        const isDisplaced = Boolean(sessionToken && sessionToken !== token);
+        return res.status(401).json(
+          fail(
+            isDisplaced
+              ? 'Session displaced by another sign-in. Please log in again.'
+              : 'Session expired. Please log in again.',
+          ),
+        );
       } else {
-        // Sliding expiration window: extend active session TTL by 8 hours
-        await redis.expire(`session:${userId}`, SESSION_TTL);
+        // Sliding expiration window: extend active session TTL (30 days for Remember Me, 8h default)
+        const isRememberMe = Boolean(decoded.rememberMe);
+        const sessionTtl = isRememberMe ? 30 * 24 * 60 * 60 : SESSION_TTL;
+        await redis.expire(`session:${userId}`, sessionTtl);
       }
     } catch (err) {
       // Fail closed: exclusive sessions require Redis. Do not accept bare JWTs.
@@ -132,6 +111,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       employeeViewScope,
       companyAdminGranted,
       permissions,
+      rememberMe: Boolean(decoded.rememberMe),
+      token,
     };
 
     return next();

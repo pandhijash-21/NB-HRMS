@@ -48,6 +48,7 @@ class _SuperadminLoginScreenState extends State<SuperadminLoginScreen> {
       identifier: identifier,
       password: password,
       portal: 'superadmin',
+      rememberMe: true,
     ));
   }
 

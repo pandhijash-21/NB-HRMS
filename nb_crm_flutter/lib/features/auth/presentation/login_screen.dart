@@ -156,6 +156,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       identifier: identifier,
       password: password,
       portal: isSuperAdmin ? 'superadmin' : 'standard',
+      rememberMe: _rememberMe,
     ));
   }
 

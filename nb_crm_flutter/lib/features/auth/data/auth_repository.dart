@@ -23,6 +23,7 @@ class AuthRepository {
     required String identifier,
     required String password,
     String? portal,
+    bool rememberMe = false,
   }) {
     return _dio.postEnvelope<LoginResult>(
       'auth/login',
@@ -31,6 +32,7 @@ class AuthRepository {
         'password': password,
         'platform': kIsWeb ? 'browser' : 'app',
         if (portal != null) 'portal': portal,
+        'rememberMe': rememberMe,
       },
       parse: (raw) {
         if (raw is! Map) {

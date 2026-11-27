@@ -15,6 +15,8 @@ declare global {
         employeeViewScope?: 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY';
         companyAdminGranted?: boolean;
         permissions: Record<string, string[]>;
+        rememberMe?: boolean;
+        token?: string;
       };
       auditEntries?: AuditEntryInput[];
     }

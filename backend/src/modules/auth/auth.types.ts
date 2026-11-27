@@ -6,6 +6,7 @@ export const LoginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
   portal: z.enum(['superadmin', 'standard']).optional(),
   platform: z.enum(['app', 'browser', 'mobile', 'web']).optional(),
+  rememberMe: z.boolean().optional(),
 });
 
 export const ChangePasswordSchema = z.object({

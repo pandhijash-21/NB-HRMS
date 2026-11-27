@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NB Platform Documentation · Comprehensive API Reference</title>
+  <link rel="stylesheet" href="assets/css/doc-theme.css" />
+</head>
+<body>
+  <header class="top-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="mobile-toggle" aria-label="Toggle navigation">☰</button>
+      <a href="index.html" class="brand-group">
+        <div class="brand-badge">NB</div>
+        <div class="brand-titles">
+          <h1>NB INFRA PROJECTS LTD</h1>
+          <p>Enterprise Suite Documentation</p>
+        </div>
+      </a>
+    </div>
+    <div class="header-actions">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="docSearch" placeholder="Search API endpoints..." />
+      </div>
+      <a href="system-health.html" class="nav-pill-btn gold">🩺 Health Check</a>
+      <a href="api-reference.html" class="nav-pill-btn">API Specs</a>
+    </div>
+  </header>
+
+  <div class="app-container">
+    <aside class="docs-sidebar">
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Architecture & System</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="index.html"><span class="nav-icon">🏛️</span>Overview & Arch</a></li>
+          <li class="sidebar-nav-item"><a href="security-auth.html"><span class="nav-icon">🔐</span>Security, Auth & RBAC</a></li>
+          <li class="sidebar-nav-item active"><a href="api-reference.html"><span class="nav-icon">⚡</span>API Reference</a></li>
+          <li class="sidebar-nav-item"><a href="deployment-devops.html"><span class="nav-icon">🚀</span>DevOps & Deployment</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Core Business Suites</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="hrms.html"><span class="nav-icon">👥</span>HRMS Suite</a></li>
+          <li class="sidebar-nav-item"><a href="crm.html"><span class="nav-icon">📈</span>CRM (Pre & Post-Sales)</a></li>
+          <li class="sidebar-nav-item"><a href="erp.html"><span class="nav-icon">🏗️</span>ERP & Infrastructure</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Realtime & Clients</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="collaboration.html"><span class="nav-icon">💬</span>Chat, Meet & AI STT</a></li>
+          <li class="sidebar-nav-item"><a href="earth.html"><span class="nav-icon">🌍</span>NB Earth Geospatial</a></li>
+          <li class="sidebar-nav-item"><a href="flutter-mobile.html"><span class="nav-icon">📱</span>Flutter & Android Widget</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">System Tools</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="system-health.html"><span class="nav-icon">🩺</span>Live Health Check</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="docs-main-content">
+      <div class="breadcrumbs">
+        <a href="index.html">Documentation</a>
+        <span class="sep">/</span>
+        <a href="api-reference.html">Architecture & System</a>
+        <span class="sep">/</span>
+        <span>Complete API Reference</span>
+      </div>
+
+      <h1 class="page-title">REST API & Real-time Endpoint Reference</h1>
+      <p class="page-lead">
+        Exhaustive catalog of REST endpoints, authentication protocols, headers, parameters, and payloads across HRMS, CRM, ERP, Realtime Events, and Meet infrastructure.
+      </p>
+
+      <div class="callout info">
+        <div class="callout-icon">💡</div>
+        <div>
+          <strong>Authentication Header:</strong> All protected endpoints require a Bearer token: <code>Authorization: Bearer &lt;jwt_token&gt;</code>. EventSource SSE streams accept the token as a query parameter (<code>?token=&lt;jwt_token&gt;</code>).
+        </div>
+      </div>
+
+      <!-- Section: Auth API -->
+      <h2 class="section-heading">1. Authentication & Session Endpoints</h2>
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Request Body / Params</th>
+              <th>Description & Response</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="method-tag method-post">POST</span></td>
+              <td><code>/api/auth/login</code></td>
+              <td><code>{ identifier, password, portal?, platform?, rememberMe? }</code></td>
+              <td>Authenticates user. Returns JWT and user profile. Enforces single concurrent session via Redis eviction.</td>
+            </tr>
+            <tr>
+              <td><span class="method-tag method-get">GET</span></td>
+              <td><code>/api/auth/me</code></td>
+              <td><em>None (Bearer header)</em></td>
+              <td>Validates current JWT, checks email verification and emergency contact status. Refreshes JWT if user has active trip.</td>
+            </tr>
+            <tr>
+              <td><span class="method-tag method-post">POST</span></td>
+              <td><code>/api/auth/logout</code></td>
+              <td><em>None</em></td>
+              <td>Explicitly invalidates Redis session key and disconnects active real-time channels.</td>
+            </tr>
+            <tr>
+              <td><span class="method-tag method-post">POST</span></td>
+              <td><code>/api/auth/change-password</code></td>
+              <td><code>{ currentPassword, newPassword }</code></td>
+              <td>Changes account password and requires fresh re-authentication.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: Real-Time Events -->
+      <h2 class="section-heading">2. Real-Time Telemetry & Event Streams</h2>
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint / Protocol</th>
+              <th>Payload / Query</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="method-tag method-get">GET</span></td>
+              <td><code>/api/events/stream</code> (SSE)</td>
+              <td><code>?token=&lt;jwt&gt;</code></td>
+              <td>Persistent Server-Sent Events stream. Emits <code>session:displaced</code>, <code>permissions_updated</code>, <code>push_notify</code>.</td>
+            </tr>
+            <tr>
+              <td><span class="badge purple">WS</span></td>
+              <td><code>/socket.io</code> (Socket.IO)</td>
+              <td><code>auth: { token: &lt;jwt&gt; }</code></td>
+              <td>Bidirectional WebSocket for team chat, LiveKit meeting events, inventory status updates, and GPS location streams.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: HRMS & Attendance -->
+      <h2 class="section-heading">3. HRMS & Attendance APIs</h2>
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Parameters</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="method-tag method-post">POST</span></td>
+              <td><code>/api/attendance/punch</code></td>
+              <td><code>{ latitude, longitude, source, faceVerified? }</code></td>
+              <td>Records biometric attendance punch. Validates geofence coordinates against project boundaries.</td>
+            </tr>
+            <tr>
+              <td><span class="method-tag method-get">GET</span></td>
+              <td><code>/api/attendance/my-summary</code></td>
+              <td><code>?month=&lt;YYYY-MM&gt;</code></td>
+              <td>Retrieves monthly attendance calendar: present, absent, half-days, missed punches, and overtime hours.</td>
+            </tr>
+            <tr>
+              <td><span class="method-tag method-post">POST</span></td>
+              <td><code>/api/leave/apply</code></td>
+              <td><code>{ leaveTypeId, fromDate, toDate, reason }</code></td>
+              <td>Submits leave application into the multi-tier approval workflow.</td>
+            </tr>
+            <tr>
+              <td><span class="method-tag method-get">GET</span></td>
+              <td><code>/api/payroll/my-payslips</code></td>
+              <td><code>?year=&lt;YYYY&gt;</code></td>
+              <td>Returns itemized 7th Pay Commission monthly salary statements.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: CRM APIs -->
+      <h2 class="section-heading">4. CRM Pre & Post-Sales APIs</h2>
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Parameters</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="method-tag method-get">GET</span></td>
+              <td><code>/api/crm/leads</code></td>
+              <td><code>?stage=&lt;stage&gt;&amp;search=&lt;q&gt;&amp;page=&lt;n&gt;</code></td>
+              <td>Fetches leads scoped by agent allocation and organizational permissions.</td>
+            </tr>
+            <tr>
+              <td><span class="method-tag method-post">POST</span></td>
+              <td><code>/api/crm/leads</code></td>
+              <td><code>{ name, phone, email, project, source }</code></td>
+              <td>Creates lead and triggers dynamic round-robin assignment.</td>
+            </tr>
+            <tr>
+              <td><span class="method-tag method-post">POST</span></td>
+              <td><code>/api/crm/leads/:id/call</code></td>
+              <td><code>{ agentExtension }</code></td>
+              <td>Dispatches click-to-call command to Elision / Greeter PBX telephony server.</td>
+            </tr>
+            <tr>
+              <td><span class="method-tag method-patch">PATCH</span></td>
+              <td><code>/api/crm/units/:id/status</code></td>
+              <td><code>{ status: 'AVAILABLE'|'BLOCKED'|'BOOKED' }</code></td>
+              <td>Updates real estate unit status and broadcasts <code>crm_unit_update</code> via Socket.IO.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: ERP APIs -->
+      <h2 class="section-heading">5. ERP & Infrastructure APIs</h2>
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Parameters</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="method-tag method-get">GET</span></td>
+              <td><code>/api/erp/projects</code></td>
+              <td><code>?status=&lt;status&gt;</code></td>
+              <td>Returns active civil engineering and real estate construction projects.</td>
+            </tr>
+            <tr>
+              <td><span class="method-tag method-get">GET</span></td>
+              <td><code>/api/erp/boq/:projectId</code></td>
+              <td><em>None</em></td>
+              <td>Retrieves hierarchical Bill of Quantities item master with rate analysis.</td>
+            </tr>
+            <tr>
+              <td><span class="method-tag method-post">POST</span></td>
+              <td><code>/api/erp/purchase-orders</code></td>
+              <td><code>{ vendorId, items: [...], totalValue }</code></td>
+              <td>Generates procurement purchase order against approved material requisitions.</td>
+            </tr>
+            <tr>
+              <td><span class="method-tag method-post">POST</span></td>
+              <td><code>/api/erp/dpr</code></td>
+              <td><code>{ projectId, date, labor, equipment, items, photos }</code></td>
+              <td>Submits Daily Progress Report. Supports multi-draft offline synchronization.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Navigation Links -->
+      <div class="docs-footer-nav">
+        <a href="flutter-mobile.html" class="footer-nav-link">
+          <span class="dir">Previous ➔</span>
+          <span class="title">Flutter & Android Widget</span>
+        </a>
+        <a href="deployment-devops.html" class="footer-nav-link" style="text-align:right">
+          <span class="dir">Next Module ➔</span>
+          <span class="title">DevOps & Deployment</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <footer class="global-footer">
+    <p>© 2026 NB Infra Projects LTD. Confidential & Proprietary.</p>
+  </footer>
+
+  <script src="assets/js/doc-app.js"></script>
+</body>
+</html>

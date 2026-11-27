@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NB Platform Enterprise Documentation · Architecture & Overview</title>
+  <link rel="stylesheet" href="assets/css/doc-theme.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="top-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="mobile-toggle" aria-label="Toggle navigation">☰</button>
+      <a href="index.html" class="brand-group">
+        <div class="brand-badge">NB</div>
+        <div class="brand-titles">
+          <h1>NB INFRA PROJECTS LTD</h1>
+          <p>Enterprise Suite Documentation</p>
+        </div>
+      </a>
+    </div>
+    <div class="header-actions">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="docSearch" placeholder="Search documentation..." />
+      </div>
+      <a href="system-health.html" class="nav-pill-btn gold">🩺 Health Check</a>
+      <a href="api-reference.html" class="nav-pill-btn">API Specs</a>
+    </div>
+  </header>
+
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="docs-sidebar">
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Architecture & System</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item active"><a href="index.html"><span class="nav-icon">🏛️</span>Overview & Arch</a></li>
+          <li class="sidebar-nav-item"><a href="security-auth.html"><span class="nav-icon">🔐</span>Security, Auth & RBAC</a></li>
+          <li class="sidebar-nav-item"><a href="api-reference.html"><span class="nav-icon">⚡</span>API Reference</a></li>
+          <li class="sidebar-nav-item"><a href="deployment-devops.html"><span class="nav-icon">🚀</span>DevOps & Deployment</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Core Business Suites</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="hrms.html"><span class="nav-icon">👥</span>HRMS Suite</a></li>
+          <li class="sidebar-nav-item"><a href="crm.html"><span class="nav-icon">📈</span>CRM (Pre & Post-Sales)</a></li>
+          <li class="sidebar-nav-item"><a href="erp.html"><span class="nav-icon">🏗️</span>ERP & Infrastructure</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Realtime & Clients</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="collaboration.html"><span class="nav-icon">💬</span>Chat, Meet & AI STT</a></li>
+          <li class="sidebar-nav-item"><a href="earth.html"><span class="nav-icon">🌍</span>NB Earth Geospatial</a></li>
+          <li class="sidebar-nav-item"><a href="flutter-mobile.html"><span class="nav-icon">📱</span>Flutter & Android Widget</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">System Tools</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="system-health.html"><span class="nav-icon">🩺</span>Live Health Check</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-main-content">
+      <div class="breadcrumbs">
+        <a href="index.html">Documentation</a>
+        <span class="sep">/</span>
+        <span>System Architecture & Overview</span>
+      </div>
+
+      <h1 class="page-title">Enterprise Architecture & System Overview</h1>
+      <p class="page-lead">
+        The NB Platform is an all-in-one industrial ERP, CRM, and HRMS infrastructure engine engineered for heavy civil engineering, real estate development, and institutional workforce management. Built on a resilient multi-tenant foundation, it orchestrates 116+ relational entities across mobile, desktop, and web clients.
+      </p>
+
+      <!-- Key Stats Cards -->
+      <div class="grid-4">
+        <div class="feature-card gold-border">
+          <div class="card-icon">👥</div>
+          <div class="card-title">HRMS Suite</div>
+          <p class="card-desc">Workforce KYC, eSSL biometrics sync, GPS tracking, 7th Pay Commission, leaves & recruitment.</p>
+        </div>
+        <div class="feature-card cyan-border">
+          <div class="card-icon">📈</div>
+          <div class="card-title">CRM Platform</div>
+          <p class="card-desc">Lead funnel, CTI telephony PBX, WhatsApp Cloud API, real estate inventory, demand notices.</p>
+        </div>
+        <div class="feature-card emerald-border">
+          <div class="card-icon">🏗️</div>
+          <div class="card-title">ERP & Infra</div>
+          <p class="card-desc">BOQ takeoffs, competitive tenders, work orders, purchase orders, offline DPR drafts.</p>
+        </div>
+        <div class="feature-card purple-border">
+          <div class="card-icon">🛰️</div>
+          <div class="card-title">NB Earth & Meet</div>
+          <p class="card-desc">3D WebGL Earth globe, LiveKit WebRTC video, self-hosted Faster-Whisper AI speech transcription.</p>
+        </div>
+      </div>
+
+      <!-- High-Level Flow Box -->
+      <div class="diagram-box">
+        <div class="diagram-title">System Ingestion & Telemetry Pipeline</div>
+        <div class="flow-step-row">
+          <div class="flow-step">📱 Flutter / Next.js Clients</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🛡️ Double AES-GCM & VPN Gate</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">⚡ Node.js 20 REST & Socket.IO</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🔐 Redis Single-Session Engine</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🗄️ PostgreSQL 15 (116+ Models)</div>
+        </div>
+      </div>
+
+      <!-- Section: Monorepo Architecture -->
+      <h2 class="section-heading">📂 Monorepo Repository Structure</h2>
+      <p>
+        The repository is structured as a unified monorepo accommodating the API backend, client applications, AI speech microservices, and containerization assets:
+      </p>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Directory</th>
+              <th>Stack / Runtime</th>
+              <th>Description & Key Responsibilities</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>/backend</code></td>
+              <td>Node.js 20, Express 5, TypeScript, Prisma 6</td>
+              <td>Primary REST API, SSE stream server, Socket.IO gateway, MSSQL eSSL biometric sync, BullMQ background jobs.</td>
+            </tr>
+            <tr>
+              <td><code>/nb_crm_flutter</code></td>
+              <td>Flutter 3.9+, Dart 3, BLoC, Riverpod</td>
+              <td>Primary enterprise client for Android, iOS, Windows Desktop, and Web. Includes background tracking isolates and Android Quick-Punch Home Widget.</td>
+            </tr>
+            <tr>
+              <td><code>/frontend</code></td>
+              <td>Next.js 14 / React 18, Tailwind, NextAuth</td>
+              <td>Companion web dashboard for administrative operations, employee self-service portal, and legacy desktop browser workflows.</td>
+            </tr>
+            <tr>
+              <td><code>/whisper</code></td>
+              <td>Python 3.10, Faster-Whisper, FastAPI</td>
+              <td>High-performance on-premise Speech-to-Text inference server running on port <code>8095</code> for automated meeting transcripts.</td>
+            </tr>
+            <tr>
+              <td><code>/docker</code> & <code>docker-compose.yml</code></td>
+              <td>Docker, Alpine, Compose v2</td>
+              <td>Full infrastructure orchestration including PostgreSQL 15 (port 5434), Redis 7 (port 6379), MinIO S3 (port 9000), and LiveKit.</td>
+            </tr>
+            <tr>
+              <td><code>/docs</code></td>
+              <td>Static HTML / CSS / JS / Markdown</td>
+              <td>Local, self-contained documentation suite and system health monitors served natively by Express and locally accessible.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: Core Capabilities Matrix -->
+      <h2 class="section-heading">⚙️ Platform Core Engines</h2>
+      <p>
+        NB Platform is built around four proprietary foundational engines that guarantee zero dual-active login fraud, robust data isolation, and instant real-time reactivity:
+      </p>
+
+      <div class="grid-2">
+        <div class="feature-card">
+          <div class="card-title">1. Single-Session Enforcement & Real-time Displacement</div>
+          <p class="card-desc">
+            To prevent credential sharing and attendance manipulation, every user is restricted to strictly <strong>one active session</strong>. New sign-ins instantly invalidate older sessions via Redis. Connected clients are notified via SSE (<code>session:displaced</code>) and Socket.IO, terminating superseded sessions in <strong>&lt; 50ms</strong> without requiring page reloads.
+          </p>
+        </div>
+        <div class="feature-card">
+          <div class="card-title">2. 5-Action Scoped RBAC Matrix</div>
+          <p class="card-desc">
+            Granular access controls enforce permissions across five distinct verbs: <code>CREATE</code>, <code>READ</code>, <code>UPDATE</code>, <code>DELETE</code>, and <code>APPROVE</code>. Records are filtered dynamically by employee hierarchy: <code>NONE</code>, <code>SELF</code>, <code>INSTITUTE</code>, or <code>UNIVERSITY</code>.
+          </p>
+        </div>
+        <div class="feature-card">
+          <div class="card-title">3. Double-Layer AES-GCM Transport Security</div>
+          <p class="card-desc">
+            In addition to standard TLS/HTTPS, sensitive mobile-to-server payloads undergo client-side AES-GCM payload encryption with dynamic nonces (<code>transport_crypto</code>) before transmission, mitigating man-in-the-middle sniffing on public Wi-Fi or compromised networks.
+          </p>
+        </div>
+        <div class="feature-card">
+          <div class="card-title">4. Multi-Tenant Modular Licensing Gates</div>
+          <p class="card-desc">
+            Each organizational entity or subsidiary (sub-org) is licensed selectively for <code>HRMS</code>, <code>CRM</code>, or <code>ERP</code>. Middleware guards (<code>requireModuleLicense</code>) prevent unauthorized module access at both route and database query levels.
+          </p>
+        </div>
+      </div>
+
+      <!-- Navigation Links -->
+      <div class="docs-footer-nav">
+        <div></div>
+        <a href="hrms.html" class="footer-nav-link" style="text-align:right">
+          <span class="dir">Next Module ➔</span>
+          <span class="title">HRMS Suite Overview</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <footer class="global-footer">
+    <p>© 2026 NB Infra Projects LTD. Confidential & Proprietary. Built for Engineering, Infrastructure, and Real Estate Excellence.</p>
+  </footer>
+
+  <script src="assets/js/doc-app.js"></script>
+</body>
+</html>

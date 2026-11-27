@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NB Platform Documentation · DevOps & Deployment Runbook</title>
+  <link rel="stylesheet" href="assets/css/doc-theme.css" />
+</head>
+<body>
+  <header class="top-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="mobile-toggle" aria-label="Toggle navigation">☰</button>
+      <a href="index.html" class="brand-group">
+        <div class="brand-badge">NB</div>
+        <div class="brand-titles">
+          <h1>NB INFRA PROJECTS LTD</h1>
+          <p>Enterprise Suite Documentation</p>
+        </div>
+      </a>
+    </div>
+    <div class="header-actions">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="docSearch" placeholder="Search DevOps docs..." />
+      </div>
+      <a href="system-health.html" class="nav-pill-btn gold">🩺 Health Check</a>
+      <a href="api-reference.html" class="nav-pill-btn">API Specs</a>
+    </div>
+  </header>
+
+  <div class="app-container">
+    <aside class="docs-sidebar">
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Architecture & System</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="index.html"><span class="nav-icon">🏛️</span>Overview & Arch</a></li>
+          <li class="sidebar-nav-item"><a href="security-auth.html"><span class="nav-icon">🔐</span>Security, Auth & RBAC</a></li>
+          <li class="sidebar-nav-item"><a href="api-reference.html"><span class="nav-icon">⚡</span>API Reference</a></li>
+          <li class="sidebar-nav-item active"><a href="deployment-devops.html"><span class="nav-icon">🚀</span>DevOps & Deployment</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Core Business Suites</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="hrms.html"><span class="nav-icon">👥</span>HRMS Suite</a></li>
+          <li class="sidebar-nav-item"><a href="crm.html"><span class="nav-icon">📈</span>CRM (Pre & Post-Sales)</a></li>
+          <li class="sidebar-nav-item"><a href="erp.html"><span class="nav-icon">🏗️</span>ERP & Infrastructure</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Realtime & Clients</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="collaboration.html"><span class="nav-icon">💬</span>Chat, Meet & AI STT</a></li>
+          <li class="sidebar-nav-item"><a href="earth.html"><span class="nav-icon">🌍</span>NB Earth Geospatial</a></li>
+          <li class="sidebar-nav-item"><a href="flutter-mobile.html"><span class="nav-icon">📱</span>Flutter & Android Widget</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">System Tools</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="system-health.html"><span class="nav-icon">🩺</span>Live Health Check</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="docs-main-content">
+      <div class="breadcrumbs">
+        <a href="index.html">Documentation</a>
+        <span class="sep">/</span>
+        <a href="deployment-devops.html">Architecture & System</a>
+        <span class="sep">/</span>
+        <span>DevOps & Deployment</span>
+      </div>
+
+      <h1 class="page-title">DevOps, Docker & Deployment Runbook</h1>
+      <p class="page-lead">
+        Comprehensive production infrastructure runbook covering Docker Compose services, PostgreSQL database clusters, Redis session stores, PM2 process management, Nginx reverse proxy configuration, and disaster recovery.
+      </p>
+
+      <!-- Port Topology Grid -->
+      <div class="grid-4">
+        <div class="feature-card cyan-border">
+          <div class="card-icon">🗄️</div>
+          <div class="card-title">PostgreSQL</div>
+          <p class="card-desc">Port <code>5434</code> (<code>nb_crm_db</code> cluster with 116+ relational models).</p>
+        </div>
+        <div class="feature-card gold-border">
+          <div class="card-icon">⚡</div>
+          <div class="card-title">Redis Cache</div>
+          <p class="card-desc">Port <code>6379</code> (single active session enforcement & queues).</p>
+        </div>
+        <div class="feature-card emerald-border">
+          <div class="card-icon">🚀</div>
+          <div class="card-title">Backend API</div>
+          <p class="card-desc">Port <code>4000</code> (Express 5 REST & Socket.IO gateway).</p>
+        </div>
+        <div class="feature-card purple-border">
+          <div class="card-icon">🎙️</div>
+          <div class="card-title">Whisper STT</div>
+          <p class="card-desc">Port <code>8095</code> (Python Faster-Whisper transcription microservice).</p>
+        </div>
+      </div>
+
+      <!-- Section: Production Ports & Services -->
+      <h2 class="section-heading">1. Production Port Architecture</h2>
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Service</th>
+              <th>Port</th>
+              <th>Protocol</th>
+              <th>Role in NB Ecosystem</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>PostgreSQL 15</strong></td>
+              <td><code>5434</code></td>
+              <td>TCP</td>
+              <td>Primary ACID persistence for 116+ relational Prisma models.</td>
+            </tr>
+            <tr>
+              <td><strong>Redis 7/8</strong></td>
+              <td><code>6379</code></td>
+              <td>TCP</td>
+              <td>Atomic single-session storage (<code>session:&lt;userId&gt;</code>) and BullMQ job queues.</td>
+            </tr>
+            <tr>
+              <td><strong>Backend REST API</strong></td>
+              <td><code>4000</code></td>
+              <td>HTTP / WS</td>
+              <td>Node.js 20 Express runtime, SSE stream, and Socket.IO real-time hub.</td>
+            </tr>
+            <tr>
+              <td><strong>Companion Web Portal</strong></td>
+              <td><code>3000</code></td>
+              <td>HTTP</td>
+              <td>Next.js 14 companion dashboard for admin and self-service.</td>
+            </tr>
+            <tr>
+              <td><strong>Faster-Whisper STT</strong></td>
+              <td><code>8095</code></td>
+              <td>HTTP</td>
+              <td>Self-hosted Python AI speech-to-text inference microservice.</td>
+            </tr>
+            <tr>
+              <td><strong>MinIO Object Storage</strong></td>
+              <td><code>9000</code> / <code>9001</code></td>
+              <td>HTTP</td>
+              <td>S3-compatible document locker, call recording archives, and photo bucket.</td>
+            </tr>
+            <tr>
+              <td><strong>LiveKit WebRTC</strong></td>
+              <td><code>7880</code> / <code>7881</code></td>
+              <td>HTTP / TCP / UDP</td>
+              <td>Real-time video conferencing, screen sharing, and audio room engine.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: Nginx Configuration -->
+      <h2 class="section-heading">2. Production Nginx Reverse Proxy Configuration</h2>
+      <p>
+        To support SSE without buffering and WebSocket upgrades, use the following production Nginx block:
+      </p>
+
+      <pre><code># /etc/nginx/sites-available/nb-platform.conf
+server {
+    listen 443 ssl http2;
+    server_name crm.nbsince1946.com;
+
+    ssl_certificate /etc/letsencrypt/live/crm.nbsince1946.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/crm.nbsince1946.com/privkey.pem;
+
+    # Core REST API
+    location /api/ {
+        proxy_pass http://127.0.0.1:4000/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Real-Time Server-Sent Events (SSE) - Crucial for zero buffering
+    location /api/events/stream {
+        proxy_pass http://127.0.0.1:4000/api/events/stream;
+        proxy_http_version 1.1;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding off;
+        proxy_read_timeout 24h;
+    }
+
+    # Socket.IO WebSocket Gateway
+    location /socket.io/ {
+        proxy_pass http://127.0.0.1:4000/socket.io/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 86400;
+    }
+}</code></pre>
+
+      <!-- Section: Common Operations & CLI -->
+      <h2 class="section-heading">3. Common Operational CLI Commands</h2>
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>Command Line</th>
+              <th>Expected Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Start All Containers</td>
+              <td><code>docker compose up -d</code></td>
+              <td>Starts Postgres (5434), Redis (6379), and MinIO (9000).</td>
+            </tr>
+            <tr>
+              <td>Run Prisma Migrations</td>
+              <td><code>cd backend && npx prisma migrate deploy</code></td>
+              <td>Applies all database schema migrations to <code>nb_crm_db</code>.</td>
+            </tr>
+            <tr>
+              <td>Verify Backend Code</td>
+              <td><code>cd backend && npx tsc --noEmit</code></td>
+              <td>Type-checks backend TypeScript codebase (0 errors).</td>
+            </tr>
+            <tr>
+              <td>Verify Flutter Code</td>
+              <td><code>cd nb_crm_flutter && flutter analyze</code></td>
+              <td>Runs static analysis across Flutter features (0 issues).</td>
+            </tr>
+            <tr>
+              <td>Check System Health</td>
+              <td><code>curl http://localhost:4000/system-health</code></td>
+              <td>Returns JSON with database, Redis, Whisper, and Cloudinary statuses.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Navigation Links -->
+      <div class="docs-footer-nav">
+        <a href="api-reference.html" class="footer-nav-link">
+          <span class="dir">Previous ➔</span>
+          <span class="title">Complete API Reference</span>
+        </a>
+        <a href="index.html" class="footer-nav-link" style="text-align:right">
+          <span class="dir">Return to Top ➔</span>
+          <span class="title">Master Architecture Hub</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <footer class="global-footer">
+    <p>© 2026 NB Infra Projects LTD. Confidential & Proprietary.</p>
+  </footer>
+
+  <script src="assets/js/doc-app.js"></script>
+</body>
+</html>

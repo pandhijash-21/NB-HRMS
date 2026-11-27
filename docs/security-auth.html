@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NB Platform Documentation · Security, Auth & RBAC Matrix</title>
+  <link rel="stylesheet" href="assets/css/doc-theme.css" />
+</head>
+<body>
+  <header class="top-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="mobile-toggle" aria-label="Toggle navigation">☰</button>
+      <a href="index.html" class="brand-group">
+        <div class="brand-badge">NB</div>
+        <div class="brand-titles">
+          <h1>NB INFRA PROJECTS LTD</h1>
+          <p>Enterprise Suite Documentation</p>
+        </div>
+      </a>
+    </div>
+    <div class="header-actions">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="docSearch" placeholder="Search security docs..." />
+      </div>
+      <a href="system-health.html" class="nav-pill-btn gold">🩺 Health Check</a>
+      <a href="api-reference.html" class="nav-pill-btn">API Specs</a>
+    </div>
+  </header>
+
+  <div class="app-container">
+    <aside class="docs-sidebar">
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Architecture & System</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="index.html"><span class="nav-icon">🏛️</span>Overview & Arch</a></li>
+          <li class="sidebar-nav-item active"><a href="security-auth.html"><span class="nav-icon">🔐</span>Security, Auth & RBAC</a></li>
+          <li class="sidebar-nav-item"><a href="api-reference.html"><span class="nav-icon">⚡</span>API Reference</a></li>
+          <li class="sidebar-nav-item"><a href="deployment-devops.html"><span class="nav-icon">🚀</span>DevOps & Deployment</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Core Business Suites</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="hrms.html"><span class="nav-icon">👥</span>HRMS Suite</a></li>
+          <li class="sidebar-nav-item"><a href="crm.html"><span class="nav-icon">📈</span>CRM (Pre & Post-Sales)</a></li>
+          <li class="sidebar-nav-item"><a href="erp.html"><span class="nav-icon">🏗️</span>ERP & Infrastructure</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Realtime & Clients</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="collaboration.html"><span class="nav-icon">💬</span>Chat, Meet & AI STT</a></li>
+          <li class="sidebar-nav-item"><a href="earth.html"><span class="nav-icon">🌍</span>NB Earth Geospatial</a></li>
+          <li class="sidebar-nav-item"><a href="flutter-mobile.html"><span class="nav-icon">📱</span>Flutter & Android Widget</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">System Tools</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="system-health.html"><span class="nav-icon">🩺</span>Live Health Check</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="docs-main-content">
+      <div class="breadcrumbs">
+        <a href="index.html">Documentation</a>
+        <span class="sep">/</span>
+        <a href="security-auth.html">Architecture & System</a>
+        <span class="sep">/</span>
+        <span>Security, Auth & RBAC</span>
+      </div>
+
+      <h1 class="page-title">Security, Authentication & RBAC Matrix</h1>
+      <p class="page-lead">
+        Comprehensive specification of the authentication lifecycle, strict single concurrent session enforcement, real-time eviction push, the 5-action scoped RBAC permission engine, and transport encryption.
+      </p>
+
+      <!-- Key Security Pillars -->
+      <div class="grid-3">
+        <div class="feature-card gold-border">
+          <div class="card-icon">🚫</div>
+          <div class="card-title">Single Active Session</div>
+          <p class="card-desc">Zero concurrent logins for the same account. New login instantly evicts previous devices in real time (&lt;50ms).</p>
+        </div>
+        <div class="feature-card cyan-border">
+          <div class="card-icon">🛡️</div>
+          <div class="card-title">5-Action Scoped RBAC</div>
+          <p class="card-desc">Granular verbs (CREATE, READ, UPDATE, DELETE, APPROVE) scoped by SELF, INSTITUTE, or UNIVERSITY hierarchy.</p>
+        </div>
+        <div class="feature-card emerald-border">
+          <div class="card-icon">🔐</div>
+          <div class="card-title">Double AES-GCM Transport</div>
+          <p class="card-desc">Client-side payload encryption prior to network transmission, mitigating proxy interception.</p>
+        </div>
+      </div>
+
+      <!-- Section: Single Session Enforcement -->
+      <h2 class="section-heading">1. Single-Session Enforcement & Real-Time Displacement</h2>
+      <p>
+        To prevent buddy punching, attendance spoofing, and credential sharing across devices, the platform implements strict single-session exclusivity:
+      </p>
+
+      <div class="diagram-box">
+        <div class="diagram-title">Session Displacement Sequence Diagram</div>
+        <div class="flow-step-row">
+          <div class="flow-step">📱 Device B Logs In</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🔑 Mint New JWT</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">⚡ Overwrite Redis <code>session:&lt;userId&gt;</code></div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">📡 Push <code>session:displaced</code> via SSE & Socket.IO</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🚪 Device A Instantly Signed Out</div>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Layer / Component</th>
+              <th>Behavior & Enforcement Mechanism</th>
+              <th>Latency / Timing</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Redis Session Key</strong></td>
+              <td>Stores <code>session:&lt;userId&gt; = &lt;jwt_token&gt;</code>. On new login, old key is overwritten and <code>prev_session</code> is wiped immediately (zero grace period).</td>
+              <td>Atomic, immediate (&lt; 2ms)</td>
+            </tr>
+            <tr>
+              <td><strong>Server-Sent Events (SSE)</strong></td>
+              <td>Backend calls <code>sseService.toUser(userId, 'session:displaced', ...)</code>. Web EventSource receives event and triggers <code>signOut()</code>.</td>
+              <td>Sub-second (&lt; 50ms)</td>
+            </tr>
+            <tr>
+              <td><strong>Socket.IO Gateway</strong></td>
+              <td>Backend calls <code>emitSessionDisplaced(userId, ...)</code> to room <code>user:&lt;userId&gt;</code>. Mobile/Flutter socket triggers <code>UnauthorizedGate.notify()</code>.</td>
+              <td>Sub-second (&lt; 50ms)</td>
+            </tr>
+            <tr>
+              <td><strong>API Guard (requireAuth)</strong></td>
+              <td>If an incoming request presents a displaced JWT (where <code>sessionToken !== token</code>), the API immediately rejects it with HTTP 401.</td>
+              <td>Synchronous on request</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: Remember Me Lifecycle -->
+      <h2 class="section-heading">2. Persistent Login ("Remember Me") Lifecycle</h2>
+      <p>
+        The platform distinguishes between transient standard logins and persistent trusted device logins:
+      </p>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Standard Login (Remember Me Unchecked)</th>
+              <th>Remember Me Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>JWT Expiration</strong></td>
+              <td>8 hours (<code>expiresIn: '8h'</code>)</td>
+              <td><strong>30 days</strong> (<code>expiresIn: '30d'</code>)</td>
+            </tr>
+            <tr>
+              <td><strong>Redis TTL</strong></td>
+              <td>8 hours (28,800 seconds)</td>
+              <td><strong>30 days</strong> (2,592,000 seconds)</td>
+            </tr>
+            <tr>
+              <td><strong>Sliding Window</strong></td>
+              <td>Extended by 8 hours on each authenticated API call.</td>
+              <td>Extended by 30 days on each authenticated API call.</td>
+            </tr>
+            <tr>
+              <td><strong>App Restart Behavior</strong></td>
+              <td>Bounces to login screen once 8-hour token expires.</td>
+              <td>Seamlessly keeps user authenticated into dashboard; auto-renews.</td>
+            </tr>
+            <tr>
+              <td><strong>Displacement Handling</strong></td>
+              <td>Session evicted; credentials not stored.</td>
+              <td>Session evicted; saved credentials automatically purged to prevent fighting the new active session.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: RBAC Matrix -->
+      <h2 class="section-heading">3. 5-Action Scoped RBAC Engine</h2>
+      <p>
+        Permissions are structured as a 2D matrix of modules and action verbs, augmented with organizational scope filters:
+      </p>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Action Verb</th>
+              <th>Scope Filter</th>
+              <th>Functional Meaning</th>
+              <th>Example Enforcement</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>CREATE</code></td>
+              <td>Module-level</td>
+              <td>Ability to author new records.</td>
+              <td>Creating a new purchase order or leave application.</td>
+            </tr>
+            <tr>
+              <td><code>READ</code></td>
+              <td><code>SELF</code> / <code>INSTITUTE</code> / <code>UNIVERSITY</code></td>
+              <td>Visibility boundary.</td>
+              <td><code>SELF</code> sees own salary; <code>INSTITUTE</code> sees campus salary; <code>UNIVERSITY</code> sees all.</td>
+            </tr>
+            <tr>
+              <td><code>UPDATE</code></td>
+              <td><code>SELF</code> / <code>INSTITUTE</code> / <code>UNIVERSITY</code></td>
+              <td>Ability to edit existing records.</td>
+              <td>Editing draft DPR or updating lead notes.</td>
+            </tr>
+            <tr>
+              <td><code>DELETE</code></td>
+              <td>Module-level</td>
+              <td>Ability to purge or soft-delete records.</td>
+              <td>Deleting a canceled tender or unused project item.</td>
+            </tr>
+            <tr>
+              <td><code>APPROVE</code></td>
+              <td>Hierarchical</td>
+              <td>Sign-off authority.</td>
+              <td>Approving leave requests, purchase orders, or employee profile changes.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Navigation Links -->
+      <div class="docs-footer-nav">
+        <a href="earth.html" class="footer-nav-link">
+          <span class="dir">Previous ➔</span>
+          <span class="title">NB Earth Geospatial Hub</span>
+        </a>
+        <a href="api-reference.html" class="footer-nav-link" style="text-align:right">
+          <span class="dir">Next Module ➔</span>
+          <span class="title">Complete API Reference</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <footer class="global-footer">
+    <p>© 2026 NB Infra Projects LTD. Confidential & Proprietary.</p>
+  </footer>
+
+  <script src="assets/js/doc-app.js"></script>
+</body>
+</html>

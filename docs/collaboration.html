@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NB Platform Documentation · Collaboration, Meet & AI STT</title>
+  <link rel="stylesheet" href="assets/css/doc-theme.css" />
+</head>
+<body>
+  <header class="top-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="mobile-toggle" aria-label="Toggle navigation">☰</button>
+      <a href="index.html" class="brand-group">
+        <div class="brand-badge">NB</div>
+        <div class="brand-titles">
+          <h1>NB INFRA PROJECTS LTD</h1>
+          <p>Enterprise Suite Documentation</p>
+        </div>
+      </a>
+    </div>
+    <div class="header-actions">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="docSearch" placeholder="Search collaboration docs..." />
+      </div>
+      <a href="system-health.html" class="nav-pill-btn gold">🩺 Health Check</a>
+      <a href="api-reference.html" class="nav-pill-btn">API Specs</a>
+    </div>
+  </header>
+
+  <div class="app-container">
+    <aside class="docs-sidebar">
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Architecture & System</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="index.html"><span class="nav-icon">🏛️</span>Overview & Arch</a></li>
+          <li class="sidebar-nav-item"><a href="security-auth.html"><span class="nav-icon">🔐</span>Security, Auth & RBAC</a></li>
+          <li class="sidebar-nav-item"><a href="api-reference.html"><span class="nav-icon">⚡</span>API Reference</a></li>
+          <li class="sidebar-nav-item"><a href="deployment-devops.html"><span class="nav-icon">🚀</span>DevOps & Deployment</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Core Business Suites</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="hrms.html"><span class="nav-icon">👥</span>HRMS Suite</a></li>
+          <li class="sidebar-nav-item"><a href="crm.html"><span class="nav-icon">📈</span>CRM (Pre & Post-Sales)</a></li>
+          <li class="sidebar-nav-item"><a href="erp.html"><span class="nav-icon">🏗️</span>ERP & Infrastructure</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Realtime & Clients</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item active"><a href="collaboration.html"><span class="nav-icon">💬</span>Chat, Meet & AI STT</a></li>
+          <li class="sidebar-nav-item"><a href="earth.html"><span class="nav-icon">🌍</span>NB Earth Geospatial</a></li>
+          <li class="sidebar-nav-item"><a href="flutter-mobile.html"><span class="nav-icon">📱</span>Flutter & Android Widget</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">System Tools</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="system-health.html"><span class="nav-icon">🩺</span>Live Health Check</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="docs-main-content">
+      <div class="breadcrumbs">
+        <a href="index.html">Documentation</a>
+        <span class="sep">/</span>
+        <a href="collaboration.html">Realtime & Clients</a>
+        <span class="sep">/</span>
+        <span>Chat, Meet & AI Whisper</span>
+      </div>
+
+      <h1 class="page-title">Collaboration, Video Conferencing & AI Transcription</h1>
+      <p class="page-lead">
+        A real-time communication platform combining enterprise team messaging, LiveKit WebRTC video meetings with knocking rooms, self-hosted Faster-Whisper AI speech-to-text inference, and a dual-transport event broadcasting bus.
+      </p>
+
+      <!-- Key Columns Grid -->
+      <div class="grid-3">
+        <div class="feature-card purple-border">
+          <div class="card-icon">💬</div>
+          <div class="card-title">Omnichannel Chat</div>
+          <p class="card-desc">Direct messaging, project channels, threads, reactions, file attachments, and typing indicators.</p>
+        </div>
+        <div class="feature-card cyan-border">
+          <div class="card-icon">📹</div>
+          <div class="card-title">NB Meet (LiveKit WebRTC)</div>
+          <p class="card-desc">Video conferencing, screen sharing, knocking waiting room, host moderation, and interactive board.</p>
+        </div>
+        <div class="feature-card gold-border">
+          <div class="card-icon">🎙️</div>
+          <div class="card-title">Faster-Whisper AI STT</div>
+          <p class="card-desc">Self-hosted Python STT microservice on port <code>8095</code> generating automated multi-lingual transcripts.</p>
+        </div>
+      </div>
+
+      <!-- Section: Video Conferencing -->
+      <h2 class="section-heading">1. NB Meet & LiveKit WebRTC Video Architecture</h2>
+      <p>
+        Built on <strong>LiveKit</strong> WebRTC infrastructure for high-definition, low-latency video meetings across mobile, desktop, and web:
+      </p>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Technical Implementation</th>
+              <th>Access & Moderation Control</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Knocking / Waiting Room</strong></td>
+              <td>Guest tokens route users to <code>waiting:&lt;participantId&gt;</code> room. Host receives <code>waiting_knock</code> event.</td>
+              <td>Host clicks Admit or Deny via <code>emitJoinDecision()</code>.</td>
+            </tr>
+            <tr>
+              <td><strong>Interactive Whiteboard</strong></td>
+              <td>Vector stroke paths broadcast via Socket.IO (<code>board_draw</code>, <code>board_clear</code>).</td>
+              <td>Collaborative real-time sketching during design review sessions.</td>
+            </tr>
+            <tr>
+              <td><strong>Screen Sharing</strong></td>
+              <td>MediaStream track capture (Web displayMedia or Android MediaProjection).</td>
+              <td>Any participant granted presenter permission.</td>
+            </tr>
+            <tr>
+              <td><strong>Room Moderation</strong></td>
+              <td>Dispatches <code>meeting_moderation</code> events (mute audio, stop camera, kick peer).</td>
+              <td>Restricted to Meeting Host or Company Admin.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: Faster-Whisper STT -->
+      <h2 class="section-heading">2. Self-Hosted Faster-Whisper Speech-to-Text Engine</h2>
+      <p>
+        To ensure complete data privacy without sending audio to third-party cloud APIs, the platform includes a self-hosted Whisper microservice:
+      </p>
+
+      <div class="diagram-box">
+        <div class="diagram-title">AI Speech Transcription Pipeline</div>
+        <div class="flow-step-row">
+          <div class="flow-step">🎙️ Live Audio Stream</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">📦 Audio Chunk Ingestion (:8095)</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🧠 Faster-Whisper Model</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">📜 Text Utterance & Timestamp</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">📡 Socket.IO (meeting_transcript)</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🗄️ PostgreSQL Meeting Archive</div>
+        </div>
+      </div>
+
+      <p>
+        The microservice is located in <code>/whisper/server.py</code> and runs a FastAPI server wrapping CTranslate2-optimized Faster-Whisper models:
+      </p>
+      <ul>
+        <li><strong>Port & Endpoints:</strong> Listens on <code>http://localhost:8095/transcribe</code> and <code>/health</code>.</li>
+        <li><strong>Language Detection:</strong> Automatically detects spoken language or accepts hints (e.g. English, Hindi).</li>
+        <li><strong>Speaker Alignment:</strong> Utterance metadata binds speaker participant ID, name, start time, and text.</li>
+      </ul>
+
+      <!-- Section: Real-Time Event Architecture -->
+      <h2 class="section-heading">3. Real-Time Event Broadcasting Matrix</h2>
+      <p>
+        The platform uses a dual-transport event architecture to guarantee instant real-time synchronization:
+      </p>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Event Name</th>
+              <th>Transport</th>
+              <th>Payload Scope</th>
+              <th>Client Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>session:displaced</code> / <code>session_displaced</code></td>
+              <td>SSE + Socket.IO</td>
+              <td><code>user:&lt;userId&gt;</code></td>
+              <td>Instant session eviction in &lt;50ms when account signs in elsewhere.</td>
+            </tr>
+            <tr>
+              <td><code>crm_unit_update</code></td>
+              <td>Socket.IO</td>
+              <td>Global broadcast</td>
+              <td>Updates unit inventory grid in TowerUnitsScreen without reload.</td>
+            </tr>
+            <tr>
+              <td><code>crm_update</code></td>
+              <td>Socket.IO</td>
+              <td>Global broadcast</td>
+              <td>Triggers lead timeline and stage refresh in CRM Pre-Sales dashboard.</td>
+            </tr>
+            <tr>
+              <td><code>erp_update</code></td>
+              <td>Socket.IO</td>
+              <td>Global broadcast</td>
+              <td>Notifies procurement and project managers of new GRN or PO approvals.</td>
+            </tr>
+            <tr>
+              <td><code>new_message</code></td>
+              <td>Socket.IO</td>
+              <td><code>channel:&lt;channelId&gt;</code></td>
+              <td>Appends chat message to active conversation with audio alert.</td>
+            </tr>
+            <tr>
+              <td><code>permissions_updated</code></td>
+              <td>SSE + Socket.IO</td>
+              <td>Global broadcast</td>
+              <td>Hot-refreshes user permission cache without logging out.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Navigation Links -->
+      <div class="docs-footer-nav">
+        <a href="erp.html" class="footer-nav-link">
+          <span class="dir">Previous ➔</span>
+          <span class="title">ERP & Infrastructure Suite</span>
+        </a>
+        <a href="earth.html" class="footer-nav-link" style="text-align:right">
+          <span class="dir">Next Module ➔</span>
+          <span class="title">NB Earth Geospatial Hub</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <footer class="global-footer">
+    <p>© 2026 NB Infra Projects LTD. Confidential & Proprietary.</p>
+  </footer>
+
+  <script src="assets/js/doc-app.js"></script>
+</body>
+</html>

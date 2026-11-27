@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NB Platform Documentation · CRM Suite (Pre & Post-Sales)</title>
+  <link rel="stylesheet" href="assets/css/doc-theme.css" />
+</head>
+<body>
+  <header class="top-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="mobile-toggle" aria-label="Toggle navigation">☰</button>
+      <a href="index.html" class="brand-group">
+        <div class="brand-badge">NB</div>
+        <div class="brand-titles">
+          <h1>NB INFRA PROJECTS LTD</h1>
+          <p>Enterprise Suite Documentation</p>
+        </div>
+      </a>
+    </div>
+    <div class="header-actions">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="docSearch" placeholder="Search CRM docs..." />
+      </div>
+      <a href="system-health.html" class="nav-pill-btn gold">🩺 Health Check</a>
+      <a href="api-reference.html" class="nav-pill-btn">API Specs</a>
+    </div>
+  </header>
+
+  <div class="app-container">
+    <aside class="docs-sidebar">
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Architecture & System</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="index.html"><span class="nav-icon">🏛️</span>Overview & Arch</a></li>
+          <li class="sidebar-nav-item"><a href="security-auth.html"><span class="nav-icon">🔐</span>Security, Auth & RBAC</a></li>
+          <li class="sidebar-nav-item"><a href="api-reference.html"><span class="nav-icon">⚡</span>API Reference</a></li>
+          <li class="sidebar-nav-item"><a href="deployment-devops.html"><span class="nav-icon">🚀</span>DevOps & Deployment</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Core Business Suites</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="hrms.html"><span class="nav-icon">👥</span>HRMS Suite</a></li>
+          <li class="sidebar-nav-item active"><a href="crm.html"><span class="nav-icon">📈</span>CRM (Pre & Post-Sales)</a></li>
+          <li class="sidebar-nav-item"><a href="erp.html"><span class="nav-icon">🏗️</span>ERP & Infrastructure</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Realtime & Clients</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="collaboration.html"><span class="nav-icon">💬</span>Chat, Meet & AI STT</a></li>
+          <li class="sidebar-nav-item"><a href="earth.html"><span class="nav-icon">🌍</span>NB Earth Geospatial</a></li>
+          <li class="sidebar-nav-item"><a href="flutter-mobile.html"><span class="nav-icon">📱</span>Flutter & Android Widget</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">System Tools</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="system-health.html"><span class="nav-icon">🩺</span>Live Health Check</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="docs-main-content">
+      <div class="breadcrumbs">
+        <a href="index.html">Documentation</a>
+        <span class="sep">/</span>
+        <a href="crm.html">Core Suites</a>
+        <span class="sep">/</span>
+        <span>CRM (Pre-Sales & Post-Sales)</span>
+      </div>
+
+      <h1 class="page-title">Customer Relationship Management (CRM)</h1>
+      <p class="page-lead">
+        A dual-lifecycle real estate and enterprise CRM powering omni-channel lead generation, automated round-robin sales allocation, PBX telephony, WhatsApp conversational workflows, unit inventory matrices, and post-sales billing.
+      </p>
+
+      <!-- Grid Cards -->
+      <div class="grid-3">
+        <div class="feature-card gold-border">
+          <div class="card-icon">🎯</div>
+          <div class="card-title">Pre-Sales Lead Funnel</div>
+          <p class="card-desc">Omni-source capture (Meta, Google, 99acres), algorithmic round-robin allocation, and automated lead aging.</p>
+        </div>
+        <div class="feature-card cyan-border">
+          <div class="card-icon">📞</div>
+          <div class="card-title">CTI Telephony & WhatsApp</div>
+          <p class="card-desc">Click-to-call PBX integration (Elision / Greeter), automated call recordings, and BotBiz WhatsApp HSM messaging.</p>
+        </div>
+        <div class="feature-card emerald-border">
+          <div class="card-icon">🏢</div>
+          <div class="card-title">Inventory & Post-Sales</div>
+          <p class="card-desc">Tower/unit inventory grids, live booking states, milestone payment schedules, and demand notices.</p>
+        </div>
+      </div>
+
+      <!-- Section: Pre-Sales Pipeline -->
+      <h2 class="section-heading">1. Lead Acquisition & Dynamic Round-Robin Engine</h2>
+      <p>
+        Leads flow into the central ingestion engine from advertising channels, channel partners, and direct referrals:
+      </p>
+
+      <div class="diagram-box">
+        <div class="diagram-title">Pre-Sales Ingestion & Lifecycle Pipeline</div>
+        <div class="flow-step-row">
+          <div class="flow-step">📥 Webhook (Meta / Google / Portals)</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🔍 De-duplication Check</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">⚖️ Round-Robin Allocator</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">💬 WhatsApp Welcome Template</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🔔 Real-time Push to Agent</div>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Lead Stage</th>
+              <th>Trigger & Qualification Criteria</th>
+              <th>Automated System Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge cyan">NEW</span></td>
+              <td>Fresh lead created via API, import, or webhook.</td>
+              <td>Assigned to next eligible agent in round-robin queue. Instant push notification.</td>
+            </tr>
+            <tr>
+              <td><span class="badge gold">CONTACTED</span></td>
+              <td>Agent initiates call or WhatsApp message.</td>
+              <td>Call log linked; recording attached upon PBX webhook completion.</td>
+            </tr>
+            <tr>
+              <td><span class="badge purple">SITE VISIT SCHEDULED</span></td>
+              <td>Prospect agrees to physical project inspection.</td>
+              <td>Calendar invite dispatched; automated SMS/WhatsApp reminder scheduled 2h prior.</td>
+            </tr>
+            <tr>
+              <td><span class="badge emerald">NEGOTIATION / BOOKED</span></td>
+              <td>Unit selected; booking deposit received.</td>
+              <td>Unit inventory status changed from <code>AVAILABLE</code> to <code>BOOKED</code>.</td>
+            </tr>
+            <tr>
+              <td><span class="badge rose">LOST / JUNK</span></td>
+              <td>Not interested, budget mismatch, invalid number.</td>
+              <td>Tagged with loss reason; removed from active funnel; queued for retargeting.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: Telephony -->
+      <h2 class="section-heading">2. CTI Telephony & PBX Integration</h2>
+      <p>
+        The platform interfaces with enterprise Cloud Telephony PBX systems (Elision & Greeter):
+      </p>
+
+      <div class="grid-2">
+        <div class="feature-card">
+          <div class="card-title">Click-to-Call PBX Bridge</div>
+          <p class="card-desc">
+            Sales reps initiate calls directly from the Flutter app. The backend dispatches an originate command to the PBX server, connecting the agent's extension and ringing the prospect simultaneously.
+          </p>
+        </div>
+        <div class="feature-card">
+          <div class="card-title">Automated Call Recordings & In-App Player</div>
+          <p class="card-desc">
+            When a call completes, the PBX server posts a webhook with duration, disposition, and audio URL. Flutter plays the recording securely via [crm_audio_player_dialog.dart](file:///c:/Users/DELL/Desktop/dev/NB-HRMS/nb_crm_flutter/lib/features/crm/presentation/widgets/crm_audio_player_dialog.dart) with seeking and playback speed controls.
+          </p>
+        </div>
+      </div>
+
+      <!-- Section: Inventory & Post-Sales -->
+      <h2 class="section-heading">3. Real Estate Unit Inventory & Post-Sales Billing</h2>
+      <p>
+        Projects, towers, and individual units are managed with live locking and payment schedules:
+      </p>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Color Code</th>
+              <th>Allowed Actions</th>
+              <th>Behavior</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>AVAILABLE</code></td>
+              <td><span class="badge emerald">GREEN</span></td>
+              <td>Quote, Block, Book</td>
+              <td>Open for general sales inquiries and client quotations.</td>
+            </tr>
+            <tr>
+              <td><code>BLOCKED</code></td>
+              <td><span class="badge gold">AMBER</span></td>
+              <td>Unblock, Confirm Booking</td>
+              <td>Temporary token hold (typically 24 to 48 hours) pending payment confirmation.</td>
+            </tr>
+            <tr>
+              <td><code>BOOKED</code></td>
+              <td><span class="badge cyan">BLUE</span></td>
+              <td>Generate Schedule, View Billing</td>
+              <td>Customer agreement signed; payment milestones activated.</td>
+            </tr>
+            <tr>
+              <td><code>SOLD</code></td>
+              <td><span class="badge purple">PURPLE</span></td>
+              <td>Handover, Possession, NOC</td>
+              <td>100% payments cleared; registry and possession completed.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-icon">💡</div>
+        <div>
+          <strong>Real-Time Inventory Synchronization:</strong> Whenever any unit's status transitions (e.g. from Available to Blocked), the backend broadcasts <code>crm_unit_update</code> over Socket.IO. All sales rep devices viewing the [TowerUnitsScreen](file:///c:/Users/DELL/Desktop/dev/NB-HRMS/nb_crm_flutter/lib/features/erp/presentation/screens/tower_units_screen.dart) update their visual grid in real time without refreshing.
+        </div>
+      </div>
+
+      <!-- Section: Channel Partners -->
+      <h2 class="section-heading">4. Channel Partner (Broker) Ecosystem</h2>
+      <p>
+        External brokers register prospects through the Channel Partner portal:
+      </p>
+      <ul>
+        <li><strong>Client Protection Lock:</strong> When a broker registers a lead, that client is exclusively locked to the broker for 60 to 90 days.</li>
+        <li><strong>Commission Slabs:</strong> Configurable commission structures (e.g., 2% for Tier 1, 2.5% for Tier 2) with automated payout voucher generation upon unit registration.</li>
+      </ul>
+
+      <!-- Navigation Links -->
+      <div class="docs-footer-nav">
+        <a href="hrms.html" class="footer-nav-link">
+          <span class="dir">Previous ➔</span>
+          <span class="title">HRMS Suite Overview</span>
+        </a>
+        <a href="erp.html" class="footer-nav-link" style="text-align:right">
+          <span class="dir">Next Module ➔</span>
+          <span class="title">ERP & Infrastructure Suite</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <footer class="global-footer">
+    <p>© 2026 NB Infra Projects LTD. Confidential & Proprietary.</p>
+  </footer>
+
+  <script src="assets/js/doc-app.js"></script>
+</body>
+</html>

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NB Platform Documentation · Flutter Multiplatform & Android Widget</title>
+  <link rel="stylesheet" href="assets/css/doc-theme.css" />
+</head>
+<body>
+  <header class="top-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="mobile-toggle" aria-label="Toggle navigation">☰</button>
+      <a href="index.html" class="brand-group">
+        <div class="brand-badge">NB</div>
+        <div class="brand-titles">
+          <h1>NB INFRA PROJECTS LTD</h1>
+          <p>Enterprise Suite Documentation</p>
+        </div>
+      </a>
+    </div>
+    <div class="header-actions">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="docSearch" placeholder="Search Flutter docs..." />
+      </div>
+      <a href="system-health.html" class="nav-pill-btn gold">🩺 Health Check</a>
+      <a href="api-reference.html" class="nav-pill-btn">API Specs</a>
+    </div>
+  </header>
+
+  <div class="app-container">
+    <aside class="docs-sidebar">
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Architecture & System</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="index.html"><span class="nav-icon">🏛️</span>Overview & Arch</a></li>
+          <li class="sidebar-nav-item"><a href="security-auth.html"><span class="nav-icon">🔐</span>Security, Auth & RBAC</a></li>
+          <li class="sidebar-nav-item"><a href="api-reference.html"><span class="nav-icon">⚡</span>API Reference</a></li>
+          <li class="sidebar-nav-item"><a href="deployment-devops.html"><span class="nav-icon">🚀</span>DevOps & Deployment</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Core Business Suites</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="hrms.html"><span class="nav-icon">👥</span>HRMS Suite</a></li>
+          <li class="sidebar-nav-item"><a href="crm.html"><span class="nav-icon">📈</span>CRM (Pre & Post-Sales)</a></li>
+          <li class="sidebar-nav-item"><a href="erp.html"><span class="nav-icon">🏗️</span>ERP & Infrastructure</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Realtime & Clients</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="collaboration.html"><span class="nav-icon">💬</span>Chat, Meet & AI STT</a></li>
+          <li class="sidebar-nav-item"><a href="earth.html"><span class="nav-icon">🌍</span>NB Earth Geospatial</a></li>
+          <li class="sidebar-nav-item active"><a href="flutter-mobile.html"><span class="nav-icon">📱</span>Flutter & Android Widget</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">System Tools</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="system-health.html"><span class="nav-icon">🩺</span>Live Health Check</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="docs-main-content">
+      <div class="breadcrumbs">
+        <a href="index.html">Documentation</a>
+        <span class="sep">/</span>
+        <a href="flutter-mobile.html">Realtime & Clients</a>
+        <span class="sep">/</span>
+        <span>Flutter Multiplatform & Android Widget</span>
+      </div>
+
+      <h1 class="page-title">Flutter Client Architecture & Android Punch Widget</h1>
+      <p class="page-lead">
+        In-depth architecture of the primary cross-platform Flutter application powering Android, iOS, Web, and Windows desktop, featuring BLoC/Riverpod state binding, the native Android Quick-Punch Home Widget, background GPS tracking isolates, and offline draft persistence.
+      </p>
+
+      <!-- Key Columns Grid -->
+      <div class="grid-3">
+        <div class="feature-card emerald-border">
+          <div class="card-icon">📱</div>
+          <div class="card-title">Android Punch Widget</div>
+          <p class="card-desc">Native home screen AppWidget for 1-tap attendance punch-in/out without opening the application.</p>
+        </div>
+        <div class="feature-card cyan-border">
+          <div class="card-icon">🧩</div>
+          <div class="card-title">BLoC + Riverpod Bridge</div>
+          <p class="card-desc">Hybrid state architecture leveraging BLoC for global auth/session and Riverpod for feature screens.</p>
+        </div>
+        <div class="feature-card gold-border">
+          <div class="card-icon">🛰️</div>
+          <div class="card-title">Background GPS Isolate</div>
+          <p class="card-desc">Continuous foreground service acquiring road-matched GPS fixes even with the screen locked.</p>
+        </div>
+      </div>
+
+      <!-- Section: Android Quick-Punch Widget -->
+      <h2 class="section-heading">1. Android Quick-Punch Home Widget</h2>
+      <p>
+        The Android Home Widget enables rapid biometric punch-in and punch-out directly from the device launcher screen:
+      </p>
+
+      <div class="diagram-box">
+        <div class="diagram-title">Widget Execution Flow</div>
+        <div class="flow-step-row">
+          <div class="flow-step">👆 User Taps Widget Button</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🔑 Read Cached Token from Keystore</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">📍 Acquire Instant GPS Fix</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">📡 Dispatch <code>/attendance/punch</code></div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🔄 Update Widget State (Punched In)</div>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th>File Location</th>
+              <th>Technical Responsibility</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Widget Provider</strong></td>
+              <td><code>android/app/src/main/kotlin/.../PunchWidgetProvider.kt</code></td>
+              <td>Native Android AppWidget lifecycle handler; binds remote layout views and click intents.</td>
+            </tr>
+            <tr>
+              <td><strong>Widget Sync Service</strong></td>
+              <td>[widget_sync_service.dart](file:///c:/Users/DELL/Desktop/dev/NB-HRMS/nb_crm_flutter/lib/core/services/widget_sync_service.dart)</td>
+              <td>Synchronizes employee name, punch status, last punch timestamp, and token cache with Android shared storage.</td>
+            </tr>
+            <tr>
+              <td><strong>Deep Link Launch URI</strong></td>
+              <td><code>nbcrm://punch?action=punch_in</code></td>
+              <td>Deep-link routing triggering direct punch execution or opening the attendance confirmation screen.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: State Architecture -->
+      <h2 class="section-heading">2. Hybrid BLoC + Riverpod State Architecture</h2>
+      <p>
+        To combine robust, deterministic event auditing with flexible reactive widget trees, the app utilizes a hybrid architecture:
+      </p>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>State Layer</th>
+              <th>Classes / Providers</th>
+              <th>Responsibility</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Global Shell & Auth (BLoC)</strong></td>
+              <td><code>AuthBloc</code>, <code>ThemeCubit</code>, <code>ApiUrlCubit</code>, <code>AppModuleCubit</code></td>
+              <td>Controls authentication lifecycle, session polling (8s), login, password change, and app router refresh stream.</td>
+            </tr>
+            <tr>
+              <td><strong>Bridge Layer</strong></td>
+              <td>[auth_riverpod_bridge.dart](file:///c:/Users/DELL/Desktop/dev/NB-HRMS/nb_crm_flutter/lib/features/auth/presentation/auth_riverpod_bridge.dart)</td>
+              <td>Listens to <code>AuthBloc</code> stream and hydrates Riverpod <code>AuthNotifier</code> so both systems share identical state.</td>
+            </tr>
+            <tr>
+              <td><strong>Feature Data (Riverpod)</strong></td>
+              <td><code>profileProvider</code>, <code>crmLeadsProvider</code>, <code>tasksProvider</code>, <code>leaveProvider</code></td>
+              <td>Asynchronous data fetching, auto-disposal, optimistic caching, and pull-to-refresh invalidation.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: Offline Drafts -->
+      <h2 class="section-heading">3. Multi-Draft Offline Persistence Engine</h2>
+      <p>
+        Powered by [form_draft_service.dart](file:///c:/Users/DELL/Desktop/dev/NB-HRMS/nb_crm_flutter/lib/core/services/form_draft_service.dart), field personnel can draft complex forms without fear of connection dropouts:
+      </p>
+      <ul>
+        <li><strong>Multiple Named Drafts:</strong> An engineer can maintain different drafts simultaneously (e.g. <em>"DPR - Pier Cap P34"</em> and <em>"DPR - Retaining Wall R2"</em>).</li>
+        <li><strong>Automatic Local Auto-Save:</strong> Input changes are debounced and saved into persistent JSON storage.</li>
+        <li><strong>Midway Navigation Restoration:</strong> Leaving a screen or restarting the device automatically restores the exact in-progress draft when opening the form again.</li>
+      </ul>
+
+      <!-- Navigation Links -->
+      <div class="docs-footer-nav">
+        <a href="security-auth.html" class="footer-nav-link">
+          <span class="dir">Previous ➔</span>
+          <span class="title">Security, Auth & RBAC</span>
+        </a>
+        <a href="api-reference.html" class="footer-nav-link" style="text-align:right">
+          <span class="dir">Next Module ➔</span>
+          <span class="title">Complete API Reference</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <footer class="global-footer">
+    <p>© 2026 NB Infra Projects LTD. Confidential & Proprietary.</p>
+  </footer>
+
+  <script src="assets/js/doc-app.js"></script>
+</body>
+</html>

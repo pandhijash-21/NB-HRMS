@@ -149,7 +149,9 @@ const sendLocalHtml = (file: string) => (_req: express.Request, res: express.Res
 };
 app.get('/system-health', sendLocalHtml('system-health.html'));
 app.get('/system-health.html', sendLocalHtml('system-health.html'));
-app.get('/docs', sendLocalHtml('project-documentation.html'));
+app.use('/docs', express.static(docsRoot));
+app.get('/docs', sendLocalHtml('index.html'));
+app.get('/docs/index.html', sendLocalHtml('index.html'));
 app.get('/project-documentation.html', sendLocalHtml('project-documentation.html'));
 
 app.use(maintenanceMiddleware);

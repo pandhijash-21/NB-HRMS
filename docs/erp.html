@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NB Platform Documentation · ERP & Construction Suite</title>
+  <link rel="stylesheet" href="assets/css/doc-theme.css" />
+</head>
+<body>
+  <header class="top-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="mobile-toggle" aria-label="Toggle navigation">☰</button>
+      <a href="index.html" class="brand-group">
+        <div class="brand-badge">NB</div>
+        <div class="brand-titles">
+          <h1>NB INFRA PROJECTS LTD</h1>
+          <p>Enterprise Suite Documentation</p>
+        </div>
+      </a>
+    </div>
+    <div class="header-actions">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="docSearch" placeholder="Search ERP docs..." />
+      </div>
+      <a href="system-health.html" class="nav-pill-btn gold">🩺 Health Check</a>
+      <a href="api-reference.html" class="nav-pill-btn">API Specs</a>
+    </div>
+  </header>
+
+  <div class="app-container">
+    <aside class="docs-sidebar">
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Architecture & System</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="index.html"><span class="nav-icon">🏛️</span>Overview & Arch</a></li>
+          <li class="sidebar-nav-item"><a href="security-auth.html"><span class="nav-icon">🔐</span>Security, Auth & RBAC</a></li>
+          <li class="sidebar-nav-item"><a href="api-reference.html"><span class="nav-icon">⚡</span>API Reference</a></li>
+          <li class="sidebar-nav-item"><a href="deployment-devops.html"><span class="nav-icon">🚀</span>DevOps & Deployment</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Core Business Suites</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="hrms.html"><span class="nav-icon">👥</span>HRMS Suite</a></li>
+          <li class="sidebar-nav-item"><a href="crm.html"><span class="nav-icon">📈</span>CRM (Pre & Post-Sales)</a></li>
+          <li class="sidebar-nav-item active"><a href="erp.html"><span class="nav-icon">🏗️</span>ERP & Infrastructure</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Realtime & Clients</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="collaboration.html"><span class="nav-icon">💬</span>Chat, Meet & AI STT</a></li>
+          <li class="sidebar-nav-item"><a href="earth.html"><span class="nav-icon">🌍</span>NB Earth Geospatial</a></li>
+          <li class="sidebar-nav-item"><a href="flutter-mobile.html"><span class="nav-icon">📱</span>Flutter & Android Widget</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">System Tools</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="system-health.html"><span class="nav-icon">🩺</span>Live Health Check</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="docs-main-content">
+      <div class="breadcrumbs">
+        <a href="index.html">Documentation</a>
+        <span class="sep">/</span>
+        <a href="erp.html">Core Suites</a>
+        <span class="sep">/</span>
+        <span>ERP & Infrastructure</span>
+      </div>
+
+      <h1 class="page-title">Enterprise Resource Planning (ERP & Civil Infra)</h1>
+      <p class="page-lead">
+        Engineered specifically for heavy civil construction, infrastructure contracting, and real estate engineering. Manages project master records, BOQ estimations, competitive tendering, subcontractor work orders, procurement, multi-draft offline DPR telemetry, and site inventories.
+      </p>
+
+      <!-- Key ERP Pillars Grid -->
+      <div class="grid-4">
+        <div class="feature-card cyan-border">
+          <div class="card-icon">📐</div>
+          <div class="card-title">BOQ & Estimation</div>
+          <p class="card-desc">Detailed itemized Bill of Quantities, rate analysis, material quantity takeoffs, and change variations.</p>
+        </div>
+        <div class="feature-card gold-border">
+          <div class="card-icon">🤝</div>
+          <div class="card-title">Tenders & Bidding</div>
+          <p class="card-desc">Competitive vendor packages, comparative cost sheets, technical evaluation, and contract awards.</p>
+        </div>
+        <div class="feature-card emerald-border">
+          <div class="card-icon">📝</div>
+          <div class="card-title">Work Orders & RA Bills</div>
+          <p class="card-desc">Subcontractor agreements, milestone certifications, retention money deductions, and labor compliance.</p>
+        </div>
+        <div class="feature-card purple-border">
+          <div class="card-icon">📋</div>
+          <div class="card-title">DPR Telemetry</div>
+          <p class="card-desc">Daily Progress Reports, offline multi-draft auto-save, labor headcounts, and site photo records.</p>
+        </div>
+      </div>
+
+      <!-- Section: Project Lifecycle Diagram -->
+      <h2 class="section-heading">1. Project Execution Workflow</h2>
+      <p>
+        Construction contracts progress through an interconnected chain of engineering, commercial, and field operational milestones:
+      </p>
+
+      <div class="diagram-box">
+        <div class="diagram-title">Civil Engineering & Procurement Pipeline</div>
+        <div class="flow-step-row">
+          <div class="flow-step">📐 BOQ Preparation</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">📑 Tender Package</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🔨 Work Order (Subcontractor)</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">📦 Material Requisition (MR)</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🚚 Goods Receipt (GRN)</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">📊 Daily DPR Telemetry</div>
+        </div>
+      </div>
+
+      <!-- Section: DPR -->
+      <h2 class="section-heading">2. Daily Progress Reports (DPR) & Multi-Draft Offline Auto-Save</h2>
+      <p>
+        Site engineers record field conditions directly from the mobile app on active construction sites where connectivity is intermittent:
+      </p>
+
+      <div class="grid-2">
+        <div class="feature-card">
+          <div class="card-title">Site Operations Telemetry</div>
+          <ul>
+            <li><strong>Labor Tracking:</strong> Mason, carpenter, bar bender, skilled, and helper counts.</li>
+            <li><strong>Machinery Hours:</strong> Excavators, tower cranes, transit mixers (working vs. idle hours).</li>
+            <li><strong>Material Consumption:</strong> Cement bags, reinforcement steel metric tons, RMC cubic meters.</li>
+            <li><strong>Work Item Progress:</strong> Quantities executed against specific BOQ item codes.</li>
+          </ul>
+        </div>
+        <div class="feature-card">
+          <div class="card-title">Multi-Draft Auto-Save Engine</div>
+          <p class="card-desc">
+            Powered by [form_draft_service.dart](file:///c:/Users/DELL/Desktop/dev/NB-HRMS/nb_crm_flutter/lib/core/services/form_draft_service.dart):
+          </p>
+          <ul>
+            <li>Engineers can maintain <strong>multiple concurrent DPR drafts</strong> (e.g., Draft for Tower A, Draft for Storm Drain B).</li>
+            <li>Forms automatically save every keystroke to persistent encrypted local storage.</li>
+            <li>Leaving the screen midway or restarting the app automatically restores the exact draft upon returning.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Section: Procurement & 3-Way Matching -->
+      <h2 class="section-heading">3. Procurement & 3-Way Matching Engine</h2>
+      <p>
+        Prevents inventory shrinkage and over-billing through systematic checks before payment approvals:
+      </p>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>Document</th>
+              <th>Verification Criteria</th>
+              <th>Approver Role</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td><strong>Material Requisition (MR)</strong></td>
+              <td>Verifies requested quantity does not exceed overall BOQ structural estimates.</td>
+              <td>Project Manager / Quantity Surveyor</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td><strong>Purchase Order (PO)</strong></td>
+              <td>Approves rates, vendor terms, payment schedules, and delivery milestones.</td>
+              <td>Purchase Head / Director</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td><strong>Goods Receipt Note (GRN)</strong></td>
+              <td>Site security and storekeeper physical weighbridge check and visual inspection.</td>
+              <td>Site Storekeeper</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td><strong>3-Way Match Verification</strong></td>
+              <td>Auto-reconciliation: <code>PO Rate = Invoice Rate</code> & <code>GRN Quantity = Invoiced Quantity</code>.</td>
+              <td>Finance / Accounts Auditor</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: Work Orders -->
+      <h2 class="section-heading">4. Work Orders & Subcontractor Billing (RA Bills)</h2>
+      <p>
+        Subcontractors submit Running Account (RA) bills against certified completed milestones:
+      </p>
+      <ul>
+        <li><strong>Retention Deduction:</strong> Automatic 5% to 10% deduction held until the end of the defect liability period (DLP).</li>
+        <li><strong>Statutory Deductions:</strong> TDS under 194C (1% or 2%), GST TDS (2%), and labor cess (1%).</li>
+        <li><strong>Material Recovery:</strong> Cost of contractor-issued cement or steel deducted from gross payable bills.</li>
+      </ul>
+
+      <!-- Navigation Links -->
+      <div class="docs-footer-nav">
+        <a href="crm.html" class="footer-nav-link">
+          <span class="dir">Previous ➔</span>
+          <span class="title">CRM Suite Overview</span>
+        </a>
+        <a href="collaboration.html" class="footer-nav-link" style="text-align:right">
+          <span class="dir">Next Module ➔</span>
+          <span class="title">Chat, Meet & AI Transcription</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <footer class="global-footer">
+    <p>© 2026 NB Infra Projects LTD. Confidential & Proprietary.</p>
+  </footer>
+
+  <script src="assets/js/doc-app.js"></script>
+</body>
+</html>

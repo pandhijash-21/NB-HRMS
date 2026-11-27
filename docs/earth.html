@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NB Platform Documentation · NB Earth & Geospatial Telemetry</title>
+  <link rel="stylesheet" href="assets/css/doc-theme.css" />
+</head>
+<body>
+  <header class="top-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="mobile-toggle" aria-label="Toggle navigation">☰</button>
+      <a href="index.html" class="brand-group">
+        <div class="brand-badge">NB</div>
+        <div class="brand-titles">
+          <h1>NB INFRA PROJECTS LTD</h1>
+          <p>Enterprise Suite Documentation</p>
+        </div>
+      </a>
+    </div>
+    <div class="header-actions">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="docSearch" placeholder="Search Earth docs..." />
+      </div>
+      <a href="system-health.html" class="nav-pill-btn gold">🩺 Health Check</a>
+      <a href="api-reference.html" class="nav-pill-btn">API Specs</a>
+    </div>
+  </header>
+
+  <div class="app-container">
+    <aside class="docs-sidebar">
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Architecture & System</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="index.html"><span class="nav-icon">🏛️</span>Overview & Arch</a></li>
+          <li class="sidebar-nav-item"><a href="security-auth.html"><span class="nav-icon">🔐</span>Security, Auth & RBAC</a></li>
+          <li class="sidebar-nav-item"><a href="api-reference.html"><span class="nav-icon">⚡</span>API Reference</a></li>
+          <li class="sidebar-nav-item"><a href="deployment-devops.html"><span class="nav-icon">🚀</span>DevOps & Deployment</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Core Business Suites</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="hrms.html"><span class="nav-icon">👥</span>HRMS Suite</a></li>
+          <li class="sidebar-nav-item"><a href="crm.html"><span class="nav-icon">📈</span>CRM (Pre & Post-Sales)</a></li>
+          <li class="sidebar-nav-item"><a href="erp.html"><span class="nav-icon">🏗️</span>ERP & Infrastructure</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Realtime & Clients</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="collaboration.html"><span class="nav-icon">💬</span>Chat, Meet & AI STT</a></li>
+          <li class="sidebar-nav-item active"><a href="earth.html"><span class="nav-icon">🌍</span>NB Earth Geospatial</a></li>
+          <li class="sidebar-nav-item"><a href="flutter-mobile.html"><span class="nav-icon">📱</span>Flutter & Android Widget</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">System Tools</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="system-health.html"><span class="nav-icon">🩺</span>Live Health Check</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="docs-main-content">
+      <div class="breadcrumbs">
+        <a href="index.html">Documentation</a>
+        <span class="sep">/</span>
+        <a href="earth.html">Realtime & Clients</a>
+        <span class="sep">/</span>
+        <span>NB Earth & Geospatial Telemetry</span>
+      </div>
+
+      <h1 class="page-title">NB Earth & Geospatial Telemetry</h1>
+      <p class="page-lead">
+        A command-center visualizer uniting interactive 3D WebGL planet rendering, infrastructure project geospatial markers, live mobile worker GPS tracking, geofence polygon enforcement, and historical breadcrumb playback.
+      </p>
+
+      <!-- Grid Cards -->
+      <div class="grid-3">
+        <div class="feature-card cyan-border">
+          <div class="card-icon">🌐</div>
+          <div class="card-title">3D Earth Globe</div>
+          <p class="card-desc">Interactive WebGL sphere with realistic day/night textures, cloud layers, and camera targeting.</p>
+        </div>
+        <div class="feature-card gold-border">
+          <div class="card-icon">📍</div>
+          <div class="card-title">Infrastructure Asset Pins</div>
+          <p class="card-desc">Geocoded project sites, road contracts, real estate towers, and quarry concessions pinned globally.</p>
+        </div>
+        <div class="feature-card emerald-border">
+          <div class="card-icon">🛰️</div>
+          <div class="card-title">Live Tracking Hub</div>
+          <p class="card-desc">Real-time mobile worker positions, active trip polylines, battery telemetry, and geofence alerts.</p>
+        </div>
+      </div>
+
+      <!-- Section: 3D Globe Architecture -->
+      <h2 class="section-heading">1. 3D WebGL Globe Visualizer</h2>
+      <p>
+        Rendered natively in Flutter via <code>flutter_earth_globe</code> with asset fallbacks ensuring offline usability:
+      </p>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Layer Component</th>
+              <th>Asset Source / Engine</th>
+              <th>Behavior & Performance Optimization</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Base Earth Surface</strong></td>
+              <td>2K/4K diffuse surface map with local asset fallback (<code>assets/images/earth/</code>).</td>
+              <td>Hardware-accelerated texture mapping; cached in memory for zero-lag spinning.</td>
+            </tr>
+            <tr>
+              <td><strong>Atmospheric Glow</strong></td>
+              <td>Custom WebGL / Canvas shader layer.</td>
+              <td>Dynamically shifts color based on elevation and pitch angle.</td>
+            </tr>
+            <tr>
+              <td><strong>Point of Interest (POI) Pins</strong></td>
+              <td>Vector billboard markers rendered with depth sorting.</td>
+              <td>Pins scale dynamically; clicking reveals project details, photos, and current workforce count.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: Live Tracking Hub -->
+      <h2 class="section-heading">2. Live Workforce Tracking Hub</h2>
+      <p>
+        Found under the Tracking Hub module (<code>tracking_hub_screen.dart</code>), this interface serves as the operations control center for field operations:
+      </p>
+
+      <div class="diagram-box">
+        <div class="diagram-title">Geospatial Telemetry Processing</div>
+        <div class="flow-step-row">
+          <div class="flow-step">📱 Worker Smartphone (GPS)</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">📡 15s Location Ping (Encrypted)</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🗺️ Road Snap (OSRM Matcher)</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">⚡ Live Hub (Socket.IO Broadcast)</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🔔 Geofence In/Out Trigger</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="feature-card">
+          <div class="card-title">Stop & Idling Detection</div>
+          <p class="card-desc">
+            When GPS coordinates remain within a 25-meter radius for greater than 5 minutes, the system marks a stationary stop event, logging location name, duration, and engine idle status.
+          </p>
+        </div>
+        <div class="feature-card">
+          <div class="card-title">Geofence Compliance Monitoring</div>
+          <p class="card-desc">
+            Polygon geofences define approved project boundaries. If a tracked employee departs the designated zone during working hours, a real-time notification alert is posted to site supervisors.
+          </p>
+        </div>
+      </div>
+
+      <!-- Navigation Links -->
+      <div class="docs-footer-nav">
+        <a href="collaboration.html" class="footer-nav-link">
+          <span class="dir">Previous ➔</span>
+          <span class="title">Chat, Meet & AI STT</span>
+        </a>
+        <a href="security-auth.html" class="footer-nav-link" style="text-align:right">
+          <span class="dir">Next Module ➔</span>
+          <span class="title">Security, Auth & RBAC</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <footer class="global-footer">
+    <p>© 2026 NB Infra Projects LTD. Confidential & Proprietary.</p>
+  </footer>
+
+  <script src="assets/js/doc-app.js"></script>
+</body>
+</html>

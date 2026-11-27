@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NB Platform Documentation · HRMS Suite Deep Dive</title>
+  <link rel="stylesheet" href="assets/css/doc-theme.css" />
+</head>
+<body>
+  <header class="top-header">
+    <div style="display:flex;align-items:center;gap:14px">
+      <button class="mobile-toggle" aria-label="Toggle navigation">☰</button>
+      <a href="index.html" class="brand-group">
+        <div class="brand-badge">NB</div>
+        <div class="brand-titles">
+          <h1>NB INFRA PROJECTS LTD</h1>
+          <p>Enterprise Suite Documentation</p>
+        </div>
+      </a>
+    </div>
+    <div class="header-actions">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="docSearch" placeholder="Search HRMS docs..." />
+      </div>
+      <a href="system-health.html" class="nav-pill-btn gold">🩺 Health Check</a>
+      <a href="api-reference.html" class="nav-pill-btn">API Specs</a>
+    </div>
+  </header>
+
+  <div class="app-container">
+    <aside class="docs-sidebar">
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Architecture & System</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="index.html"><span class="nav-icon">🏛️</span>Overview & Arch</a></li>
+          <li class="sidebar-nav-item"><a href="security-auth.html"><span class="nav-icon">🔐</span>Security, Auth & RBAC</a></li>
+          <li class="sidebar-nav-item"><a href="api-reference.html"><span class="nav-icon">⚡</span>API Reference</a></li>
+          <li class="sidebar-nav-item"><a href="deployment-devops.html"><span class="nav-icon">🚀</span>DevOps & Deployment</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Core Business Suites</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item active"><a href="hrms.html"><span class="nav-icon">👥</span>HRMS Suite</a></li>
+          <li class="sidebar-nav-item"><a href="crm.html"><span class="nav-icon">📈</span>CRM (Pre & Post-Sales)</a></li>
+          <li class="sidebar-nav-item"><a href="erp.html"><span class="nav-icon">🏗️</span>ERP & Infrastructure</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">Realtime & Clients</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="collaboration.html"><span class="nav-icon">💬</span>Chat, Meet & AI STT</a></li>
+          <li class="sidebar-nav-item"><a href="earth.html"><span class="nav-icon">🌍</span>NB Earth Geospatial</a></li>
+          <li class="sidebar-nav-item"><a href="flutter-mobile.html"><span class="nav-icon">📱</span>Flutter & Android Widget</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-category">
+        <div class="sidebar-category-title">System Tools</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="system-health.html"><span class="nav-icon">🩺</span>Live Health Check</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="docs-main-content">
+      <div class="breadcrumbs">
+        <a href="index.html">Documentation</a>
+        <span class="sep">/</span>
+        <a href="hrms.html">Core Suites</a>
+        <span class="sep">/</span>
+        <span>Human Resource Management (HRMS)</span>
+      </div>
+
+      <h1 class="page-title">Human Resource Management System (HRMS)</h1>
+      <p class="page-lead">
+        The NB HRMS suite manages the complete workforce lifecycle from recruitment, biometric and geofenced attendance, to automated 7th Pay Commission payroll, GPS trip telemetry, and hierarchical approvals.
+      </p>
+
+      <!-- HRMS Component Grid -->
+      <div class="grid-3">
+        <div class="feature-card emerald-border">
+          <div class="card-icon">🪪</div>
+          <div class="card-title">Employee Master & KYC</div>
+          <p class="card-desc">Sequential ID sequences, encrypted Aadhaar/PAN, nominee records, and digital credential storage.</p>
+        </div>
+        <div class="feature-card cyan-border">
+          <div class="card-icon">⏱️</div>
+          <div class="card-title">Multi-Mode Attendance</div>
+          <p class="card-desc">eSSL hardware sync, eTimeOffice database bridge, geofencing, QR check-in, and Android Home Widget.</p>
+        </div>
+        <div class="feature-card gold-border">
+          <div class="card-icon">💰</div>
+          <div class="card-title">Payroll & 7th Pay Commission</div>
+          <p class="card-desc">Pay bands, DA, HRA, TA formulas, PF, ESIC, professional tax deductions, and automated PDF payslips.</p>
+        </div>
+      </div>
+
+      <!-- Section: Attendance Engine -->
+      <h2 class="section-heading">1. Attendance & Biometric Synchronization Engine</h2>
+      <p>
+        NB Platform attendance accommodates multiple operational realities: field construction sites, university campuses, and headquarters offices. Attendance events flow into a unified reconciliation pipeline:
+      </p>
+
+      <div class="diagram-box">
+        <div class="diagram-title">Attendance Ingestion Architecture</div>
+        <div class="flow-step-row">
+          <div class="flow-step">🏢 Biometric Clock (eSSL)</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">🔄 Tedious MSSQL Client</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">📱 Android 1-Tap Widget / App</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">📍 Geofence Validator</div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step">✅ Attendance Ingestion Service</div>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Attendance Method</th>
+              <th>Validation Mechanism</th>
+              <th>Offline Behavior</th>
+              <th>Primary Target Audience</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>eSSL Biometric / MSSQL Bridge</strong></td>
+              <td>Direct polling of eSSL MSSQL database on local network via <code>Tedious</code> driver.</td>
+              <td>Clocks store logs internally; synced automatically upon network restoration.</td>
+              <td>Factory, campus, and office headquarters personnel.</td>
+            </tr>
+            <tr>
+              <td><strong>Android Quick-Punch Widget</strong></td>
+              <td>1-tap punch via Android AppWidget using <code>WidgetSyncService</code> and encrypted token cache.</td>
+              <td>Enqueues punch locally if offline; synchronizes on next connectivity event.</td>
+              <td>Field supervisors, engineers, and mobile workforce.</td>
+            </tr>
+            <tr>
+              <td><strong>Geofenced Mobile Punch</strong></td>
+              <td>Verifies device coordinates are within radius of approved site or project polygon.</td>
+              <td>GPS coordinates cached with timestamp; server verifies against site bounds.</td>
+              <td>Civil site engineers, surveyors, and field workers.</td>
+            </tr>
+            <tr>
+              <td><strong>Dynamic QR Check-in</strong></td>
+              <td>Time-rotating cryptographic QR code on office tablet or display.</td>
+              <td>Requires real-time token validation against server clock.</td>
+              <td>Visitor reception and project site entry checkpoints.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: Trip Tracking -->
+      <h2 class="section-heading">2. GPS Tracking, Live Telemetry & Trip Management</h2>
+      <p>
+        For field engineers, survey teams, and transit vehicles, the system provides real-time location telemetry with automatic map matching and stop analysis:
+      </p>
+
+      <div class="grid-2">
+        <div class="feature-card">
+          <div class="card-title">Background GPS Foreground Service</div>
+          <p class="card-desc">
+            On native Android/iOS, a persistent background service (<code>background_tracking_service.dart</code>) acquires precise GPS coordinates at configurable intervals, streaming breadcrumb points to the backend even when the device screen is off.
+          </p>
+        </div>
+        <div class="feature-card">
+          <div class="card-title">OSRM Map Matching & Gap Detection</div>
+          <p class="card-desc">
+            Raw GPS breadcrumbs are processed through OSRM / Valhalla map-matching services to snap points to verified roadway centerlines, calculating real traveled kilometers, idling spots, and transit gap intervals.
+          </p>
+        </div>
+      </div>
+
+      <div class="callout warning">
+        <div class="callout-icon">⚠️</div>
+        <div>
+          <strong>Mid-Trip Session Security:</strong> In [auth.service.ts](file:///c:/Users/DELL/Desktop/dev/NB-HRMS/backend/src/modules/auth/auth.service.ts), if an employee has an active open trip record (<code>endTime: null</code>), the backend automatically refreshes their JWT and extends Redis session TTL upon polling, ensuring active field workers are never interrupted by standard session expirations while on duty.
+        </div>
+      </div>
+
+      <!-- Section: Payroll -->
+      <h2 class="section-heading">3. Payroll & 7th Pay Commission Engine</h2>
+      <p>
+        The payroll system supports institutional 7th Central Pay Commission (CPC) matrices alongside industrial contractor compensation schedules:
+      </p>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th>Calculation Formula / Rule</th>
+              <th>Statutory Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Basic Pay</strong></td>
+              <td>Assigned from 7th CPC Matrix (Pay Band & Grade Pay index).</td>
+              <td>Taxable Earnings</td>
+            </tr>
+            <tr>
+              <td><strong>Dearness Allowance (DA)</strong></td>
+              <td><code>Basic Pay × DA_Percentage</code> (adjusted bi-annually per government notifications).</td>
+              <td>Taxable Earnings</td>
+            </tr>
+            <tr>
+              <td><strong>House Rent Allowance (HRA)</strong></td>
+              <td>Tier-based percentage (X: 24%, Y: 16%, Z: 8% of Basic Pay).</td>
+              <td>Taxable Earnings (Exemption under 10(13A))</td>
+            </tr>
+            <tr>
+              <td><strong>Transport Allowance (TA)</strong></td>
+              <td>Fixed monthly allowance graded by employee classification + DA on TA.</td>
+              <td>Taxable Earnings</td>
+            </tr>
+            <tr>
+              <td><strong>Provident Fund (PF)</strong></td>
+              <td><code>12% of (Basic Pay + DA)</code>, capped per statutory guidelines.</td>
+              <td>Statutory Deduction</td>
+            </tr>
+            <tr>
+              <td><strong>Employee State Insurance (ESIC)</strong></td>
+              <td><code>0.75% Employee, 3.25% Employer</code> for gross salary under statutory threshold.</td>
+              <td>Statutory Deduction</td>
+            </tr>
+            <tr>
+              <td><strong>Professional Tax (PT)</strong></td>
+              <td>State-specific progressive slab deduction (e.g. Maharashtra, Gujarat, Delhi).</td>
+              <td>Statutory Deduction</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: Leave Management -->
+      <h2 class="section-heading">4. Leave Management & Policy Workflows</h2>
+      <p>
+        Leaves are categorized into Earned Leave (EL), Casual Leave (CL), Sick Leave (SL), Compensatory Off (CO), and Maternity/Paternity Leave. Applications undergo multi-tier approval:
+      </p>
+      <div class="flow-step-row" style="margin-bottom:24px">
+        <div class="flow-step">1. Employee Applies</div>
+        <div class="flow-arrow">➔</div>
+        <div class="flow-step">2. Reporting Manager (Review)</div>
+        <div class="flow-arrow">➔</div>
+        <div class="flow-step">3. HR Department (Audit)</div>
+        <div class="flow-arrow">➔</div>
+        <div class="flow-step">4. Institute / Org Head (Approval)</div>
+        <div class="flow-arrow">➔</div>
+        <div class="flow-step">5. Balance Deducted</div>
+      </div>
+
+      <!-- Navigation Links -->
+      <div class="docs-footer-nav">
+        <a href="index.html" class="footer-nav-link">
+          <span class="dir">Previous ➔</span>
+          <span class="title">System Overview & Arch</span>
+        </a>
+        <a href="crm.html" class="footer-nav-link" style="text-align:right">
+          <span class="dir">Next Module ➔</span>
+          <span class="title">CRM Pre & Post-Sales</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <footer class="global-footer">
+    <p>© 2026 NB Infra Projects LTD. Confidential & Proprietary.</p>
+  </footer>
+
+  <script src="assets/js/doc-app.js"></script>
+</body>
+</html>

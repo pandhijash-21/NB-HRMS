@@ -8,6 +8,10 @@ import '../../crm/data/crm_repository.dart';
 import '../domain/collab_models.dart';
 
 class CollabSocket {
+  static final CollabSocket instance = CollabSocket._internal();
+  factory CollabSocket() => instance;
+  CollabSocket._internal();
+
   io.Socket? _socket;
   Timer? _heartbeat;
   String? _token;
@@ -23,6 +27,19 @@ class CollabSocket {
   final _pushNotify = <void Function(Map<String, dynamic>)>[];
   final _incomingCall = <void Function(Map<String, dynamic>)>[];
   final _permissionsUpdated = <void Function(Map<String, dynamic>)>[];
+  final _sessionDisplaced = <void Function(String reason)>[];
+
+  void onSessionDisplaced(void Function(String reason) cb) {
+    if (!_sessionDisplaced.contains(cb)) _sessionDisplaced.add(cb);
+  }
+
+  void offSessionDisplaced([void Function(String reason)? cb]) {
+    if (cb != null) {
+      _sessionDisplaced.remove(cb);
+    } else {
+      _sessionDisplaced.clear();
+    }
+  }
 
   io.Socket connect({required String token}) {
     if (_socket != null && _token == token) {
@@ -169,6 +186,17 @@ class CollabSocket {
         cb(row);
       }
     });
+    void handleDisplaced(dynamic data) {
+      String reason = 'Session displaced by another sign-in. Please log in again.';
+      if (data is Map && data['reason'] != null) {
+        reason = data['reason'].toString();
+      }
+      for (final cb in List.of(_sessionDisplaced)) {
+        cb(reason);
+      }
+    }
+    socket.on('session_displaced', handleDisplaced);
+    socket.on('session:displaced', handleDisplaced);
     socket.connect();
     _heartbeat = Timer.periodic(const Duration(seconds: 20), (_) {
       if (socket.connected) socket.emit('heartbeat');
@@ -471,6 +499,17 @@ class CollabSocket {
     _socket?.on('meeting_end_progress', (data) {
       if (data is Map) cb(Map<String, dynamic>.from(data));
     });
+  }
+
+  void disconnect() {
+    _heartbeat?.cancel();
+    _heartbeat = null;
+    _token = null;
+    _joinedMeetingId = null;
+    _joinedChannelId = null;
+    _socket?.disconnect();
+    _socket?.dispose();
+    _socket = null;
   }
 
   void dispose() {

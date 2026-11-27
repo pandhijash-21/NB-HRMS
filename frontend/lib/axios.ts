@@ -33,13 +33,25 @@ api.interceptors.response.use(
     if (!hadToken) {
       return Promise.reject(error);
     }
-    const message = String(error.response?.data?.message ?? "");
+    const errorData = error.response?.data;
+    const message = String(errorData?.message ?? errorData?.error ?? "");
+    const isDisplaced =
+      message.toLowerCase().includes("displaced") ||
+      message.toLowerCase().includes("another device") ||
+      message.toLowerCase().includes("another sign-in");
+
     if (
+      isDisplaced ||
       message.includes("Session expired") ||
-      message.includes("logged in from another device") ||
       message.includes("Invalid or expired")
     ) {
-      await signOut({ callbackUrl: "/login?reason=session" });
+      try {
+        localStorage.removeItem("hrms_token");
+        sessionStorage.clear();
+      } catch (_) {}
+      await signOut({
+        callbackUrl: isDisplaced ? "/login?reason=displaced" : "/login?reason=session",
+      });
     }
     return Promise.reject(error);
   },

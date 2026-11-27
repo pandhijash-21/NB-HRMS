@@ -9,6 +9,7 @@ import '../../../../core/services/background_tracking_service.dart';
 import '../../../../core/services/web_live_tracking_service.dart';
 import '../../../../core/services/widget_sync_service.dart';
 import '../../../../core/storage/secure_storage_service.dart';
+import '../../../collaboration/data/collab_socket.dart';
 import '../../data/auth_repository.dart';
 import '../../domain/permissions.dart';
 import 'auth_event.dart';
@@ -30,6 +31,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         super(const AuthState.unknown()) {
     _gate.bind(({reason}) async {
       add(AuthUnauthorizedKicked(reason: reason));
+    });
+    CollabSocket.instance.onSessionDisplaced((reason) {
+      _gate.notify(reason: reason);
     });
 
     on<AuthBootstrapRequested>(_onBootstrap);
@@ -129,6 +133,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       if (!restored.isFirstLogin) {
         _startSessionWatch();
       }
+      CollabSocket.instance.connect(token: restored.token);
       add(const AuthPermissionsRefreshRequested());
 
       if (!restored.isFirstLogin) {
@@ -210,6 +215,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       ));
 
       _startSessionWatch();
+      CollabSocket.instance.connect(token: result.token);
       await WebLiveTrackingService.start();
       unawaited(startBackgroundTracking());
     } on ApiException catch (e) {
@@ -428,6 +434,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     // If login is currently in progress or already unauthenticated, never kick or interrupt!
     if (state.isSubmitting || state.status == AuthStatus.unauthenticated) return;
     final wasOnTrip = state.user?.onTrip == true;
+    CollabSocket.instance.disconnect();
     WebLiveTrackingService.stop(preventRestart: true);
     unawaited(stopBackgroundTracking());
     _stopSessionWatch();
@@ -488,6 +495,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         // Best-effort remote logout; always clear local session regardless of remote errors.
       }
     }
+    CollabSocket.instance.disconnect();
     WebLiveTrackingService.stop(preventRestart: true);
     unawaited(stopBackgroundTracking());
     _stopSessionWatch();

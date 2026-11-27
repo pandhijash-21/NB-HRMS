@@ -8,6 +8,7 @@ import '../../../core/network/dio_client.dart' show isJwtExpired;
 import '../../../core/services/background_tracking_service.dart';
 import '../../../core/services/web_live_tracking_service.dart';
 import '../../../core/services/widget_sync_service.dart';
+import '../../collaboration/data/collab_socket.dart';
 import '../domain/auth_user.dart';
 import '../domain/permissions.dart';
 import 'auth_providers.dart';
@@ -89,7 +90,13 @@ class AuthNotifier extends Notifier<AuthState> {
   AuthState build() {
     final gate = ref.read(unauthorizedGateProvider);
     gate.bind(_handleUnauthorized);
+    final socket = CollabSocket.instance;
+    void onDisplaced(String reason) {
+      _handleUnauthorized(reason: reason);
+    }
+    socket.onSessionDisplaced(onDisplaced);
     ref.onDispose(() {
+      socket.offSessionDisplaced(onDisplaced);
       gate.unbind(_handleUnauthorized);
       _stopSessionWatch();
     });
@@ -289,6 +296,7 @@ class AuthNotifier extends Notifier<AuthState> {
       needsEmergencyContact: restored.needsEmergencyContact,
     );
     _startSessionWatch();
+    CollabSocket.instance.connect(token: restored.token);
     unawaited(refreshPermissions());
     // Refresh gate from server (emails may have been verified elsewhere).
     if (!restored.isFirstLogin) {
@@ -318,6 +326,7 @@ class AuthNotifier extends Notifier<AuthState> {
     // Ignore late 401s after user already signed out / while submitting.
     if (state.status == AuthStatus.unauthenticated || state.isSubmitting) return;
     final repo = ref.read(authRepositoryProvider);
+    CollabSocket.instance.disconnect();
     WebLiveTrackingService.stop(preventRestart: true);
     unawaited(stopBackgroundTracking());
     _stopSessionWatch();
@@ -420,6 +429,7 @@ class AuthNotifier extends Notifier<AuthState> {
       ref.invalidate(profileProvider);
       ref.invalidate(activeProfileEmployeeIdProvider);
       _startSessionWatch();
+      CollabSocket.instance.connect(token: result.token);
       await WebLiveTrackingService.start();
       unawaited(startBackgroundTracking());
       return true;
@@ -545,6 +555,7 @@ class AuthNotifier extends Notifier<AuthState> {
     } catch (_) {
       // Best-effort remote logout; always clear local session regardless of remote errors.
     }
+    CollabSocket.instance.disconnect();
     WebLiveTrackingService.stop(preventRestart: true);
     _stopSessionWatch();
     await ref.read(secureStorageProvider).clearRememberedCredentials();

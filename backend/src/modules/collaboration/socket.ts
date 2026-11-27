@@ -91,6 +91,13 @@ export function emitPermissionsUpdated(payload: { roleId?: string; moduleKey?: s
   io.emit('permissions_updated', { ...payload, at: Date.now() });
 }
 
+export function emitSessionDisplaced(userId: string, reason: string) {
+  const io = ioRef;
+  if (!io) return;
+  io.to(`user:${userId}`).emit('session_displaced', { reason, at: Date.now() });
+  io.to(`user:${userId}`).emit('session:displaced', { reason, at: Date.now() });
+}
+
 export function emitCrmUpdate(payload: Record<string, unknown>) {
   const io = ioRef;
   if (!io) return;

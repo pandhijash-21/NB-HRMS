@@ -28,8 +28,9 @@ eventsRouter.get('/stream', (req, res, next) => {
   res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering
   res.flushHeaders();
 
+  const client = { userId, employeeId, role, companyAdminGranted, res };
   // Register client
-  sseService.add(userId, { userId, employeeId, role, companyAdminGranted, res });
+  sseService.add(userId, client);
 
   // Send initial ping so client knows connection is live
   res.write(`event: connected\ndata: ${JSON.stringify({ userId, employeeId, role })}\n\n`);
@@ -42,6 +43,6 @@ eventsRouter.get('/stream', (req, res, next) => {
   // Cleanup on disconnect
   req.on('close', () => {
     clearInterval(heartbeat);
-    sseService.remove(userId);
+    sseService.remove(userId, client);
   });
 });

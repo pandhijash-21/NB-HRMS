@@ -95,6 +95,18 @@ export function TopbarActions({ isAdmin = false }: TopbarActionsProps) {
           });
         }
       : undefined,
+
+    onSessionDisplaced: (data) => {
+      toast.error("Signed Out", {
+        description: data?.reason || "This account was signed in on another device or browser.",
+        duration: 6000,
+      });
+      try {
+        localStorage.removeItem("hrms_token");
+        sessionStorage.clear();
+      } catch (_) {}
+      signOut({ callbackUrl: "/login?reason=displaced" });
+    },
   });
 
   return (

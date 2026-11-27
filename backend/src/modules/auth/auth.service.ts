@@ -33,6 +33,7 @@ import {
 import { parseModules } from '../platform/platform.service';
 import { familyService } from '../personal-education/family.service';
 import { sseService } from '../events/sse.service';
+import { emitSessionDisplaced } from '../collaboration/socket';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
 
@@ -450,11 +451,13 @@ export const authService = {
     // 5. Record exclusive session in Redis (replaces and invalidates any previous device immediately).
     try {
       await storeSession(user.id, user.roleId, token, sessionTtl, true);
-      // Proactively notify previous active device over SSE if connected
+      // Proactively notify previous active device over SSE and Socket.io if connected
       try {
-        sseService.toUser(user.id, 'session:displaced', {
+        const displacePayload = {
           reason: 'Session displaced by another sign-in. Please log in again.',
-        });
+        };
+        sseService.toUser(user.id, 'session:displaced', displacePayload);
+        emitSessionDisplaced(user.id, displacePayload.reason);
       } catch (_) {}
     } catch (err) {
       console.error('Failed to store login session in Redis:', err);

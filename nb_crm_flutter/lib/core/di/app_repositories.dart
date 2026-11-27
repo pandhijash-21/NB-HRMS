@@ -40,6 +40,7 @@ class AppRepositories {
     unauthorizedGate = UnauthorizedGate();
     dioClient = DioClient(
       readToken: storage.readToken,
+      readTokenCached: () => storage.currentCachedToken,
       unauthorizedGate: unauthorizedGate,
       baseUrl: AppConfig.apiBaseUrl,
     );

@@ -60,7 +60,7 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
     if (d['contractorTypeCode'] != null) contractorTypeCode = d['contractorTypeCode'].toString();
   }
 
-  void autoSave() {
+  void autoSave({bool immediate = false}) {
     FormDraftService.instance.autoSave(
       formId: draftKey,
       data: {
@@ -83,6 +83,7 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
         'tdsCode': tdsCode,
         'contractorTypeCode': contractorTypeCode,
       },
+      immediate: immediate,
     );
   }
 
@@ -117,7 +118,12 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
             );
           }
 
-          return AlertDialog(
+          return PopScope(
+            canPop: true,
+            onPopInvokedWithResult: (didPop, _) {
+              if (didPop) autoSave(immediate: true);
+            },
+            child: AlertDialog(
             title: const Text('Add vendor'),
             content: SizedBox(
               width: 560,
@@ -424,6 +430,7 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
                     : const Text('Add vendor'),
               ),
             ],
+          ),
           );
         },
       );

@@ -9,6 +9,17 @@ class WidgetSyncService {
   static const String appGroupId = 'group.com.nbsince1946.hrms';
 
   static bool _initialized = false;
+  static Uri? pendingWidgetLaunchUri;
+
+  static void setPendingLaunchUri(Uri uri) {
+    pendingWidgetLaunchUri = uri;
+  }
+
+  static Uri? consumePendingLaunchUri() {
+    final u = pendingWidgetLaunchUri;
+    pendingWidgetLaunchUri = null;
+    return u;
+  }
 
   /// Initializes widget group and registers click listener
   static Future<void> init({Function(Uri? uri)? onWidgetClick}) async {
@@ -22,12 +33,14 @@ class WidgetSyncService {
       // Check if launched directly from widget click
       final initialUri = await HomeWidget.initiallyLaunchedFromHomeWidget();
       if (initialUri != null) {
+        setPendingLaunchUri(initialUri);
         onWidgetClick?.call(initialUri);
       }
 
       // Listen for runtime clicks
       HomeWidget.widgetClicked.listen((Uri? uri) {
         if (uri != null) {
+          setPendingLaunchUri(uri);
           onWidgetClick?.call(uri);
         }
       });

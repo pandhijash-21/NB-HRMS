@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -7,6 +10,28 @@ import 'api_envelope.dart';
 import 'app_config.dart';
 import 'transport_crypto.dart';
 import '../services/branding_config.dart';
+
+/// Checks whether a JWT token string has an `exp` claim and has expired.
+/// Returns false if the token cannot be parsed as a 3-part JWT.
+bool isJwtExpired(String? token) {
+  if (token == null || token.trim().isEmpty) return false;
+  try {
+    final parts = token.trim().split('.');
+    if (parts.length != 3) return false;
+    final normalized = base64Url.normalize(parts[1]);
+    final payloadString = utf8.decode(base64Url.decode(normalized));
+    final payload = jsonDecode(payloadString);
+    if (payload is Map && payload.containsKey('exp')) {
+      final exp = payload['exp'];
+      if (exp is num) {
+        final expDate = DateTime.fromMillisecondsSinceEpoch(exp.toInt() * 1000);
+        // Treat as expired if current time is at or beyond expiry (with 5-second buffer)
+        return DateTime.now().isAfter(expDate.subtract(const Duration(seconds: 5)));
+      }
+    }
+  } catch (_) {}
+  return false;
+}
 
 /// Mutable hook so [DioClient] can notify auth without circular construction.
 class UnauthorizedGate {
@@ -25,9 +50,9 @@ class UnauthorizedGate {
 
   Future<void> notify({String? reason}) async {
     final now = DateTime.now();
-    // Debounce notifications within 2 seconds so burst 401s don't trigger repeated kick logic
+    // Debounce notifications within 1.5 seconds so burst 401s don't trigger repeated kick logic
     if (_lastNotifiedAt != null &&
-        now.difference(_lastNotifiedAt!).inMilliseconds < 2000) {
+        now.difference(_lastNotifiedAt!).inMilliseconds < 1500) {
       return;
     }
     _lastNotifiedAt = now;
@@ -44,7 +69,8 @@ class UnauthorizedGate {
 class DioClient {
   DioClient({
     required Future<String?> Function() readToken,
-    required UnauthorizedGate unauthorizedGate,
+    required this.unauthorizedGate,
+    this.readTokenCached,
     String? baseUrl,
   }) {
     dio = Dio(
@@ -64,12 +90,39 @@ class DioClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
+          final path = options.path;
+          final isAuthPublic = path.contains('auth/login') ||
+              path.contains('auth/forgot-password') ||
+              path.contains('auth/release-session');
+          final isGuestMeet = options.extra['isGuest'] == true ||
+              (path.contains('meet') && options.extra['bearer'] != null);
+
           final extraToken = options.extra['bearer'];
           final token = extraToken is String && extraToken.isNotEmpty
               ? extraToken
               : await readToken();
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
+
+            // Proactively detect expired JWT on authenticated calls
+            if (!isAuthPublic && !isGuestMeet && isJwtExpired(token)) {
+              AppLogger.network.w('Intercepted expired token for $path');
+              unawaited(unauthorizedGate.notify(
+                reason: 'Session expired. Please log in again.',
+              ));
+              return handler.reject(
+                DioException(
+                  requestOptions: options,
+                  error: 'Session expired. Please log in again.',
+                  type: DioExceptionType.badResponse,
+                  response: Response(
+                    requestOptions: options,
+                    statusCode: 401,
+                    data: {'error': 'Session expired. Please log in again.'},
+                  ),
+                ),
+              );
+            }
           }
           if (BrandingConfig.hasActiveBypass && BrandingConfig.bypassToken != null) {
             options.headers['x-maintenance-bypass'] = BrandingConfig.bypassToken;
@@ -130,31 +183,19 @@ class DioClient {
           final isAuthPublic = path.contains('auth/login') ||
               path.contains('auth/forgot-password') ||
               path.contains('auth/release-session');
-          if (status == 401 && !isAuthPublic) {
-            // Check if the 401 was for the CURRENT active session.
-            // If the request was made with an obsolete, stale or null token, do NOT kick the active session!
-            final reqAuth = error.requestOptions.headers['Authorization']?.toString();
-            final reqToken = reqAuth != null && reqAuth.startsWith('Bearer ')
-                ? reqAuth.substring(7).trim()
-                : null;
-            final currentToken = (await readToken())?.trim();
+          final isGuestMeet = error.requestOptions.extra['isGuest'] == true ||
+              (path.contains('meet') && error.requestOptions.extra['bearer'] != null);
 
-            if (currentToken != null && currentToken.isNotEmpty) {
-              if (reqToken != null && reqToken == currentToken) {
-                // Extract server error message if available
-                String? serverMessage;
-                final resData = error.response?.data;
-                if (resData is Map) {
-                  serverMessage = resData['error']?.toString() ??
-                      resData['message']?.toString();
-                }
-                await unauthorizedGate.notify(reason: serverMessage);
-              } else {
-                AppLogger.network.w(
-                  'Ignored 401 on $path because request token does not match current active token',
-                );
-              }
+          if (status == 401 && !isAuthPublic && !isGuestMeet) {
+            String? serverMessage;
+            final resData = error.response?.data;
+            if (resData is Map) {
+              serverMessage = resData['error']?.toString() ??
+                  resData['message']?.toString();
             }
+            await unauthorizedGate.notify(
+              reason: serverMessage ?? 'Session expired. Please log in again.',
+            );
           }
           handler.next(error);
         },
@@ -163,6 +204,8 @@ class DioClient {
   }
 
   late final Dio dio;
+  final UnauthorizedGate unauthorizedGate;
+  final String? Function()? readTokenCached;
 
   String get baseUrl => dio.options.baseUrl;
 
@@ -332,14 +375,34 @@ class DioClient {
   ApiException _mapDio(DioException e) {
     final path = e.requestOptions.path;
     final data = e.response?.data;
+    final status = e.response?.statusCode;
+
+    // Direct 401 Unauthorized handling: always clear, specific session expired message
+    if (status == 401) {
+      if (data is Map) {
+        final error = data['error'];
+        if (error is String && error.isNotEmpty) {
+          return ApiException(error, statusCode: 401);
+        }
+        final message = data['message'];
+        if (message is String && message.isNotEmpty) {
+          return ApiException(message, statusCode: 401);
+        }
+      }
+      return const ApiException(
+        'Your session has expired. Please log in again.',
+        statusCode: 401,
+      );
+    }
+
     if (data is Map) {
       final error = data['error'];
       if (error is String && error.isNotEmpty) {
-        return ApiException(error, statusCode: e.response?.statusCode);
+        return ApiException(error, statusCode: status);
       }
       final message = data['message'];
       if (message is String && message.isNotEmpty) {
-        return ApiException(message, statusCode: e.response?.statusCode);
+        return ApiException(message, statusCode: status);
       }
     }
 
@@ -347,16 +410,35 @@ class DioClient {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
+        final cached = readTokenCached?.call();
+        if (cached != null && isJwtExpired(cached)) {
+          unawaited(unauthorizedGate.notify(
+            reason: 'Session expired. Please log in again.',
+          ));
+          return const ApiException(
+            'Your session has expired. Please log in again.',
+            statusCode: 401,
+          );
+        }
         return const ApiException(
           'Connection timed out. Check that the API server is running.',
         );
       case DioExceptionType.connectionError:
+        final cached = readTokenCached?.call();
+        if (cached != null && isJwtExpired(cached)) {
+          unawaited(unauthorizedGate.notify(
+            reason: 'Session expired. Please log in again.',
+          ));
+          return const ApiException(
+            'Your session has expired. Please log in again.',
+            statusCode: 401,
+          );
+        }
         final url = dio.options.baseUrl;
         return ApiException(
           'Unable to reach server at $url. If running locally, check that the backend is started, or switch to the Live Server.',
         );
       default:
-        final status = e.response?.statusCode;
         if (status == 404 && (path.contains('subtasks') || path.contains('boq') || path.contains('erp/resources'))) {
           return const ApiException(
             'API not found on this server. In debug, use local backend (127.0.0.1:4000) or deploy the latest backend.',

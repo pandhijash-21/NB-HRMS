@@ -59,6 +59,7 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
   void initState() {
     super.initState();
     _tenderNoCtrl.addListener(_autoSaveDraft);
+    _createdByCtrl.addListener(_autoSaveDraft);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final name = context.read<AuthBloc>().state.user?.name;
       if (name != null && _createdByCtrl.text.isEmpty) {
@@ -68,7 +69,7 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
     });
   }
 
-  void _autoSaveDraft() {
+  void _autoSaveDraft({bool immediate = false}) {
     if (_saving || _loadingInitial) return;
     final data = {
       'tenderNo': _tenderNoCtrl.text.trim(),
@@ -86,6 +87,7 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
       formId: 'erp_tender',
       entityId: widget.id,
       data: data,
+      immediate: immediate,
     );
   }
 
@@ -177,6 +179,7 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     _tenderNoCtrl.dispose();
     _createdByCtrl.dispose();
     super.dispose();
@@ -220,6 +223,7 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
         _endDate = picked;
       }
     });
+    _autoSaveDraft();
   }
 
   Future<void> _onProjectChanged(String? id) async {
@@ -230,6 +234,7 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
       _activityName = null;
       _boqActivities = [];
     });
+    _autoSaveDraft();
     if (id != null && !_projectTowers.containsKey(id)) {
       try {
         final towers = await context.read<ProjectRepository>().listTowers(id);
@@ -251,6 +256,7 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
       _activityName = null;
       _boqActivities = [];
     });
+    _autoSaveDraft();
     if (id == null || id.isEmpty) return;
     try {
       final acts = await context.read<TenderRepository>().activitiesFromBoq(id);
@@ -290,6 +296,7 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
           ...preview,
         ];
       });
+      _autoSaveDraft();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
@@ -507,7 +514,12 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
     final towers = _projectId == null ? const <ErpProjectTower>[] : (_projectTowers[_projectId] ?? const <ErpProjectTower>[]);
     final total = _lines.fold(0.0, (s, l) => s + l.computedAmount);
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _autoSaveDraft(immediate: true);
+      },
+      child: Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
       appBar: AppBar(
         title: Text(widget.isEdit ? 'Edit Tender' : 'New Tender'),
@@ -549,6 +561,7 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
                     _loadingInitial
                         ? const LinearProgressIndicator()
                         : DropdownButtonFormField<String>(
+                            key: ValueKey('project_$_projectId'),
                             initialValue: _projectId,
                             isExpanded: true,
                             decoration: _dec('Project', required: true, hint: 'Select project'),
@@ -739,6 +752,7 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
                 total: total,
                 onAmountChanged: (i, amount) {
                   setState(() => _lines[i] = _lines[i].copyWith(amount: amount));
+                  _autoSaveDraft();
                 },
                 onRateChanged: (i, rate) {
                   setState(() {
@@ -746,8 +760,12 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
                     final amt = l.quantity != null ? l.quantity! * rate : rate;
                     _lines[i] = l.copyWith(rate: rate, amount: amt);
                   });
+                  _autoSaveDraft();
                 },
-                onRemove: (i) => setState(() => _lines.removeAt(i)),
+                onRemove: (i) {
+                  setState(() => _lines.removeAt(i));
+                  _autoSaveDraft();
+                },
               ),
           ],
         ),
@@ -821,8 +839,9 @@ class _TenderFormScreenState extends State<TenderFormScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _LinesTable extends StatelessWidget {

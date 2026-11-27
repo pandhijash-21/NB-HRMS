@@ -301,7 +301,7 @@ Future<void> showApplyWfhDialog(
     }
   }
 
-  void autoSave() {
+  void autoSave({bool immediate = false}) {
     FormDraftService.instance.autoSave(
       formId: draftKey,
       data: {
@@ -311,6 +311,7 @@ Future<void> showApplyWfhDialog(
         'fromDate': fromDate.toIso8601String(),
         'toDate': toDate.toIso8601String(),
       },
+      immediate: immediate,
     );
   }
 
@@ -327,7 +328,12 @@ Future<void> showApplyWfhDialog(
           final screenWidth = MediaQuery.of(ctx).size.width;
           final dialogWidth = (screenWidth * 0.92).clamp(340.0, 720.0);
 
-          return AlertDialog(
+          return PopScope(
+            canPop: true,
+            onPopInvokedWithResult: (didPop, _) {
+              if (didPop) autoSave(immediate: true);
+            },
+            child: AlertDialog(
             backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             titlePadding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
@@ -860,6 +866,7 @@ Future<void> showApplyWfhDialog(
                     : const Text('Submit WFH Request', style: TextStyle(fontWeight: FontWeight.w700)),
               ),
             ],
+          ),
           );
         },
       );

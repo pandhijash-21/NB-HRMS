@@ -61,7 +61,7 @@ class _TowerFormScreenState extends State<TowerFormScreen> {
     });
   }
 
-  void _autoSaveDraft() {
+  void _autoSaveDraft({bool immediate = false}) {
     if (_saving) return;
     final data = {
       'name': _name.text.trim(),
@@ -78,6 +78,7 @@ class _TowerFormScreenState extends State<TowerFormScreen> {
       formId: 'erp_tower_${widget.projectId}',
       entityId: widget.towerId,
       data: data,
+      immediate: immediate,
     );
   }
 
@@ -138,6 +139,7 @@ class _TowerFormScreenState extends State<TowerFormScreen> {
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     _name.dispose();
     _phase.dispose();
     _basements.dispose();
@@ -185,7 +187,10 @@ class _TowerFormScreenState extends State<TowerFormScreen> {
               dense: true,
               title: Text(_hasGround ? 'Flats on ground (floor 0)' : 'Parking on ground'),
               value: _hasGround,
-              onChanged: (v) => setState(() => _hasGround = v),
+              onChanged: (v) {
+                setState(() => _hasGround = v);
+                _autoSaveDraft();
+              },
             ),
           ),
           const Tooltip(
@@ -246,7 +251,12 @@ class _TowerFormScreenState extends State<TowerFormScreen> {
             ? 'floors 0–${floors - 1}'
             : 'floors 1–$floors';
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        _autoSaveDraft(immediate: true);
+      },
+      child: Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
       appBar: AppBar(
         backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
@@ -396,7 +406,10 @@ class _TowerFormScreenState extends State<TowerFormScreen> {
                               label: 'Status',
                               value: _statusCode,
                               required: true,
-                              onChanged: (v) => setState(() => _statusCode = v),
+                              onChanged: (v) {
+                                setState(() => _statusCode = v);
+                                _autoSaveDraft();
+                              },
                             ),
                           ),
                           cell(_hasGroundField()),
@@ -416,6 +429,7 @@ class _TowerFormScreenState extends State<TowerFormScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 }

@@ -48,7 +48,7 @@ class _BoqFormScreenState extends State<BoqFormScreen> {
     });
   }
 
-  void _autoSaveDraft() {
+  void _autoSaveDraft({bool immediate = false}) {
     if (_saving || _loading) return;
     final data = {
       'boqNo': _boqNoCtrl.text.trim(),
@@ -61,6 +61,7 @@ class _BoqFormScreenState extends State<BoqFormScreen> {
       formId: 'erp_boq',
       entityId: widget.id,
       data: data,
+      immediate: immediate,
     );
   }
 
@@ -140,6 +141,7 @@ class _BoqFormScreenState extends State<BoqFormScreen> {
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     _boqNoCtrl.dispose();
     _titleCtrl.dispose();
     super.dispose();
@@ -203,7 +205,12 @@ class _BoqFormScreenState extends State<BoqFormScreen> {
       );
     }
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        _autoSaveDraft(immediate: true);
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(widget.isEdit ? 'Edit BOQ' : 'BOQ Form'),
         leading: const AppBackButton(fallbackLocation: '/erp/boq'),
@@ -256,19 +263,26 @@ class _BoqFormScreenState extends State<BoqFormScreen> {
                         Radio<String>(
                           value: 'CURRENT_RATE',
                           groupValue: _rateSource,
-                          onChanged: (v) => setState(() => _rateSource = v!),
+                          onChanged: (v) {
+                            setState(() => _rateSource = v!);
+                            _autoSaveDraft();
+                          },
                         ),
                         const Text('Current Rate'),
                         Radio<String>(
                           value: 'ESTIMATED_RATE',
                           groupValue: _rateSource,
-                          onChanged: (v) => setState(() => _rateSource = v!),
+                          onChanged: (v) {
+                            setState(() => _rateSource = v!);
+                            _autoSaveDraft();
+                          },
                         ),
                         const Text('Estimated Rate'),
                       ],
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
+                      key: ValueKey('proj_$_projectId'),
                       initialValue: _projectId,
                       decoration: _dec('Project', required: true),
                       items: _projects
@@ -277,7 +291,10 @@ class _BoqFormScreenState extends State<BoqFormScreen> {
                                 child: Text(p.name),
                               ))
                           .toList(),
-                      onChanged: (v) => setState(() => _projectId = v),
+                      onChanged: (v) {
+                        setState(() => _projectId = v);
+                        _autoSaveDraft();
+                      },
                       validator: (v) => v == null ? 'Required' : null,
                     ),
                   ],
@@ -298,6 +315,7 @@ class _BoqFormScreenState extends State<BoqFormScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 }

@@ -109,7 +109,12 @@ void main() async {
   if (!kIsWeb) {
     unawaited(WidgetSyncService.init(onWidgetClick: (uri) {
       if (uri != null) {
-        router.go('/attendance');
+        WidgetSyncService.setPendingLaunchUri(uri);
+        final action = uri.queryParameters['action'] ?? 'punch';
+        if (authBloc.state.isAuthenticated) {
+          WidgetSyncService.consumePendingLaunchUri();
+          router.go('/attendance?action=$action&source=widget');
+        }
       }
     }));
   }
@@ -184,6 +189,13 @@ class NbCrmApp extends StatelessWidget {
                 listenWhen: (previous, current) => previous.status != current.status,
                 listener: (_, state) {
                   _syncWebSplash(state.status);
+                  if (state.status == AuthStatus.authenticated) {
+                    final pending = WidgetSyncService.consumePendingLaunchUri();
+                    if (pending != null) {
+                      final action = pending.queryParameters['action'] ?? 'punch';
+                      router.go('/attendance?action=$action&source=widget');
+                    }
+                  }
                 },
                 buildWhen: (previous, current) =>
                     previous.status != current.status ||

@@ -197,10 +197,14 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
   void initState() {
     super.initState();
     _prNoCtrl.addListener(_autoSaveDraft);
+    for (final l in _lines) {
+      l.qtyCtrl.addListener(_autoSaveDraft);
+      l.remarkCtrl.addListener(_autoSaveDraft);
+    }
     _bootstrap();
   }
 
-  void _autoSaveDraft() {
+  void _autoSaveDraft({bool immediate = false}) {
     if (_saving || _loading) return;
     final data = {
       'prNumber': _prNoCtrl.text.trim(),
@@ -219,6 +223,7 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
       formId: 'erp_purchase_request',
       entityId: widget.id,
       data: data,
+      immediate: immediate,
     );
   }
 
@@ -291,6 +296,7 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     _prNoCtrl.dispose();
     for (final l in _lines) {
       l.dispose();
@@ -383,6 +389,7 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
         _storeId = linked.first.id;
       }
     });
+    _autoSaveDraft();
   }
 
   void _applyMaterial(_PrLineDraft line, ErpMaterial? m) {
@@ -401,6 +408,7 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
       line.sizeCode = m.sizeCode ?? m.size;
       line.size = m.size ?? m.sizeCode;
     });
+    _autoSaveDraft();
   }
 
   Future<void> _pickDate({required bool requiredBy}) async {
@@ -419,6 +427,7 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
         _prDate = picked;
       }
     });
+    _autoSaveDraft();
   }
 
   Future<void> _save({required bool submit}) async {
@@ -487,7 +496,12 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
         ? _stores
         : _stores.where((s) => s.propertyId == null || s.propertyId == _propertyId).toList();
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _autoSaveDraft(immediate: true);
+      },
+      child: Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text(widget.isEdit ? 'Purchase Request' : 'New Purchase Request'),
@@ -531,17 +545,24 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
                       category: kPrType,
                       label: 'PR Type',
                       value: _prTypeCode,
-                      onChanged: (v) => setState(() => _prTypeCode = v),
+                      onChanged: (v) {
+                        setState(() => _prTypeCode = v);
+                        _autoSaveDraft();
+                      },
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
-                      value: _projectId,
+                      key: ValueKey('project_$_projectId'),
+                      initialValue: _projectId,
                       decoration: const InputDecoration(labelText: 'Project', border: OutlineInputBorder()),
                       items: [
                         const DropdownMenuItem(value: null, child: Text('Select project')),
                         ..._projects.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))),
                       ],
-                      onChanged: (v) => setState(() => _projectId = v),
+                      onChanged: (v) {
+                        setState(() => _projectId = v);
+                        _autoSaveDraft();
+                      },
                     ),
                     const SizedBox(height: 10),
                     ActivityDropdownWithCreate(
@@ -553,11 +574,17 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
                         labelText: 'Activity',
                         border: OutlineInputBorder(),
                       ),
-                      onChanged: (v) => setState(() => _activityId = v),
-                      onActivityCreated: (created) => setState(() {
-                        _activities = [..._activities, created];
-                        _activityId = created.id;
-                      }),
+                      onChanged: (v) {
+                        setState(() => _activityId = v);
+                        _autoSaveDraft();
+                      },
+                      onActivityCreated: (created) {
+                        setState(() {
+                          _activities = [..._activities, created];
+                          _activityId = created.id;
+                        });
+                        _autoSaveDraft();
+                      },
                     ),
                     const SizedBox(height: 10),
                     VendorDropdownWithCreate(
@@ -569,11 +596,17 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
                         labelText: 'Name of Vendor',
                         border: OutlineInputBorder(),
                       ),
-                      onChanged: (v) => setState(() => _vendorId = v),
-                      onVendorCreated: (created) => setState(() {
-                        _vendors = [..._vendors, created];
-                        _vendorId = created.id;
-                      }),
+                      onChanged: (v) {
+                        setState(() => _vendorId = v);
+                        _autoSaveDraft();
+                      },
+                      onVendorCreated: (created) {
+                        setState(() {
+                          _vendors = [..._vendors, created];
+                          _vendorId = created.id;
+                        });
+                        _autoSaveDraft();
+                      },
                     ),
                     const SizedBox(height: 10),
                     InputDecorator(
@@ -595,11 +628,15 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
                       category: kPrPriority,
                       label: 'Priority',
                       value: _priorityCode,
-                      onChanged: (v) => setState(() => _priorityCode = v),
+                      onChanged: (v) {
+                        setState(() => _priorityCode = v);
+                        _autoSaveDraft();
+                      },
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
-                      value: _propertyId,
+                      key: ValueKey('prop_$_propertyId'),
+                      initialValue: _propertyId,
                       decoration: const InputDecoration(labelText: 'Property', border: OutlineInputBorder()),
                       items: [
                         const DropdownMenuItem(value: null, child: Text('Select property (optional)')),
@@ -617,11 +654,17 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
                         labelText: 'Store',
                         border: OutlineInputBorder(),
                       ),
-                      onChanged: (v) => setState(() => _storeId = v),
-                      onStoreCreated: (created) => setState(() {
-                        _stores = [..._stores, created];
-                        _storeId = created.id;
-                      }),
+                      onChanged: (v) {
+                        setState(() => _storeId = v);
+                        _autoSaveDraft();
+                      },
+                      onStoreCreated: (created) {
+                        setState(() {
+                          _stores = [..._stores, created];
+                          _storeId = created.id;
+                        });
+                        _autoSaveDraft();
+                      },
                     ),
                     const SizedBox(height: 20),
                     Row(
@@ -630,7 +673,15 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
                           child: Text('Material Details', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                         ),
                         FilledButton.tonalIcon(
-                          onPressed: () => setState(() => _lines.add(_PrLineDraft())),
+                          onPressed: () {
+                            setState(() {
+                              final newLine = _PrLineDraft();
+                              newLine.qtyCtrl.addListener(_autoSaveDraft);
+                              newLine.remarkCtrl.addListener(_autoSaveDraft);
+                              _lines.add(newLine);
+                            });
+                            _autoSaveDraft();
+                          },
                           icon: const Icon(Icons.add),
                           label: const Text('Add'),
                         ),
@@ -650,10 +701,13 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
                                   const Spacer(),
                                   if (_lines.length > 1)
                                     IconButton(
-                                      onPressed: () => setState(() {
-                                        _lines[i].dispose();
-                                        _lines.removeAt(i);
-                                      }),
+                                      onPressed: () {
+                                        setState(() {
+                                          _lines[i].dispose();
+                                          _lines.removeAt(i);
+                                        });
+                                        _autoSaveDraft();
+                                      },
                                       icon: const Icon(Icons.delete_outline, color: Colors.red),
                                     ),
                                 ],
@@ -749,8 +803,9 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
                     ),
                   ],
                 ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _chip(String label, String? value) {
     return Chip(

@@ -63,7 +63,7 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreDraftIfAny());
   }
 
-  void _autoSaveDraft() {
+  void _autoSaveDraft({bool immediate = false}) {
     if (!mounted) return;
     FormDraftService.instance.autoSave(
       formId: _draftKey,
@@ -77,6 +77,7 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
         'refType': _selectedRefType,
         'selectedSalesId': _selectedSalesId,
       },
+      immediate: immediate,
     );
   }
 
@@ -120,6 +121,7 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     _phoneController.dispose();
     _nameController.dispose();
     _cpNameController.dispose();
@@ -187,7 +189,12 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
           return visitDate.year == now.year && visitDate.month == now.month && visitDate.day == now.day;
         }).toList();
 
-        return Scaffold(
+        return PopScope(
+          canPop: true,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) _autoSaveDraft(immediate: true);
+          },
+          child: Scaffold(
           appBar: AppBar(
             leading: const AppBackButton(fallbackLocation: '/crm/pre-sales'),
             title: Column(
@@ -518,10 +525,11 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
               ],
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   Future<void> _handleLookup(BuildContext context) async {
     final authUser = context.read<AuthBloc>().state.user;
@@ -852,7 +860,10 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
                 .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                 .toList(),
             onChanged: (val) {
-              if (val != null) setState(() => _selectedLeadSource = val);
+              if (val != null) {
+                setState(() => _selectedLeadSource = val);
+                _autoSaveDraft();
+              }
             },
           ),
 
@@ -885,7 +896,10 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
                   .map((r) => DropdownMenuItem(value: r, child: Text(r)))
                   .toList(),
               onChanged: (val) {
-                if (val != null) setState(() => _selectedRefType = val);
+                if (val != null) {
+                  setState(() => _selectedRefType = val);
+                  _autoSaveDraft();
+                }
               },
             ),
             const SizedBox(height: 14),
@@ -936,7 +950,10 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
               child: Text(label, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
             );
           }).toList(),
-          onChanged: (val) => setState(() => _selectedSalesId = val),
+          onChanged: (val) {
+            setState(() => _selectedSalesId = val);
+            _autoSaveDraft();
+          },
         ),
         const SizedBox(height: 16),
 

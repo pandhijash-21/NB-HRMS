@@ -35,6 +35,11 @@ class _DprFormScreenState extends State<DprFormScreen> {
   String? _projectId;
   final _createdByCtrl = TextEditingController();
 
+  // Multi-draft management
+  String _currentDraftId = 'dpr_${DateTime.now().millisecondsSinceEpoch}';
+  List<MultiDraftSummary> _savedDrafts = [];
+  bool _isAutoSaving = false;
+
   // Draft line
   String? _contractorId;
   String? _activityId;
@@ -84,8 +89,19 @@ class _DprFormScreenState extends State<DprFormScreen> {
     });
   }
 
-  void _autoSaveDraft() {
+  String get _currentDraftTitle {
+    final proj = _projects.where((p) => p.id == _projectId).firstOrNull?.name ?? 'Untitled Project';
+    final dateStr = DateFormat('d MMM').format(_reportDate);
+    final count = _lines.length;
+    return '$proj • $dateStr${count > 0 ? ' ($count tasks)' : ''}';
+  }
+
+  void _autoSaveDraft({bool immediate = false}) {
     if (_saving || _loadingInitial) return;
+    final projectName = _projects.where((p) => p.id == _projectId).firstOrNull?.name ?? 'Untitled Project';
+    final dateStr = DateFormat('d MMM').format(_reportDate);
+    final count = _lines.length;
+    final title = '$projectName ($dateStr${count > 0 ? ' • $count tasks' : ''})';
     final data = {
       'reportDate': _reportDate.toIso8601String(),
       'projectId': _projectId,
@@ -103,52 +119,142 @@ class _DprFormScreenState extends State<DprFormScreen> {
       'statusCode': _statusCode,
       'completion': _completionCtrl.text.trim(),
       'lines': _lines.map((l) => l.toJson()).toList(),
+      'draftMaterials': _draftMaterials.map((m) => m.toJson()).toList(),
+      'draftLabour': _draftLabour.map((l) => l.toJson()).toList(),
+      'draftMachines': _draftMachines.map((m) => m.toJson()).toList(),
     };
-    FormDraftService.instance.autoSave(
+
+    if (mounted) setState(() => _isAutoSaving = true);
+
+    FormDraftService.instance.autoSaveMultiDraft(
       formId: 'erp_dpr',
+      draftId: _currentDraftId,
+      title: title,
+      subtitle: '$count tasks added',
       data: data,
+      immediate: immediate,
+      onSaved: () {
+        if (mounted) {
+          setState(() => _isAutoSaving = false);
+          _refreshSavedDraftsList();
+        }
+      },
     );
   }
 
-  Future<void> _restoreDraftIfAny() async {
-    final draft = await FormDraftService.instance.loadDraftInfo('erp_dpr');
-    if (draft != null && mounted) {
-      setState(() {
-        _draftInfo = draft;
-        final d = draft.data;
-        if (d['reportDate'] != null) {
-          _reportDate = DateTime.tryParse(d['reportDate'].toString()) ?? _reportDate;
-        }
-        if (d['projectId'] != null) _projectId = d['projectId'];
-        if ((d['createdByName'] as String?)?.isNotEmpty == true) {
-          _createdByCtrl.text = d['createdByName'];
-        }
-        if (d['contractorId'] != null) _contractorId = d['contractorId'];
-        if (d['activityId'] != null) _activityId = d['activityId'];
-        if (d['subtaskId'] != null) _subtaskId = d['subtaskId'];
-        if (d['towerId'] != null) _towerId = d['towerId'];
-        if (d['floorNo'] != null) _floorNo = d['floorNo'] as int?;
-        if (d['unitId'] != null) _unitId = d['unitId'];
-        if (d['unitCode'] != null) _unitCode = d['unitCode'];
-        if ((d['consumed'] as String?)?.isNotEmpty == true) _consumedCtrl.text = d['consumed'];
-        if (d['gradeCode'] != null) _gradeCode = d['gradeCode'];
-        if ((d['remarks'] as String?)?.isNotEmpty == true) _remarksCtrl.text = d['remarks'];
-        if (d['statusCode'] != null) _statusCode = d['statusCode'];
-        if ((d['completion'] as String?)?.isNotEmpty == true) _completionCtrl.text = d['completion'];
-        if (d['lines'] is List) {
-          try {
-            _lines
-              ..clear()
-              ..addAll((d['lines'] as List).map((l) => ErpDprLine.fromJson(l as Map<String, dynamic>)));
-          } catch (_) {}
-        }
-      });
+  Future<void> _refreshSavedDraftsList() async {
+    final list = await FormDraftService.instance.listMultiDrafts('erp_dpr');
+    if (mounted) {
+      setState(() => _savedDrafts = list);
     }
   }
 
-  void _discardDraft() {
-    FormDraftService.instance.clearDraft('erp_dpr');
+  Future<void> _fetchTowersForProject(String pId) async {
+    if (!_projectTowers.containsKey(pId)) {
+      try {
+        final towers = await context.read<ProjectRepository>().listTowers(pId);
+        if (mounted) {
+          setState(() {
+            _projectTowers[pId] = towers;
+          });
+        }
+      } catch (e) {
+        debugPrint('Failed to load towers for project $pId: $e');
+      }
+    }
+  }
+
+  Future<void> _restoreDraftIfAny() async {
+    await _refreshSavedDraftsList();
+    final activeId = await FormDraftService.instance.getActiveMultiDraftId('erp_dpr');
+    MultiDraftSummary? target;
+    if (activeId != null && activeId.isNotEmpty) {
+      target = _savedDrafts.where((d) => d.draftId == activeId).firstOrNull;
+    }
+    target ??= _savedDrafts.firstOrNull;
+
+    if (target != null && mounted) {
+      await _openDraft(target, promptSaveCurrent: false);
+    }
+  }
+
+  Future<void> _openDraft(MultiDraftSummary draft, {bool promptSaveCurrent = true}) async {
+    if (promptSaveCurrent && _lines.isNotEmpty) {
+      _autoSaveDraft(immediate: true);
+    }
+
+    final d = draft.data;
+    _currentDraftId = draft.draftId;
+    _draftInfo = FormDraftInfo(
+      formId: 'erp_dpr',
+      draftId: draft.draftId,
+      savedAt: draft.savedAt,
+      data: d,
+    );
+
+    if (d['reportDate'] != null) {
+      _reportDate = DateTime.tryParse(d['reportDate'].toString()) ?? _reportDate;
+    }
+    _projectId = d['projectId'] as String?;
+    if ((d['createdByName'] as String?)?.isNotEmpty == true) {
+      _createdByCtrl.text = d['createdByName'];
+    }
+    _contractorId = d['contractorId'] as String?;
+    _activityId = d['activityId'] as String?;
+    _subtaskId = d['subtaskId'] as String?;
+    _towerId = d['towerId'] as String?;
+    _floorNo = d['floorNo'] as int?;
+    _unitId = d['unitId'] as String?;
+    _unitCode = d['unitCode'] as String?;
+    if (d['consumed'] != null) _consumedCtrl.text = d['consumed'].toString();
+    _gradeCode = d['gradeCode'] as String?;
+    if (d['remarks'] != null) _remarksCtrl.text = d['remarks'].toString();
+    _statusCode = d['statusCode'] as String?;
+    if (d['completion'] != null) _completionCtrl.text = d['completion'].toString();
+
+    if (d['lines'] is List) {
+      try {
+        _lines
+          ..clear()
+          ..addAll((d['lines'] as List).map((l) => ErpDprLine.fromJson(l as Map<String, dynamic>)));
+      } catch (_) {}
+    }
+    if (d['draftMaterials'] is List) {
+      try {
+        _draftMaterials = (d['draftMaterials'] as List).map((m) => ErpDprMaterialLine.fromJson(m as Map<String, dynamic>)).toList();
+      } catch (_) {}
+    }
+    if (d['draftLabour'] is List) {
+      try {
+        _draftLabour = (d['draftLabour'] as List).map((l) => ErpDprLabourLine.fromJson(l as Map<String, dynamic>)).toList();
+      } catch (_) {}
+    }
+    if (d['draftMachines'] is List) {
+      try {
+        _draftMachines = (d['draftMachines'] as List).map((m) => ErpDprMachineLine.fromJson(m as Map<String, dynamic>)).toList();
+      } catch (_) {}
+    }
+
+    await FormDraftService.instance.setActiveMultiDraftId('erp_dpr', draft.draftId);
+
+    if (mounted) setState(() {});
+
+    if (_projectId != null) {
+      await _fetchTowersForProject(_projectId!);
+    }
+    if (_contractorId != null) {
+      await _fetchContractorResources(_contractorId, _reportDate);
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _createNewDraft() {
+    // Save current draft if it has content
+    if (_lines.isNotEmpty || _projectId != null) {
+      _autoSaveDraft(immediate: true);
+    }
     setState(() {
+      _currentDraftId = 'dpr_${DateTime.now().millisecondsSinceEpoch}';
       _draftInfo = null;
       _lines.clear();
       _projectId = null;
@@ -162,7 +268,203 @@ class _DprFormScreenState extends State<DprFormScreen> {
       _consumedCtrl.text = '0';
       _remarksCtrl.clear();
       _completionCtrl.clear();
+      _draftMaterials = [];
+      _draftLabour = [];
+      _draftMachines = [];
     });
+    FormDraftService.instance.setActiveMultiDraftId('erp_dpr', _currentDraftId);
+    _toast('Started new DPR draft');
+  }
+
+  Future<void> _discardCurrentDraft() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Discard Draft?'),
+        content: const Text('Are you sure you want to discard this DPR draft? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await FormDraftService.instance.deleteMultiDraft('erp_dpr', _currentDraftId);
+    await _refreshSavedDraftsList();
+
+    if (_savedDrafts.isNotEmpty) {
+      await _openDraft(_savedDrafts.first, promptSaveCurrent: false);
+      _toast('Switched to draft: ${_savedDrafts.first.title}');
+    } else {
+      _createNewDraft();
+    }
+  }
+
+  Future<void> _deleteSpecificDraft(String draftId) async {
+    await FormDraftService.instance.deleteMultiDraft('erp_dpr', draftId);
+    await _refreshSavedDraftsList();
+    if (_currentDraftId == draftId) {
+      if (_savedDrafts.isNotEmpty) {
+        await _openDraft(_savedDrafts.first, promptSaveCurrent: false);
+      } else {
+        _createNewDraft();
+      }
+    } else {
+      if (mounted) setState(() {});
+    }
+    _toast('Draft deleted');
+  }
+
+  void _saveDraftExplicitly() {
+    _autoSaveDraft(immediate: true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('DPR saved as draft successfully!'),
+        backgroundColor: Color(0xFF0F766E),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showDraftsDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.folder_open_rounded, color: Color(0xFF0D9488)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Saved DPR Drafts (${_savedDrafts.length})', style: const TextStyle(fontSize: 16)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline, color: Color(0xFF0D9488)),
+                tooltip: 'Create New Draft',
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _createNewDraft();
+                },
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 480,
+            child: _savedDrafts.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: Text('No saved drafts found.')),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: _savedDrafts.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (ctx, idx) {
+                      final draft = _savedDrafts[idx];
+                      final isActive = draft.draftId == _currentDraftId;
+                      final isDark = Theme.of(ctx).brightness == Brightness.dark;
+                      return Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                        color: isActive
+                            ? (isDark ? const Color(0xFF132A26) : const Color(0xFFF0FDF4))
+                            : Colors.transparent,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          draft.title,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13,
+                                            color: isActive ? const Color(0xFF0D9488) : null,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (isActive)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF0D9488).withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text(
+                                            'ACTIVE',
+                                            style: TextStyle(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: Color(0xFF0D9488),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'Saved ${draft.formattedTime}',
+                                    style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (!isActive)
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  _openDraft(draft);
+                                },
+                                style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xFF0D9488),
+                                  minimumSize: Size.zero,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                ),
+                                child: const Text('Resume'),
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFDC2626)),
+                              tooltip: 'Delete Draft',
+                              onPressed: () async {
+                                await _deleteSpecificDraft(draft.draftId);
+                                setDlg(() {});
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _createNewDraft();
+              },
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('+ New DPR Draft'),
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0D9488)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _loadInitialData() async {
@@ -205,22 +507,15 @@ class _DprFormScreenState extends State<DprFormScreen> {
       _floorNo = null;
       _unitId = null;
     });
-    if (pId != null && !_projectTowers.containsKey(pId)) {
-      try {
-        final towers = await context.read<ProjectRepository>().listTowers(pId);
-        if (mounted) {
-          setState(() {
-            _projectTowers[pId] = towers;
-          });
-        }
-      } catch (e) {
-        debugPrint('Failed to load towers for project $pId: $e');
-      }
+    _autoSaveDraft();
+    if (pId != null) {
+      await _fetchTowersForProject(pId);
     }
   }
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     _createdByCtrl.dispose();
     _consumedCtrl.dispose();
     _remarksCtrl.dispose();
@@ -334,7 +629,10 @@ class _DprFormScreenState extends State<DprFormScreen> {
       firstDate: DateTime(2020),
       lastDate: DateTime(2040),
     );
-    if (picked != null) setState(() => apply(picked));
+    if (picked != null) {
+      setState(() => apply(picked));
+      _autoSaveDraft();
+    }
   }
 
   void _addTask() {
@@ -392,6 +690,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
       );
     });
     _clearDraft();
+    _autoSaveDraft();
     _toast('Task added');
   }
 
@@ -412,7 +711,9 @@ class _DprFormScreenState extends State<DprFormScreen> {
         'createdByName': _createdByCtrl.text.trim().isEmpty ? null : _createdByCtrl.text.trim(),
         'lines': _lines.map((l) => l.toJson()).toList(),
       });
+      await FormDraftService.instance.clearSubmittedMultiDraft('erp_dpr', _currentDraftId);
       await FormDraftService.instance.clearDraft('erp_dpr');
+      await _refreshSavedDraftsList();
       if (!mounted) return;
       // Open printable Daily Report view once mandatory data is saved.
       context.go('/erp/dpr/${created.id}');
@@ -512,6 +813,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
         ),
       ];
     });
+    _autoSaveDraft();
   }
 
   Future<void> _addLabourDialog() async {
@@ -577,6 +879,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
         ),
       ];
     });
+    _autoSaveDraft();
   }
 
   Future<void> _addMachineDialog() async {
@@ -653,309 +956,381 @@ class _DprFormScreenState extends State<DprFormScreen> {
         ),
       ];
     });
+    _autoSaveDraft();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
-      appBar: AppBar(
-        title: const Text('Daily Progress Report'),
-        leading: const AppBackButton(fallbackLocation: '/erp/dpr'),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1200),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      FormDraftBanner(
-                        formId: 'erp_dpr',
-                        draftInfo: _draftInfo,
-                        onDiscard: _draftInfo != null ? _discardDraft : null,
-                      ),
-                      _card(
-                        isDark,
-                        child: Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        _autoSaveDraft(immediate: true);
+      },
+      child: Scaffold(
+        backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
+        appBar: AppBar(
+          title: const Text('Daily Progress Report'),
+          leading: const AppBackButton(fallbackLocation: '/erp/dpr'),
+          actions: [
+            if (_savedDrafts.isNotEmpty)
+              TextButton.icon(
+                onPressed: _showDraftsDialog,
+                icon: const Icon(Icons.folder_open_rounded, size: 16),
+                label: Text('Drafts (${_savedDrafts.length})'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFC5A059),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            TextButton.icon(
+              onPressed: _createNewDraft,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('+ New Draft'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white,
+                textStyle: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1200),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        FormDraftBanner(
+                          formId: 'erp_dpr',
+                          draftInfo: _draftInfo,
+                          customTitle: _draftInfo != null ? 'Draft: $_currentDraftTitle' : null,
+                          draftCount: _savedDrafts.length,
+                          isSaving: _isAutoSaving,
+                          onManageDrafts: _savedDrafts.isNotEmpty ? _showDraftsDialog : null,
+                          onNewDraft: _createNewDraft,
+                          onDiscard: _draftInfo != null ? _discardCurrentDraft : null,
+                        ),
+                        _card(
+                          isDark,
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              SizedBox(
+                                width: 200,
+                                child: InkWell(
+                                  onTap: () => _pickDate(
+                                    apply: (d) {
+                                      _reportDate = d;
+                                      if (_contractorId != null) {
+                                        _fetchContractorResources(_contractorId, d);
+                                      }
+                                    },
+                                    initial: _reportDate,
+                                  ),
+                                  child: InputDecorator(
+                                    decoration: _dec('Date'),
+                                    child: Text(_df.format(_reportDate)),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 320,
+                                child: _loadingInitial
+                                    ? const LinearProgressIndicator()
+                                    : DropdownButtonFormField<String>(
+                                        key: ValueKey('project_$_projectId'),
+                                        isExpanded: true,
+                                        initialValue: _projectId,
+                                        decoration: _dec('Project', required: true),
+                                        hint: const Text('Select Project'),
+                                        items: _projects
+                                            .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name, overflow: TextOverflow.ellipsis)))
+                                            .toList(),
+                                        onChanged: _onProjectChanged,
+                                      ),
+                              ),
+                              SizedBox(
+                                width: 240,
+                                child: TextFormField(
+                                  controller: _createdByCtrl,
+                                  readOnly: true,
+                                  decoration: _dec('DPR Created By', readOnly: true),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _card(
+                          isDark,
+                          child: Column(
+                            children: [
+                              _grid([
+                                _loadingInitial
+                                    ? const LinearProgressIndicator()
+                                    : VendorDropdownWithCreate(
+                                        value: _contractorId,
+                                        vendors: _contractors,
+                                        required: true,
+                                        decoration: _dec('Vendor', required: true),
+                                        hint: const Text('Select Vendor'),
+                                        onChanged: (v) {
+                                          setState(() => _contractorId = v);
+                                          _fetchContractorResources(v, _reportDate);
+                                          _autoSaveDraft();
+                                        },
+                                        onVendorCreated: (created) {
+                                          setState(() {
+                                            _contractors = [..._contractors, created];
+                                            _contractorId = created.id;
+                                          });
+                                          _fetchContractorResources(created.id, _reportDate);
+                                          _autoSaveDraft();
+                                        },
+                                      ),
+                                _loadingInitial
+                                    ? const LinearProgressIndicator()
+                                    : ActivityDropdownWithCreate(
+                                        value: _activityId,
+                                        activities: _activities,
+                                        required: true,
+                                        decoration: _dec('Activity', required: true),
+                                        hint: const Text('Select Activity'),
+                                        onChanged: (v) => setState(() {
+                                          _activityId = v;
+                                          _subtaskId = null;
+                                          _autoSaveDraft();
+                                        }),
+                                        onActivityCreated: (created) => setState(() {
+                                          _activities = [..._activities, created];
+                                          _activityId = created.id;
+                                          _subtaskId = null;
+                                          _autoSaveDraft();
+                                        }),
+                                      ),
+                                DropdownButtonFormField<String>(
+                                  key: ValueKey('subtask_$_subtaskId'),
+                                  isExpanded: true,
+                                  initialValue: _subtaskId,
+                                  decoration: _dec('Task'),
+                                  hint: const Text('Select Work Details'),
+                                  items: _subtasks
+                                      .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name, overflow: TextOverflow.ellipsis)))
+                                      .toList(),
+                                  onChanged: _activityId == null
+                                      ? null
+                                      : (v) => setState(() {
+                                            _subtaskId = v;
+                                            _autoSaveDraft();
+                                          }),
+                                ),
+                                DropdownButtonFormField<String>(
+                                  key: ValueKey('tower_$_towerId'),
+                                  isExpanded: true,
+                                  initialValue: _towerId,
+                                  decoration: _dec('Property Block'),
+                                  hint: const Text('Select Block'),
+                                  items: [
+                                    const DropdownMenuItem(value: _allTower, child: Text('ALL')),
+                                    ..._towers.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))),
+                                  ],
+                                  onChanged: _projectId == null
+                                      ? null
+                                      : (v) => setState(() {
+                                            _towerId = v;
+                                            _floorNo = null;
+                                            _unitId = null;
+                                            _autoSaveDraft();
+                                          }),
+                                ),
+                              ]),
+                              const SizedBox(height: 12),
+                              _grid([
+                                DropdownButtonFormField<int>(
+                                  key: ValueKey('floor_$_floorNo'),
+                                  isExpanded: true,
+                                  initialValue: _floorNo,
+                                  decoration: _dec('Property Floor'),
+                                  hint: const Text('Select Floor'),
+                                  items: _floors.map((f) => DropdownMenuItem(value: f, child: Text('Floor $f'))).toList(),
+                                  onChanged: _towerId == null
+                                      ? null
+                                      : (v) => setState(() {
+                                            _floorNo = v;
+                                            _unitId = null;
+                                            _autoSaveDraft();
+                                          }),
+                                ),
+                                DropdownButtonFormField<String>(
+                                  key: ValueKey('unit_$_unitId'),
+                                  isExpanded: true,
+                                  initialValue: _unitId,
+                                  decoration: _dec('Property Unit'),
+                                  hint: const Text('Select Unit'),
+                                  items: _units
+                                      .map((u) => DropdownMenuItem(value: u.id, child: Text(u.unitNo)))
+                                      .toList(),
+                                  onChanged: (v) => setState(() {
+                                    _unitId = v;
+                                    _autoSaveDraft();
+                                  }),
+                                ),
+                                lookupDropdown(
+                                  context: context,
+                                  category: DprLookupKeys.measurementUnit,
+                                  label: 'Unit',
+                                  value: _unitCode,
+                                  required: true,
+                                  onChanged: (v) => setState(() {
+                                    _unitCode = v;
+                                    _autoSaveDraft();
+                                  }),
+                                ),
+                                TextFormField(
+                                  controller: _consumedCtrl,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                                  decoration: _dec("Today's Consumed Work Qty", required: true),
+                                ),
+                              ]),
+                              const SizedBox(height: 12),
+                              _grid([
+                                lookupDropdown(
+                                  context: context,
+                                  category: DprLookupKeys.grade,
+                                  label: 'Grade',
+                                  value: _gradeCode,
+                                  onChanged: (v) => setState(() {
+                                    _gradeCode = v;
+                                    _autoSaveDraft();
+                                  }),
+                                ),
+                                TextFormField(
+                                  controller: _remarksCtrl,
+                                  maxLines: 2,
+                                  decoration: _dec('Remarks', hint: 'Enter Remark'),
+                                ),
+                                lookupDropdown(
+                                  context: context,
+                                  category: DprLookupKeys.status,
+                                  label: 'Status',
+                                  value: _statusCode,
+                                  onChanged: (v) => setState(() {
+                                    _statusCode = v;
+                                    _autoSaveDraft();
+                                  }),
+                                ),
+                                TextFormField(
+                                  controller: _completionCtrl,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  decoration: _dec('Total Task Completion(%)', required: true, hint: 'Enter Completion Percentage'),
+                                ),
+                              ]),
+                              const SizedBox(height: 12),
+                              _grid([
+                                InkWell(
+                                  onTap: () => _pickDate(apply: (d) => _actualStart = d, initial: _actualStart),
+                                  child: InputDecorator(
+                                    decoration: _dec('Actual Start Date', readOnly: true),
+                                    child: Text(_actualStart == null ? 'Select Start Date' : _df.format(_actualStart!)),
+                                  ),
+                                ),
+                                InkWell(
+                                  onTap: () => _pickDate(apply: (d) => _actualEnd = d, initial: _actualEnd),
+                                  child: InputDecorator(
+                                    decoration: _dec('Actual End Date', readOnly: true),
+                                    child: Text(_actualEnd == null ? 'Select End Date' : _df.format(_actualEnd!)),
+                                  ),
+                                ),
+                                InputDecorator(
+                                  decoration: _dec('Material Rate', readOnly: true),
+                                  child: const Text('No'),
+                                ),
+                                InputDecorator(
+                                  decoration: _dec('Labour Rate', readOnly: true),
+                                  child: const Text('No'),
+                                ),
+                                InputDecorator(
+                                  decoration: _dec('Machine Rate', readOnly: true),
+                                  child: const Text('No'),
+                                ),
+                              ]),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _resourceSection(isDark),
+                        const SizedBox(height: 16),
+                        Row(
                           children: [
-                            SizedBox(
-                              width: 200,
-                              child: InkWell(
-                                onTap: () => _pickDate(
-                                  apply: (d) {
-                                    _reportDate = d;
-                                    if (_contractorId != null) {
-                                      _fetchContractorResources(_contractorId, d);
-                                    }
-                                  },
-                                  initial: _reportDate,
-                                ),
-                                child: InputDecorator(
-                                  decoration: _dec('Date'),
-                                  child: Text(_df.format(_reportDate)),
-                                ),
-                              ),
+                            FilledButton.icon(
+                              onPressed: _addTask,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Task'),
+                              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1e3a5f)),
                             ),
-                            SizedBox(
-                              width: 320,
-                              child: _loadingInitial
-                                  ? const LinearProgressIndicator()
-                                  : DropdownButtonFormField<String>(
-                                      isExpanded: true,
-                                      initialValue: _projectId,
-                                      decoration: _dec('Project', required: true),
-                                      hint: const Text('Select Project'),
-                                      items: _projects
-                                          .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name, overflow: TextOverflow.ellipsis)))
-                                          .toList(),
-                                      onChanged: _onProjectChanged,
-                                    ),
-                            ),
-                            SizedBox(
-                              width: 240,
-                              child: TextFormField(
-                                controller: _createdByCtrl,
-                                readOnly: true,
-                                decoration: _dec('DPR Created By', readOnly: true),
-                              ),
+                            const SizedBox(width: 10),
+                            FilledButton(
+                              onPressed: () => _clearDraft(),
+                              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
+                              child: const Text('Clear'),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      _card(
-                        isDark,
-                        child: Column(
-                          children: [
-                            _grid([
-                              _loadingInitial
-                                  ? const LinearProgressIndicator()
-                                  : VendorDropdownWithCreate(
-                                      value: _contractorId,
-                                      vendors: _contractors,
-                                      required: true,
-                                      decoration: _dec('Vendor', required: true),
-                                      hint: const Text('Select Vendor'),
-                                      onChanged: (v) {
-                                        setState(() => _contractorId = v);
-                                        _fetchContractorResources(v, _reportDate);
-                                      },
-                                      onVendorCreated: (created) {
-                                        setState(() {
-                                          _contractors = [..._contractors, created];
-                                          _contractorId = created.id;
-                                        });
-                                        _fetchContractorResources(created.id, _reportDate);
-                                      },
-                                    ),
-                              _loadingInitial
-                                  ? const LinearProgressIndicator()
-                                  : ActivityDropdownWithCreate(
-                                      value: _activityId,
-                                      activities: _activities,
-                                      required: true,
-                                      decoration: _dec('Activity', required: true),
-                                      hint: const Text('Select Activity'),
-                                      onChanged: (v) => setState(() {
-                                        _activityId = v;
-                                        _subtaskId = null;
-                                      }),
-                                      onActivityCreated: (created) => setState(() {
-                                        _activities = [..._activities, created];
-                                        _activityId = created.id;
-                                        _subtaskId = null;
-                                      }),
-                                    ),
-                              DropdownButtonFormField<String>(
-                                isExpanded: true,
-                                initialValue: _subtaskId,
-                                decoration: _dec('Task'),
-                                hint: const Text('Select Work Details'),
-                                items: _subtasks
-                                    .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name, overflow: TextOverflow.ellipsis)))
-                                    .toList(),
-                                onChanged: _activityId == null ? null : (v) => setState(() => _subtaskId = v),
-                              ),
-                              DropdownButtonFormField<String>(
-                                isExpanded: true,
-                                initialValue: _towerId,
-                                decoration: _dec('Property Block'),
-                                hint: const Text('Select Block'),
-                                items: [
-                                  const DropdownMenuItem(value: _allTower, child: Text('ALL')),
-                                  ..._towers.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))),
-                                ],
-                                onChanged: _projectId == null
-                                    ? null
-                                    : (v) => setState(() {
-                                          _towerId = v;
-                                          _floorNo = null;
-                                          _unitId = null;
-                                        }),
-                              ),
-                            ]),
-                            const SizedBox(height: 12),
-                            _grid([
-                              DropdownButtonFormField<int>(
-                                isExpanded: true,
-                                initialValue: _floorNo,
-                                decoration: _dec('Property Floor'),
-                                hint: const Text('Select Floor'),
-                                items: _floors.map((f) => DropdownMenuItem(value: f, child: Text('Floor $f'))).toList(),
-                                onChanged: _towerId == null
-                                    ? null
-                                    : (v) => setState(() {
-                                          _floorNo = v;
-                                          _unitId = null;
-                                        }),
-                              ),
-                              DropdownButtonFormField<String>(
-                                isExpanded: true,
-                                initialValue: _unitId,
-                                decoration: _dec('Property Unit'),
-                                hint: const Text('Select Unit'),
-                                items: _units
-                                    .map((u) => DropdownMenuItem(value: u.id, child: Text(u.unitNo)))
-                                    .toList(),
-                                onChanged: (v) => setState(() => _unitId = v),
-                              ),
-                              lookupDropdown(
-                                context: context,
-                                category: DprLookupKeys.measurementUnit,
-                                label: 'Unit',
-                                value: _unitCode,
-                                required: true,
-                                onChanged: (v) => setState(() => _unitCode = v),
-                              ),
-                              TextFormField(
-                                controller: _consumedCtrl,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                                decoration: _dec("Today's Consumed Work Qty", required: true),
-                              ),
-                            ]),
-                            const SizedBox(height: 12),
-                            _grid([
-                              lookupDropdown(
-                                context: context,
-                                category: DprLookupKeys.grade,
-                                label: 'Grade',
-                                value: _gradeCode,
-                                onChanged: (v) => setState(() => _gradeCode = v),
-                              ),
-                              TextFormField(
-                                controller: _remarksCtrl,
-                                maxLines: 2,
-                                decoration: _dec('Remarks', hint: 'Enter Remark'),
-                              ),
-                              lookupDropdown(
-                                context: context,
-                                category: DprLookupKeys.status,
-                                label: 'Status',
-                                value: _statusCode,
-                                onChanged: (v) => setState(() => _statusCode = v),
-                              ),
-                              TextFormField(
-                                controller: _completionCtrl,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                decoration: _dec('Total Task Completion(%)', required: true, hint: 'Enter Completion Percentage'),
-                              ),
-                            ]),
-                            const SizedBox(height: 12),
-                            _grid([
-                              InkWell(
-                                onTap: () => _pickDate(apply: (d) => _actualStart = d, initial: _actualStart),
-                                child: InputDecorator(
-                                  decoration: _dec('Actual Start Date', readOnly: true),
-                                  child: Text(_actualStart == null ? 'Select Start Date' : _df.format(_actualStart!)),
-                                ),
-                              ),
-                              InkWell(
-                                onTap: () => _pickDate(apply: (d) => _actualEnd = d, initial: _actualEnd),
-                                child: InputDecorator(
-                                  decoration: _dec('Actual End Date', readOnly: true),
-                                  child: Text(_actualEnd == null ? 'Select End Date' : _df.format(_actualEnd!)),
-                                ),
-                              ),
-                              InputDecorator(
-                                decoration: _dec('Material Rate', readOnly: true),
-                                child: const Text('No'),
-                              ),
-                              InputDecorator(
-                                decoration: _dec('Labour Rate', readOnly: true),
-                                child: const Text('No'),
-                              ),
-                              InputDecorator(
-                                decoration: _dec('Machine Rate', readOnly: true),
-                                child: const Text('No'),
-                              ),
-                            ]),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _resourceSection(isDark),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          FilledButton.icon(
-                            onPressed: _addTask,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Task'),
-                            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1e3a5f)),
-                          ),
-                          const SizedBox(width: 10),
-                          FilledButton(
-                            onPressed: () => _clearDraft(),
-                            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC5A059)),
-                            child: const Text('Clear'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _taskTable(isDark),
-                    ],
+                        const SizedBox(height: 12),
+                        _taskTable(isDark),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1A1816) : Colors.white,
-              border: Border(top: BorderSide(color: isDark ? const Color(0xFF3D3834) : const Color(0xFFE2E8F0))),
-            ),
-            child: Row(
-              children: [
-                FilledButton(
-                  onPressed: _saving ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF1e3a5f),
-                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1A1816) : Colors.white,
+                border: Border(top: BorderSide(color: isDark ? const Color(0xFF3D3834) : const Color(0xFFE2E8F0))),
+              ),
+              child: Row(
+                children: [
+                  FilledButton(
+                    onPressed: _saving ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF1e3a5f),
+                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                    ),
+                    child: _saving
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Submit'),
                   ),
-                  child: _saving
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Submit'),
-                ),
-                const SizedBox(width: 10),
-                OutlinedButton(
-                  onPressed: _saving ? null : () => context.go('/erp/dpr'),
-                  child: const Text('Go to DPR'),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  OutlinedButton.icon(
+                    onPressed: _saving ? null : _saveDraftExplicitly,
+                    icon: const Icon(Icons.bookmark_outline, size: 16),
+                    label: const Text('Save Draft'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF0F766E),
+                      side: const BorderSide(color: Color(0xFF0F766E)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  OutlinedButton(
+                    onPressed: _saving ? null : () => context.go('/erp/dpr'),
+                    child: const Text('Go to DPR'),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1052,7 +1427,10 @@ class _DprFormScreenState extends State<DprFormScreen> {
                 DataCell(Text(_draftMaterials[i].remarks ?? '—')),
                 DataCell(IconButton(
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: () => setState(() => _draftMaterials = [..._draftMaterials]..removeAt(i)),
+                  onPressed: () {
+                    setState(() => _draftMaterials = [..._draftMaterials]..removeAt(i));
+                    _autoSaveDraft();
+                  },
                 )),
               ],
             ),
@@ -1087,7 +1465,10 @@ class _DprFormScreenState extends State<DprFormScreen> {
                 DataCell(Text(_draftLabour[i].remarks ?? '—')),
                 DataCell(IconButton(
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: () => setState(() => _draftLabour = [..._draftLabour]..removeAt(i)),
+                  onPressed: () {
+                    setState(() => _draftLabour = [..._draftLabour]..removeAt(i));
+                    _autoSaveDraft();
+                  },
                 )),
               ],
             ),
@@ -1152,7 +1533,10 @@ class _DprFormScreenState extends State<DprFormScreen> {
                 DataCell(Text(_draftMachines[i].remarks ?? '—')),
                 DataCell(IconButton(
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: () => setState(() => _draftMachines = [..._draftMachines]..removeAt(i)),
+                  onPressed: () {
+                    setState(() => _draftMachines = [..._draftMachines]..removeAt(i));
+                    _autoSaveDraft();
+                  },
                 )),
               ],
             ),
@@ -1209,7 +1593,10 @@ class _DprFormScreenState extends State<DprFormScreen> {
                         DataCell(Text(_lines[i].completionPct?.toStringAsFixed(1) ?? '—')),
                         DataCell(IconButton(
                           icon: const Icon(Icons.delete_outline),
-                          onPressed: () => setState(() => _lines.removeAt(i)),
+                          onPressed: () {
+                            setState(() => _lines.removeAt(i));
+                            _autoSaveDraft();
+                          },
                         )),
                       ],
                     ),

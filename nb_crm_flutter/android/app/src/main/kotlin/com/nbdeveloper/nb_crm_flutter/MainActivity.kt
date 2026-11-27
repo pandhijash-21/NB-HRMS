@@ -15,6 +15,11 @@ class MainActivity : FlutterFragmentActivity() {
     private var encoder: TripVideoEncoder? = null
     private var outputFile: File? = null
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)

@@ -10940,7 +10940,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       }
     }
 
-    void autoSave() {
+    void autoSave({bool immediate = false}) {
       final colValues = <String, String>{};
       for (final col in formColumns) {
         colValues[col.columnKey] = controllers[col.columnKey]?.text ?? '';
@@ -10958,6 +10958,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           'refName': refNameController.text,
           'controllers': colValues,
         },
+        immediate: immediate,
       );
     }
 
@@ -10971,7 +10972,12 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     showDialog(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
+        builder: (ctx, setDialogState) => PopScope(
+          canPop: true,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) autoSave(immediate: true);
+          },
+          child: AlertDialog(
           title: const Text('Add New Pre-Sales Lead'),
           content: Container(
             constraints: const BoxConstraints(maxWidth: 520),
@@ -11559,6 +11565,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       ],
     ),
   ),
+),
 );
   }
 

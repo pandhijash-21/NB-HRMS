@@ -34,6 +34,7 @@ final dioClientProvider = Provider<DioClient>((ref) {
   final baseUrl = ref.watch(apiBaseUrlProvider);
   return DioClient(
     readToken: storage.readToken,
+    readTokenCached: () => storage.currentCachedToken,
     unauthorizedGate: gate,
     baseUrl: baseUrl,
   );

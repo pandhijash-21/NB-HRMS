@@ -517,8 +517,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       punchLoading: _punchLoading,
       punchInIso: _punchInIso,
       punchOutIso: _punchOutIso,
-      onPunchIn: () => context.go('/attendance'),
-      onPunchOut: () => context.go('/attendance'),
+      onPunchIn: () => context.go('/attendance?action=punch'),
+      onPunchOut: () => context.go('/attendance?action=punch'),
     );
 
     final filteredModules = modules.where((m) {

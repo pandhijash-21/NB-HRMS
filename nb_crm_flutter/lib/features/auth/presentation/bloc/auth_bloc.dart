@@ -78,6 +78,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return;
       }
 
+      if (isJwtExpired(restored.token)) {
+        await _repo.clearSession();
+        unawaited(WidgetSyncService.clearWidget());
+        emit(const AuthState.unauthenticated(
+          infoMessage: 'Your session has expired. Please log in again.',
+        ));
+        return;
+      }
+
       emit(AuthState(
         status: AuthStatus.authenticated,
         user: restored.user,
@@ -265,6 +274,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     if (state.status != AuthStatus.authenticated) return;
     try {
+      final token = await _storage.readToken();
+      if (isJwtExpired(token)) {
+        add(const AuthUnauthorizedKicked(
+          reason: 'Your session has expired. Please log in again.',
+        ));
+        return;
+      }
+
       final me = await _dio.getEnvelope<Map<String, dynamic>>(
         'auth/me',
         parse: (raw) {
@@ -341,12 +358,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       if (state.status != AuthStatus.authenticated) return;
       emit(next);
 
-      final token = refreshedToken?.isNotEmpty == true
+      final tokenToSave = refreshedToken?.isNotEmpty == true
           ? refreshedToken
           : await _storage.readToken();
-      if (token != null && state.user != null) {
+      if (tokenToSave != null && state.user != null) {
         await _repo.persistSession(
-          token: token,
+          token: tokenToSave,
           user: state.user!,
           permissions: state.permissions,
           isFirstLogin: state.isFirstLogin,
@@ -358,6 +375,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         await WebLiveTrackingService.start();
         unawaited(startBackgroundTracking());
       }
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) {
+        add(AuthUnauthorizedKicked(reason: e.message));
+      }
     } catch (_) {
       // 401 is triggered via UnauthorizedGate -> AuthUnauthorizedKicked
     }
@@ -367,16 +388,21 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthUnauthorizedKicked event,
     Emitter<AuthState> emit,
   ) async {
-    // If login is currently in progress, NEVER kick out or interrupt!
-    if (state.isSubmitting) return;
-    if (state.status != AuthStatus.authenticated) return;
+    // If login is currently in progress or already unauthenticated, never kick or interrupt!
+    if (state.isSubmitting || state.status == AuthStatus.unauthenticated) return;
     final wasOnTrip = state.user?.onTrip == true;
     WebLiveTrackingService.stop(preventRestart: true);
     unawaited(stopBackgroundTracking());
     _stopSessionWatch();
-    // Release Redis so an open trip cannot permanently block re-login.
-    await _repo.releaseSessionRemote();
+    // Release Redis so an open trip cannot permanently block re-login (strict timeout)
+    try {
+      await _repo.releaseSessionRemote().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
+    } catch (_) {}
     await _repo.clearSession();
+    unawaited(WidgetSyncService.clearWidget());
 
     final String message;
     if (wasOnTrip) {
@@ -386,7 +412,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       if (r.toLowerCase().contains('another device') ||
           r.toLowerCase().contains('displaced')) {
         message = 'You were signed out because this account signed in on another device or browser.';
-      } else if (r.toLowerCase().contains('expired')) {
+      } else if (r.toLowerCase().contains('expired') ||
+          r.toLowerCase().contains('invalid') ||
+          r.toLowerCase().contains('unauthorized')) {
         message = 'Your session has expired. Please log in again.';
       } else {
         message = r;
@@ -406,15 +434,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     if (!event.skipRemote) {
       try {
-        await _repo.logoutRemote();
-      } on ApiException catch (e) {
-        emit(state.copyWith(errorMessage: e.message));
-        return;
+        await _repo.logoutRemote().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () {},
+        );
       } catch (_) {
-        emit(state.copyWith(
-          errorMessage: 'Unable to sign out. Please try again.',
-        ));
-        return;
+        // Best-effort remote logout; always clear local session regardless of remote errors.
       }
     }
     WebLiveTrackingService.stop(preventRestart: true);

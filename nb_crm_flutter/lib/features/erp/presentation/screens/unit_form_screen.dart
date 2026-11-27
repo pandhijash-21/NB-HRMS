@@ -176,11 +176,13 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
 
   String get _draftKey => 'erp_unit_${widget.projectId}_${widget.towerId}_${widget.unitId}';
 
-  void _autoSaveDraft() {
-    if (!mounted || _loading) return;
+  void _autoSaveDraft({bool immediate = false}) {
+    if (!mounted && !immediate) return;
+    if (_loading) return;
     FormDraftService.instance.autoSave(
       formId: _draftKey,
       data: _buildPayload(),
+      immediate: immediate,
     );
   }
 
@@ -303,6 +305,7 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     _superBuiltUp.removeListener(_recalcAllPricing);
     _baseRate.removeListener(_recalcAllPricing);
     _frc.removeListener(_recalcAllPricing);
@@ -1611,7 +1614,12 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        _autoSaveDraft(immediate: true);
+      },
+      child: Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
       appBar: AppBar(
         backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
@@ -2971,6 +2979,7 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
           ),
         );
       }(),
+    ),
     );
   }
 

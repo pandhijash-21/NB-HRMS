@@ -59,7 +59,7 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreDraftIfAny());
   }
 
-  void _autoSaveDraft() {
+  void _autoSaveDraft({bool immediate = false}) {
     if (_submitting) return;
     final data = {
       'leaveTypeId': _leaveTypeId,
@@ -74,6 +74,7 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
     FormDraftService.instance.autoSave(
       formId: 'hrms_leave_apply',
       data: data,
+      immediate: immediate,
     );
   }
 
@@ -118,6 +119,7 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     _reasonController.dispose();
     super.dispose();
   }
@@ -151,6 +153,7 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
         _toDate = picked;
       }
     });
+    _autoSaveDraft();
   }
 
   Future<void> _pickDocument() async {
@@ -170,6 +173,7 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
 
     setState(() => _uploadingDoc = true);
     try {
+      if (!mounted) return;
       final url = await context.read<LeaveRepository>().uploadLeaveDocument(
             employeeId: employeeId,
             bytes: picked.bytes,
@@ -180,6 +184,7 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
         _documentUrl = url;
         _documentName = picked.name;
       });
+      _autoSaveDraft();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -254,7 +259,12 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
   Widget build(BuildContext context) {
     final state = context.watch<LeaveBloc>().state;
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        _autoSaveDraft(immediate: true);
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Apply Leave'),
         leading: const AppBackButton(fallbackLocation: '/leave'),
@@ -285,6 +295,7 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
                     onDiscard: _draftInfo != null ? _discardDraft : null,
                   ),
                   DropdownButtonFormField<String>(
+                    key: ValueKey('leave_type_$_leaveTypeId'),
                     initialValue: _leaveTypeId,
                     decoration: const InputDecoration(
                       labelText: 'Leave type *',
@@ -293,22 +304,25 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
                     items: applicable
                         .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
                         .toList(),
-                    onChanged: (v) => setState(() {
-                      _leaveTypeId = v;
-                      _documentUrl = null;
-                      _documentName = null;
-                      LeaveType? next;
-                      for (final t in applicable) {
-                        if (t.id == v) {
-                          next = t;
-                          break;
+                    onChanged: (v) {
+                      setState(() {
+                        _leaveTypeId = v;
+                        _documentUrl = null;
+                        _documentName = null;
+                        LeaveType? next;
+                        for (final t in applicable) {
+                          if (t.id == v) {
+                            next = t;
+                            break;
+                          }
                         }
-                      }
-                      if (next != null && !next.allowHalfDay) {
-                        _isHalfDay = false;
-                        _halfDaySession = null;
-                      }
-                    }),
+                        if (next != null && !next.allowHalfDay) {
+                          _isHalfDay = false;
+                          _halfDaySession = null;
+                        }
+                      });
+                      _autoSaveDraft();
+                    },
                     validator: (v) => v == null ? 'Select leave type' : null,
                   ),
                   const SizedBox(height: 16),
@@ -341,13 +355,17 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Half day'),
                       value: _isHalfDay,
-                      onChanged: (v) => setState(() {
-                        _isHalfDay = v;
-                        if (!v) _halfDaySession = null;
-                      }),
+                      onChanged: (v) {
+                        setState(() {
+                          _isHalfDay = v;
+                          if (!v) _halfDaySession = null;
+                        });
+                        _autoSaveDraft();
+                      },
                     ),
                   if (_isHalfDay) ...[
                     DropdownButtonFormField<String>(
+                      key: ValueKey('session_$_halfDaySession'),
                       initialValue: _halfDaySession,
                       decoration: const InputDecoration(
                         labelText: 'Session *',
@@ -357,7 +375,10 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
                         DropdownMenuItem(value: 'MORNING', child: Text('Morning')),
                         DropdownMenuItem(value: 'AFTERNOON', child: Text('Afternoon')),
                       ],
-                      onChanged: (v) => setState(() => _halfDaySession = v),
+                      onChanged: (v) {
+                        setState(() => _halfDaySession = v);
+                        _autoSaveDraft();
+                      },
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -441,6 +462,7 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
           );
         },
       ),
+    ),
     );
   }
 }

@@ -14,7 +14,6 @@ import '../../domain/project_models.dart';
 import '../../domain/tender_models.dart';
 import '../../domain/work_order_models.dart';
 import '../bloc/erp_tenders_bloc.dart';
-import '../widgets/quick_create_masters.dart';
 import '../widgets/quick_create_vendor_dialog.dart';
 
 class TenderApplicationFormScreen extends StatefulWidget {
@@ -52,6 +51,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
   void initState() {
     super.initState();
     _appNoCtrl.addListener(_autoSaveDraft);
+    _createdByCtrl.addListener(_autoSaveDraft);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final user = context.read<AuthBloc>().state.user;
@@ -62,7 +62,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
     });
   }
 
-  void _autoSaveDraft() {
+  void _autoSaveDraft({bool immediate = false}) {
     if (_saving || _loadingInitial) return;
     final data = {
       'applicationNo': _appNoCtrl.text.trim(),
@@ -78,6 +78,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
     FormDraftService.instance.autoSave(
       formId: 'erp_tender_application',
       data: data,
+      immediate: immediate,
     );
   }
 
@@ -141,6 +142,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     _appNoCtrl.dispose();
     _createdByCtrl.dispose();
     super.dispose();
@@ -171,6 +173,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
     );
     if (picked == null) return;
     setState(() => _applicationDate = picked);
+    _autoSaveDraft();
   }
 
   Future<void> _onProjectChanged(String? id) async {
@@ -184,6 +187,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
       _activities = [];
       _loadingTenders = id != null;
     });
+    _autoSaveDraft();
     if (id == null) return;
     try {
       final tenders = await context.read<TenderRepository>().list(projectId: id);
@@ -208,6 +212,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
       _activities = [];
       _loadingActivities = id != null;
     });
+    _autoSaveDraft();
     if (id == null) return;
     try {
       final tender = await context.read<TenderRepository>().getById(id);
@@ -229,6 +234,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
           _projectId = tender.projectId;
         }
       });
+      _autoSaveDraft();
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingActivities = false);
@@ -278,7 +284,12 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _autoSaveDraft(immediate: true);
+      },
+      child: Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
       appBar: AppBar(
         title: const Text('Tender Application'),
@@ -335,6 +346,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
                               const LinearProgressIndicator()
                             else
                               DropdownButtonFormField<String>(
+                                key: ValueKey('project_$_projectId'),
                                 isExpanded: true,
                                 initialValue: _projectId,
                                 decoration: _dec('Project', required: true),
@@ -354,6 +366,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
                               const LinearProgressIndicator()
                             else
                               DropdownButtonFormField<String>(
+                                key: ValueKey('tender_$_tenderId'),
                                 isExpanded: true,
                                 initialValue: _tenderId,
                                 decoration: _dec('Project Tenders', required: true),
@@ -373,6 +386,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
                               const LinearProgressIndicator()
                             else
                               DropdownButtonFormField<String>(
+                                key: ValueKey('activity_$_activityKey'),
                                 isExpanded: true,
                                 initialValue: _activityKey,
                                 decoration: _dec('Activity', required: true),
@@ -399,6 +413,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
                                           _activityId = a.id;
                                           _activityName = a.name;
                                         });
+                                        _autoSaveDraft();
                                       },
                                 validator: (v) => v == null ? 'Required' : null,
                               ),
@@ -411,11 +426,17 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
                                 required: true,
                                 decoration: _dec('Vendor', required: true),
                                 hint: const Text('Select Vendor'),
-                                onChanged: (v) => setState(() => _contractorId = v),
-                                onVendorCreated: (created) => setState(() {
-                                  _contractors = [..._contractors, created];
-                                  _contractorId = created.id;
-                                }),
+                                onChanged: (v) {
+                                  setState(() => _contractorId = v);
+                                  _autoSaveDraft();
+                                },
+                                onVendorCreated: (created) {
+                                  setState(() {
+                                    _contractors = [..._contractors, created];
+                                    _contractorId = created.id;
+                                  });
+                                  _autoSaveDraft();
+                                },
                               ),
                             DropdownButtonFormField<String>(
                               isExpanded: true,
@@ -428,7 +449,10 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
                                 DropdownMenuItem(value: 'ACCEPTED', child: Text('ACCEPTED')),
                                 DropdownMenuItem(value: 'REJECTED', child: Text('REJECTED')),
                               ],
-                              onChanged: (v) => setState(() => _status = v ?? 'APPROVED'),
+                              onChanged: (v) {
+                                setState(() => _status = v ?? 'APPROVED');
+                                _autoSaveDraft();
+                              },
                             ),
                           ];
 
@@ -524,6 +548,7 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

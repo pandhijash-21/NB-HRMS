@@ -24,7 +24,9 @@ import '../geofenced_punch_service.dart';
 import '../web_attendance_gate.dart';
 
 class AttendanceScreen extends StatelessWidget {
-  const AttendanceScreen({super.key});
+  const AttendanceScreen({super.key, this.initialAction});
+
+  final String? initialAction;
 
   @override
   Widget build(BuildContext context) {
@@ -36,13 +38,15 @@ class AttendanceScreen extends StatelessWidget {
         attendanceRepository: context.read<AttendanceRepository>(),
         dioClient: context.read<DioClient>(),
       )..add(AttendanceLoadRequested(employeeId: empId)),
-      child: const _AttendanceView(),
+      child: _AttendanceView(initialAction: initialAction),
     );
   }
 }
 
 class _AttendanceView extends StatefulWidget {
-  const _AttendanceView();
+  const _AttendanceView({this.initialAction});
+
+  final String? initialAction;
 
   @override
   State<_AttendanceView> createState() => _AttendanceViewState();
@@ -55,6 +59,55 @@ class _AttendanceViewState extends State<_AttendanceView> {
   bool _punchInFlight = false;
   DateTime? _punchLockedUntil;
   int _cooldownTick = 0;
+  bool _autoPunchTriggered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAutoPunchOnMount();
+  }
+
+  void _checkAutoPunchOnMount() {
+    if (widget.initialAction != 'punch') return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final state = context.read<AttendanceBloc>().state;
+      if (state.status == LoadStatus.success) {
+        _triggerAutoPunch(state);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _AttendanceView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialAction == 'punch' && oldWidget.initialAction != 'punch') {
+      _autoPunchTriggered = false;
+      final state = context.read<AttendanceBloc>().state;
+      if (state.status == LoadStatus.success) {
+        _triggerAutoPunch(state);
+      }
+    }
+  }
+
+  void _triggerAutoPunch(AttendanceState state) {
+    if (_autoPunchTriggered || _punchInFlight) return;
+    _autoPunchTriggered = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final auth = context.read<AuthBloc>().state;
+      final todayYmd = _attendanceTodayYmdIst();
+      if (state.selectedDate != todayYmd) {
+        context.read<AttendanceBloc>().add(AttendanceDateSelected(todayYmd));
+      }
+      _onPunchPressed(
+        auth: auth,
+        state: state,
+        canPunchSelectedDay: true,
+        todayYmd: todayYmd,
+      );
+    });
+  }
 
   bool get _punchButtonLocked {
     if (_punchInFlight) return true;
@@ -296,7 +349,15 @@ class _AttendanceViewState extends State<_AttendanceView> {
       punchLabel = 'Punch In/Out';
     }
 
-    return Scaffold(
+    return BlocListener<AttendanceBloc, AttendanceState>(
+      listenWhen: (prev, curr) =>
+          prev.status != curr.status && curr.status == LoadStatus.success,
+      listener: (context, state) {
+        if (widget.initialAction == 'punch' && !_autoPunchTriggered) {
+          _triggerAutoPunch(state);
+        }
+      },
+      child: Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
       appBar: AppBar(
         backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
@@ -751,8 +812,9 @@ class _AttendanceViewState extends State<_AttendanceView> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildBiometricCard(
     BuildContext context,

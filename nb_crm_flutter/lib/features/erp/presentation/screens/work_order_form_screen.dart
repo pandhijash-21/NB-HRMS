@@ -67,7 +67,7 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
     _tenderCtrl.addListener(_autoSaveDraft);
   }
 
-  void _autoSaveDraft() {
+  void _autoSaveDraft({bool immediate = false}) {
     if (_saving || _loadingInitial) return;
     final data = {
       'workOrderId': _woIdCtrl.text.trim(),
@@ -85,6 +85,7 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
       formId: 'erp_work_order',
       entityId: widget.id,
       data: data,
+      immediate: immediate,
     );
   }
 
@@ -184,6 +185,7 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     _woIdCtrl.dispose();
     _tenderCtrl.dispose();
     super.dispose();
@@ -333,6 +335,7 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
         _orderDate = picked;
       }
     });
+    _autoSaveDraft();
   }
 
   Future<void> _save() async {
@@ -405,7 +408,12 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _autoSaveDraft(immediate: true);
+      },
+      child: Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
       appBar: AppBar(
         backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
@@ -460,28 +468,36 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
                               const LinearProgressIndicator()
                             else
                               DropdownButtonFormField<int>(
+                                key: ValueKey('owner_$_ownerEmployeeId'),
                                 isExpanded: true,
                                 initialValue: _ownerEmployeeId,
                                 decoration: _dec('Tender Created By', required: true),
                                 items: _employees
                                     .map((e) => DropdownMenuItem(value: e.id, child: Text(e.fullName)))
                                     .toList(),
-                                onChanged: (v) => setState(() => _ownerEmployeeId = v),
+                                onChanged: (v) {
+                                  setState(() => _ownerEmployeeId = v);
+                                  _autoSaveDraft();
+                                },
                               ),
                             if (_loadingInitial)
                               const LinearProgressIndicator()
                             else
                               DropdownButtonFormField<String>(
+                                key: ValueKey('proj_$_projectId'),
                                 isExpanded: true,
                                 initialValue: _projectId,
                                 decoration: _dec('Project', required: true, hint: 'Select project'),
                                 items: _projects
                                     .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
                                     .toList(),
-                                onChanged: (v) => setState(() {
-                                  _projectId = v;
-                                  _activities = [];
-                                }),
+                                onChanged: (v) {
+                                  setState(() {
+                                    _projectId = v;
+                                    _activities = [];
+                                  });
+                                  _autoSaveDraft();
+                                },
                               ),
                             if (_loadingInitial)
                               const LinearProgressIndicator()
@@ -491,11 +507,17 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
                                 vendors: _contractors,
                                 required: true,
                                 decoration: _dec('Vendor', required: true, hint: 'Select vendor'),
-                                onChanged: (v) => setState(() => _contractorId = v),
-                                onVendorCreated: (created) => setState(() {
-                                  _contractors = [..._contractors, created];
-                                  _contractorId = created.id;
-                                }),
+                                onChanged: (v) {
+                                  setState(() => _contractorId = v);
+                                  _autoSaveDraft();
+                                },
+                                onVendorCreated: (created) {
+                                  setState(() {
+                                    _contractors = [..._contractors, created];
+                                    _contractorId = created.id;
+                                  });
+                                  _autoSaveDraft();
+                                },
                               ),
                             if (_loadingInitial)
                               const LinearProgressIndicator()
@@ -511,6 +533,7 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
                                   final matchingApp = displayApps.where((a) => (a.tenderNo ?? a.applicationNo) == currentVal).firstOrNull;
 
                                   return DropdownButtonFormField<String>(
+                                    key: ValueKey('tender_app_${matchingApp != null ? (matchingApp.tenderNo ?? matchingApp.applicationNo) : currentVal}'),
                                     isExpanded: true,
                                     initialValue: matchingApp != null ? (matchingApp.tenderNo ?? matchingApp.applicationNo) : currentVal,
                                     decoration: _dec('Tender', hint: displayApps.isEmpty ? 'No approved tenders' : 'Select approved tender'),
@@ -548,6 +571,7 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
                                           }
                                         }
                                       });
+                                      _autoSaveDraft();
                                     },
                                   );
                                 },
@@ -557,19 +581,26 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
                               category: kWoCategory,
                               value: _categoryCode,
                               label: 'Category',
-                              onChanged: (v) => setState(() => _categoryCode = v),
+                              onChanged: (v) {
+                                setState(() => _categoryCode = v);
+                                _autoSaveDraft();
+                              },
                             ),
                             if (_loadingInitial)
                               const SizedBox.shrink()
                             else
                               DropdownButtonFormField<int>(
+                                key: ValueKey('approver_$_approverEmployeeId'),
                                 isExpanded: true,
                                 initialValue: _approverEmployeeId,
                                 decoration: _dec('Approver', hint: 'Who approves this WO'),
                                 items: _employees
                                     .map((e) => DropdownMenuItem(value: e.id, child: Text(e.fullName)))
                                     .toList(),
-                                onChanged: (v) => setState(() => _approverEmployeeId = v),
+                                onChanged: (v) {
+                                  setState(() => _approverEmployeeId = v);
+                                  _autoSaveDraft();
+                                },
                               ),
                           ],
                         ),
@@ -640,8 +671,9 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 String _formatShortDate(DateTime d) =>

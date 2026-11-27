@@ -85,7 +85,7 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
     });
   }
 
-  void _autoSaveDraft() {
+  void _autoSaveDraft({bool immediate = false}) {
     if (_saving) return;
     final data = {
       'name': _nameCtrl.text.trim(),
@@ -107,6 +107,7 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
       formId: 'erp_contractor',
       entityId: widget.id,
       data: data,
+      immediate: immediate,
     );
   }
 
@@ -169,6 +170,7 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     for (final c in [
       _nameCtrl,
       _mobileCtrl,
@@ -443,7 +445,12 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        _autoSaveDraft(immediate: true);
+      },
+      child: Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
       appBar: AppBar(
         title: Text(widget.isEdit ? 'Edit Vendor' : 'Add Vendor'),
@@ -803,6 +810,7 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 }

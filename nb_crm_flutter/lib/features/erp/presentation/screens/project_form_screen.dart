@@ -121,7 +121,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
     _specNotes.addListener(_autoSaveDraft);
   }
 
-  void _autoSaveDraft() {
+  void _autoSaveDraft({bool immediate = false}) {
     if (_saving || _loadingInitial) return;
     final data = {
       'projectNo': _projectId.text.trim(),
@@ -159,6 +159,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
       formId: 'erp_project',
       entityId: widget.projectId,
       data: data,
+      immediate: immediate,
     );
   }
 
@@ -392,6 +393,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     _projectId.dispose();
     _name.dispose();
     _rera.dispose();
@@ -712,7 +714,12 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
               )
             ]
           : items,
-      onChanged: items.isEmpty ? null : onChanged,
+      onChanged: items.isEmpty
+          ? null
+          : (v) {
+              onChanged(v);
+              _autoSaveDraft();
+            },
       validator: required ? (v) => (v == null || v == '__EMPTY__') ? 'Required' : null : null,
     );
   }
@@ -776,7 +783,12 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
             )
             .toList();
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        _autoSaveDraft(immediate: true);
+      },
+      child: Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
       appBar: AppBar(
         backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
@@ -1232,6 +1244,7 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 

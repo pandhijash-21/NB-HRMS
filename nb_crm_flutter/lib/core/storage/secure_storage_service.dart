@@ -37,6 +37,8 @@ class SecureStorageService {
   String? _cachedSessionJson;
   SharedPreferences? _prefs;
 
+  String? get currentCachedToken => _cachedToken;
+
   Future<SharedPreferences> _prefsInstance() async {
     return _prefs ??= await SharedPreferences.getInstance();
   }

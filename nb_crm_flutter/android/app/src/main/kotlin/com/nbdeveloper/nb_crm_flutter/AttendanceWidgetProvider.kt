@@ -77,15 +77,21 @@ class AttendanceWidgetProvider : HomeWidgetProvider() {
                 }
 
                 // Official HomeWidgetLaunchIntent handles background launch permissions on modern Android versions
-                val clickUri = Uri.parse("nbhrms://attendance?action=punch&source=widget")
-                val pendingIntent = HomeWidgetLaunchIntent.getActivity(
+                val punchUri = Uri.parse("nbhrms://attendance?action=punch&source=widget")
+                val punchPendingIntent = HomeWidgetLaunchIntent.getActivity(
                     context,
                     MainActivity::class.java,
-                    clickUri
+                    punchUri
                 )
+                views.setOnClickPendingIntent(R.id.btn_action, punchPendingIntent)
 
-                views.setOnClickPendingIntent(R.id.btn_action, pendingIntent)
-                views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+                val viewUri = Uri.parse("nbhrms://attendance?action=view&source=widget")
+                val viewPendingIntent = HomeWidgetLaunchIntent.getActivity(
+                    context,
+                    MainActivity::class.java,
+                    viewUri
+                )
+                views.setOnClickPendingIntent(R.id.widget_root, viewPendingIntent)
 
                 appWidgetManager.updateAppWidget(appWidgetId, views)
             } catch (t: Throwable) {

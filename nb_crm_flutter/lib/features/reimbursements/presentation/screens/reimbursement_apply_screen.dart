@@ -58,8 +58,9 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreDraftIfAny());
   }
 
-  void _autoSaveDraft() {
-    if (!mounted || _submitting) return;
+  void _autoSaveDraft({bool immediate = false}) {
+    if (_submitting) return;
+    if (!mounted && !immediate) return;
     final fieldMap = <String, dynamic>{};
     for (final e in _fields.entries) {
       fieldMap[e.key] = {
@@ -80,6 +81,7 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
         'employeeId': _employee?.employeeId,
         'fields': fieldMap,
       },
+      immediate: immediate,
     );
   }
 
@@ -121,6 +123,7 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     _titleCtrl.dispose();
     _descCtrl.dispose();
     _amountCtrl.dispose();
@@ -315,7 +318,12 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
     final namesAsync = widget.onBehalf ? ref.watch(employeeNamesProvider) : null;
     final preview = _previewAmount;
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        _autoSaveDraft(immediate: true);
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(widget.onBehalf ? 'Apply on behalf' : 'Apply reimbursement'),
         leading: const AppBackButton(),
@@ -372,7 +380,8 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
                     data: (names) {
                       final options = names.where((n) => n.employeeId != null).toList();
                       return DropdownButtonFormField<int>(
-                        value: _employee?.employeeId,
+                        key: ValueKey('employee_${_employee?.employeeId}'),
+                        initialValue: _employee?.employeeId,
                         isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Employee *',
@@ -390,6 +399,7 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
                         onChanged: (id) {
                           final match = options.where((n) => n.employeeId == id).firstOrNull;
                           setState(() => _employee = match);
+                          _autoSaveDraft();
                         },
                         validator: (v) => v == null ? 'Select an employee' : null,
                       );
@@ -414,12 +424,16 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
                       firstDate: DateTime(2020),
                       lastDate: DateTime.now().add(const Duration(days: 366)),
                     );
-                    if (picked != null) setState(() => _claimDate = picked);
+                    if (picked != null) {
+                      setState(() => _claimDate = picked);
+                      _autoSaveDraft();
+                    }
                   },
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<ReimbursementType>(
-                  value: _type,
+                  key: ValueKey('type_${_type?.id}'),
+                  initialValue: _type,
                   decoration: const InputDecoration(
                     labelText: 'Type *',
                     border: OutlineInputBorder(),
@@ -541,6 +555,7 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
           );
         },
       ),
+    ),
     );
   }
 

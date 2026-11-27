@@ -4,8 +4,10 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_envelope.dart';
+import '../../../core/network/dio_client.dart' show isJwtExpired;
 import '../../../core/services/background_tracking_service.dart';
 import '../../../core/services/web_live_tracking_service.dart';
+import '../../../core/services/widget_sync_service.dart';
 import '../domain/auth_user.dart';
 import '../domain/permissions.dart';
 import 'auth_providers.dart';
@@ -241,6 +243,14 @@ class AuthNotifier extends Notifier<AuthState> {
       state = const AuthState.unauthenticated();
       return;
     }
+    if (isJwtExpired(restored.token)) {
+      await repo.clearSession();
+      unawaited(WidgetSyncService.clearWidget());
+      state = const AuthState.unauthenticated(
+        infoMessage: 'Your session has expired. Please log in again.',
+      );
+      return;
+    }
     state = AuthState(
       status: AuthStatus.authenticated,
       user: restored.user,
@@ -276,15 +286,21 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> _handleUnauthorized({String? reason}) async {
-    // Ignore late 401s after user already signed out / while restoring or submitting.
-    if (state.status != AuthStatus.authenticated || state.isSubmitting) return;
+    // Ignore late 401s after user already signed out / while submitting.
+    if (state.status == AuthStatus.unauthenticated || state.isSubmitting) return;
     final repo = ref.read(authRepositoryProvider);
     WebLiveTrackingService.stop(preventRestart: true);
     unawaited(stopBackgroundTracking());
     _stopSessionWatch();
-    // Release Redis so an open trip cannot permanently block re-login.
-    await repo.releaseSessionRemote();
+    // Release Redis so an open trip cannot permanently block re-login (strict timeout)
+    try {
+      await repo.releaseSessionRemote().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
+    } catch (_) {}
     await repo.clearSession();
+    unawaited(WidgetSyncService.clearWidget());
     final wasOnTrip = state.user?.onTrip == true;
 
     final String message;
@@ -295,7 +311,9 @@ class AuthNotifier extends Notifier<AuthState> {
       if (r.toLowerCase().contains('another device') ||
           r.toLowerCase().contains('displaced')) {
         message = 'You were signed out because this account signed in on another device or browser.';
-      } else if (r.toLowerCase().contains('expired')) {
+      } else if (r.toLowerCase().contains('expired') ||
+          r.toLowerCase().contains('invalid') ||
+          r.toLowerCase().contains('unauthorized')) {
         message = 'Your session has expired. Please log in again.';
       } else {
         message = r;
@@ -469,18 +487,18 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> logout() async {
     final repo = ref.read(authRepositoryProvider);
     try {
-      await repo.logoutRemote();
-    } on ApiException catch (e) {
-      state = state.copyWith(errorMessage: e.message);
-      return;
+      await repo.logoutRemote().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
     } catch (_) {
-      state = state.copyWith(errorMessage: 'Unable to sign out. Please try again.');
-      return;
+      // Best-effort remote logout; always clear local session regardless of remote errors.
     }
     WebLiveTrackingService.stop(preventRestart: true);
     _stopSessionWatch();
     await repo.clearSession();
     WebLiveTrackingService.stop(preventRestart: true);
+    unawaited(WidgetSyncService.clearWidget());
     ref.invalidate(profileProvider);
     ref.invalidate(activeProfileEmployeeIdProvider);
     state = const AuthState.unauthenticated();

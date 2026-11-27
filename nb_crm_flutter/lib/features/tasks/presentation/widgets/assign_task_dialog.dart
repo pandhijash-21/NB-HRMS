@@ -55,7 +55,7 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreDraftIfAny());
   }
 
-  void _autoSaveDraft() {
+  void _autoSaveDraft({bool immediate = false}) {
     if (!mounted || _saving) return;
     FormDraftService.instance.autoSave(
       formId: _draftKey,
@@ -67,6 +67,7 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
         'deadline': _deadline.toIso8601String(),
         'subtasks': _subtasks.map((s) => s.titleText).toList(),
       },
+      immediate: immediate,
     );
   }
 
@@ -118,6 +119,7 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
 
   @override
   void dispose() {
+    _autoSaveDraft(immediate: true);
     _title.dispose();
     _description.dispose();
     for (final s in _subtasks) {
@@ -130,6 +132,7 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
     final draft = _SubtaskDraft();
     draft.title.addListener(_autoSaveDraft);
     setState(() => _subtasks.add(draft));
+    _autoSaveDraft();
   }
 
   void _removeSubtask(int index) {
@@ -137,6 +140,7 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
       _subtasks[index].dispose();
       _subtasks.removeAt(index);
     });
+    _autoSaveDraft();
   }
 
   Future<void> _pickDeadline() async {
@@ -161,6 +165,7 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
         time?.minute ?? 0,
       );
     });
+    _autoSaveDraft();
   }
 
   Future<void> _submit() async {
@@ -226,7 +231,12 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
         if (n.userId.isNotEmpty && n.userId != _assigneeUserId) n,
     ];
 
-    return AlertDialog(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _autoSaveDraft(immediate: true);
+      },
+      child: AlertDialog(
       backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
       title: const Text('Assign task', style: TextStyle(fontWeight: FontWeight.w800)),
       scrollable: true,
@@ -250,10 +260,13 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
               items: reportees,
               itemLabel: (r) => r.displayLabel,
               itemValue: (r) => r.userId,
-              onChanged: (v) => setState(() {
-                _assigneeUserId = v;
-                if (_extraApproverUserId == v) _extraApproverUserId = null;
-              }),
+              onChanged: (v) {
+                setState(() {
+                  _assigneeUserId = v;
+                  if (_extraApproverUserId == v) _extraApproverUserId = null;
+                });
+                _autoSaveDraft();
+              },
             ),
             if (reportees.isEmpty)
               const Padding(
@@ -373,6 +386,7 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
               : const Text('Assign'),
         ),
       ],
-    );
-  }
+    ),
+  );
+}
 }

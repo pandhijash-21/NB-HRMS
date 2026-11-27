@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../logging/app_logger.dart';
 import '../network/app_config.dart';
+import '../services/widget_sync_service.dart';
 import 'app_navigation.dart';
 import 'go_router_refresh_stream.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
@@ -210,6 +211,14 @@ GoRouter createAppRouter(AuthBloc authBloc) {
       final authenticated = auth.isAuthenticated;
       final isSuperAdmin = Permissions.isSuperAdmin(auth.user?.role);
       final isPlatformPath = loc.startsWith('/platform');
+
+      if (authenticated && !isSuperAdmin) {
+        final pendingWidget = WidgetSyncService.consumePendingLaunchUri();
+        if (pendingWidget != null) {
+          final action = pendingWidget.queryParameters['action'] ?? 'punch';
+          return '/attendance?action=$action&source=widget';
+        }
+      }
 
       String? next;
       if (!authenticated) {
@@ -1015,7 +1024,10 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           ),
           GoRoute(
             path: '/attendance',
-            builder: (context, state) => const AttendanceScreen(),
+            builder: (context, state) {
+              final action = state.uri.queryParameters['action'];
+              return AttendanceScreen(initialAction: action);
+            },
           ),
           GoRoute(
             path: '/admin/attendance',

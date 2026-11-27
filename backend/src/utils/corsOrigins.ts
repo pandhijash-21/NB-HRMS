@@ -5,9 +5,9 @@ const configuredCorsOrigins =
     .map((o) => o.trim())
     .filter(Boolean) ?? ['http://localhost:3000', 'http://localhost:9695'];
 
-/** Allow configured origins, localhost (dev), and prod CRM / site hosts. */
+/** Allow configured origins, localhost (dev), file:/// (null origin), and prod CRM / site hosts. */
 export function isAllowedCorsOrigin(origin: string | undefined): boolean {
-  if (!origin) return true;
+  if (!origin || origin === 'null') return true;
   if (configuredCorsOrigins.includes(origin)) return true;
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
   if (/^https:\/\/(www\.)?nbdeveloper\.co\.in$/i.test(origin)) return true;

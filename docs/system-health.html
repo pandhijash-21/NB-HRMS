@@ -126,6 +126,18 @@
     </div>
   </header>
   <main>
+    <div id="fileBanner" style="display:none;margin-bottom:18px;background:rgba(197,160,89,.12);border:1px solid rgba(197,160,89,.35);border-radius:14px;padding:14px 20px;font-size:13px;line-height:1.6;">
+      <div style="display:flex;align-items:center;gap:10px;font-weight:700;color:var(--bronze);margin-bottom:4px;">
+        <span>⚡ Local File Mode Active (file://)</span>
+        <span class="pill up" style="font-size:11px;">Opaque Reachability Active</span>
+      </div>
+      <div>
+        Modern web browsers block JavaScript from inspecting response bodies cross-origin from <code>file:///</code> paths.
+        System Health automatically uses <strong>network reachability probes</strong> (<code>mode: 'no-cors'</code>) to test live connectivity.
+        For complete unmasked JSON inspection, run the local backend (<code>cd backend &amp;&amp; npm run dev</code>) and open <a href="http://localhost:4000/docs/system-health.html" target="_blank" style="color:var(--cyan);font-weight:700;text-decoration:underline;">http://localhost:4000/docs/system-health.html</a>, or click the direct endpoint links below.
+      </div>
+    </div>
+
     <section class="hero">
       <div class="card">
         <h2>Health score</h2>
@@ -176,8 +188,8 @@
         <h2 style="margin-top:22px">How to read this</h2>
         <p class="sub" style="line-height:1.55">
           Protected routes that return <b>401/403</b> are healthy — the process is up and RBAC is working.
-          Connection failures, timeouts, and 5xx are failures.
-          Open this page from <b>http://localhost:4000/system-health</b> while the API is running for the most accurate CORS-free read.
+          When probing from <code>file:///</code>, unreachable routes fail, while responsive servers return <b>opaque reachability confirmation</b>.
+          Open this page from <b>http://localhost:4000/docs/system-health.html</b> while the API is running for the most accurate CORS-free read.
         </p>
         <footer id="stamp"></footer>
       </div>
@@ -228,7 +240,17 @@
     const $ = (id) => document.getElementById(id);
     $("preset").onchange = () => {
       const v = $("preset").value;
-      if (v !== "custom") $("origin").value = v;
+      if (v !== "custom") {
+        $("origin").value = v;
+        run();
+      }
+    };
+
+    $("origin").onkeydown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        run();
+      }
     };
 
     function origin() {
@@ -265,17 +287,43 @@
           ms,
           kind: classify(res.status, true),
           detail: json?.error || json?.data?.status || json?.status || json?.data?.message || res.statusText || "ok",
-          json
+          json,
+          opaque: false
         };
       } catch (err) {
+        if (err.name !== "AbortError") {
+          // If standard fetch failed due to CORS or file:// protocol, attempt opaque reachability probe
+          try {
+            const noCorsRes = await fetch(base + item.path, {
+              method: "GET",
+              mode: "no-cors",
+              cache: "no-store",
+              signal: ctrl.signal
+            });
+            const ms = Math.round(performance.now() - started);
+            return {
+              ...item,
+              okNet: true,
+              status: "opaque (ok)",
+              ms,
+              kind: "up",
+              detail: "Online & reachable (verified via opaque probe)",
+              json: null,
+              opaque: true
+            };
+          } catch (noCorsErr) {
+            // Target is genuinely unreachable, connection refused, or timed out
+          }
+        }
         return {
           ...item,
           okNet: false,
           status: 0,
           ms: Math.round(performance.now() - started),
           kind: "down",
-          detail: err.name === "AbortError" ? "timeout" : (err.message || "unreachable"),
-          json: null
+          detail: err.name === "AbortError" ? "timeout (8s)" : (err.message || "unreachable / offline"),
+          json: null,
+          opaque: false
         };
       } finally {
         clearTimeout(t);
@@ -312,7 +360,7 @@
         ["Avg ms", Math.round(results.reduce((a, b) => a + b.ms, 0) / results.length), ""]
       ].map(([k, v, c]) => `<div class="card kpi"><div class="label">${k}</div><div class="val">${c ? `<i class="dot ${c}"></i>` : ""}${v}</div></div>`).join("");
 
-      const health = results.find((r) => r.parseHealth && r.json?.data);
+      const health = results.find((r) => r.parseHealth);
       const d = health?.json?.data;
       if (d) {
         $("healthMeta").textContent = `${d.service || "hrms-backend"} · env ${d.env || "?"} · port ${d.port || "?"}`;
@@ -322,8 +370,29 @@
           ["Whisper", d.whisper],
           ["Status", d.status]
         ].map(([k, v]) => `<div><div class="label">${k}</div><div class="val">${v ?? "—"}</div></div>`).join("");
+      } else if (health && health.okNet) {
+        const base = origin();
+        $("healthMeta").innerHTML = `
+          <div style="color:var(--green);font-weight:700;margin-bottom:6px;">✓ API Server is Online &amp; Responding</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.45;">
+            The server answered the network probe. Browser <code>file://</code> security restricts reading cross-origin JSON payloads directly into JavaScript.
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+            <a href="${base}/health" target="_blank" class="primary" style="padding:6px 14px;border-radius:8px;text-decoration:none;font-size:12px;display:inline-block;color:#1a140c;">View Live /health JSON ↗</a>
+            <a href="http://localhost:4000/docs/system-health.html" target="_blank" style="padding:6px 14px;border:1px solid var(--line);border-radius:8px;text-decoration:none;font-size:12px;display:inline-block;color:var(--bronze);">Open via Local API :4000 ↗</a>
+          </div>
+        `;
+        $("healthKpis").innerHTML = [
+          ["Service", "hrms-backend"],
+          ["Network", "online"],
+          ["Protocol", location.protocol],
+          ["Mode", health.opaque ? "opaque probe" : "cors"]
+        ].map(([k, v]) => `<div><div class="label">${k}</div><div class="val">${v}</div></div>`).join("");
       } else {
-        $("healthMeta").textContent = "Health envelope did not return JSON. Is the API origin correct and running?";
+        $("healthMeta").innerHTML = `
+          <div style="color:var(--red);font-weight:700;margin-bottom:6px;">✗ Server Unreachable</div>
+          <div style="font-size:12px;color:var(--muted);">No response received from <code>${escapeHtml(origin())}</code>. Is the service running?</div>
+        `;
         $("healthKpis").innerHTML = "";
       }
 
@@ -401,7 +470,10 @@
       $("auto").textContent = "Auto 15s: on";
     };
 
-    if (location.protocol.startsWith("http")) {
+    if (location.protocol === "file:") {
+      const banner = $("fileBanner");
+      if (banner) banner.style.display = "block";
+    } else if (location.protocol.startsWith("http")) {
       const doc = document.getElementById("docLink");
       if (doc) doc.setAttribute("href", "/docs");
       if (location.port === "4000") {

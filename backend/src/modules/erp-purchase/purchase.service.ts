@@ -193,6 +193,8 @@ export const purchaseService = {
       defaultPoTerms: parseTerms(row.defaultPoTerms),
       priorityHighWithinDays: row.priorityHighWithinDays ?? 3,
       priorityMedWithinDays: row.priorityMedWithinDays ?? 7,
+      vendorPortalEnabled: row.vendorPortalEnabled ?? false,
+      vendorPortalAutoEmail: row.vendorPortalAutoEmail ?? false,
     };
   },
 
@@ -227,6 +229,12 @@ export const purchaseService = {
       if (n == null || n < 0 || n > 365) throw new Error('priorityMedWithinDays must be 0–365');
       data.priorityMedWithinDays = Math.floor(n);
     }
+    if ('vendorPortalEnabled' in body) {
+      data.vendorPortalEnabled = Boolean(body.vendorPortalEnabled);
+    }
+    if ('vendorPortalAutoEmail' in body) {
+      data.vendorPortalAutoEmail = Boolean(body.vendorPortalAutoEmail);
+    }
     await this.getSettings();
     const row = await prisma.erpPurchaseSettings.update({
       where: { key: SETTINGS_KEY },
@@ -256,6 +264,8 @@ export const purchaseService = {
       defaultPoTerms: parseTerms(row.defaultPoTerms),
       priorityHighWithinDays: row.priorityHighWithinDays ?? 3,
       priorityMedWithinDays: row.priorityMedWithinDays ?? 7,
+      vendorPortalEnabled: row.vendorPortalEnabled ?? false,
+      vendorPortalAutoEmail: row.vendorPortalAutoEmail ?? false,
     };
   },
 
@@ -370,7 +380,21 @@ export const purchaseService = {
         vendorName: q.vendorName,
         status: q.status,
         totalAmount: Number(q.totalAmount),
+        finalAmount: Number(q.finalAmount ?? q.totalAmount),
         gstNo: q.gstNo,
+        gstMode: q.gstMode,
+        gstTaxType: q.gstTaxType,
+        cgstRate: q.cgstRate != null ? Number(q.cgstRate) : null,
+        sgstRate: q.sgstRate != null ? Number(q.sgstRate) : null,
+        igstRate: q.igstRate != null ? Number(q.igstRate) : null,
+        cgstAmount: q.cgstAmount != null ? Number(q.cgstAmount) : null,
+        sgstAmount: q.sgstAmount != null ? Number(q.sgstAmount) : null,
+        igstAmount: q.igstAmount != null ? Number(q.igstAmount) : null,
+        freightMode: q.freightMode,
+        freightAmount: q.freightAmount != null ? Number(q.freightAmount) : null,
+        paymentTerms: q.paymentTerms,
+        deliveryDays: q.deliveryDays,
+        rating: q.rating != null ? Number(q.rating) : null,
         lines: q.lines.map((l) => ({
           purchaseRequestLineId: l.purchaseRequestLineId,
           itemName: l.itemName,

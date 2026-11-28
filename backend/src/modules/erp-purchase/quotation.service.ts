@@ -56,12 +56,130 @@ function mapEmployeeName(e: {
   };
 }
 
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+function normalizeGstMode(v: unknown): 'INCLUSIVE' | 'EXCLUSIVE' {
+  const s = String(v ?? 'INCLUSIVE').trim().toUpperCase();
+  return s === 'EXCLUSIVE' ? 'EXCLUSIVE' : 'INCLUSIVE';
+}
+
+function normalizeFreightMode(v: unknown): 'INCLUSIVE' | 'EXCLUSIVE' {
+  const s = String(v ?? 'INCLUSIVE').trim().toUpperCase();
+  return s === 'EXCLUSIVE' ? 'EXCLUSIVE' : 'INCLUSIVE';
+}
+
+function normalizeGstTaxType(v: unknown, vendorStateCode?: string | null): 'CGST_SGST' | 'IGST' | null {
+  const s = str(v)?.toUpperCase() ?? null;
+  if (s === 'CGST_SGST' || s === 'IGST') return s;
+  if (s === 'CGST' || s === 'SGST') return 'CGST_SGST';
+  const state = (vendorStateCode ?? '').trim().toUpperCase();
+  if (!state) return null;
+  return state === 'GUJARAT' ? 'CGST_SGST' : 'IGST';
+}
+
+/** Compute GST/freight amounts and final total from line subtotal + commercial fields. */
+function computeCommercialTotals(input: {
+  subtotal: number;
+  gstMode: 'INCLUSIVE' | 'EXCLUSIVE';
+  gstTaxType: 'CGST_SGST' | 'IGST' | null;
+  cgstRate: number | null;
+  sgstRate: number | null;
+  igstRate: number | null;
+  freightMode: 'INCLUSIVE' | 'EXCLUSIVE';
+  freightAmount: number;
+}) {
+  const subtotal = round2(input.subtotal);
+  let cgstAmount = 0;
+  let sgstAmount = 0;
+  let igstAmount = 0;
+  if (input.gstMode === 'EXCLUSIVE') {
+    if (input.gstTaxType === 'CGST_SGST') {
+      cgstAmount = round2((subtotal * (input.cgstRate ?? 0)) / 100);
+      sgstAmount = round2((subtotal * (input.sgstRate ?? 0)) / 100);
+    } else if (input.gstTaxType === 'IGST') {
+      igstAmount = round2((subtotal * (input.igstRate ?? 0)) / 100);
+    }
+  }
+  const freightAdd =
+    input.freightMode === 'EXCLUSIVE' ? round2(Math.max(0, input.freightAmount)) : 0;
+  const freightAmount =
+    input.freightMode === 'EXCLUSIVE' ? freightAdd : round2(Math.max(0, input.freightAmount));
+  const finalAmount = round2(subtotal + cgstAmount + sgstAmount + igstAmount + freightAdd);
+  return { cgstAmount, sgstAmount, igstAmount, freightAmount, finalAmount, totalAmount: subtotal };
+}
+
+function parseCommercial(body: Record<string, unknown>, subtotal: number) {
+  const vendorStateCode = str(body.vendorStateCode);
+  const gstMode = normalizeGstMode(body.gstMode);
+  let gstTaxType = normalizeGstTaxType(body.gstTaxType, vendorStateCode);
+  if (gstMode === 'EXCLUSIVE' && !gstTaxType) {
+    gstTaxType = vendorStateCode && vendorStateCode.toUpperCase() !== 'GUJARAT' ? 'IGST' : 'CGST_SGST';
+  }
+  if (gstMode === 'INCLUSIVE') gstTaxType = null;
+
+  const cgstRate = gstMode === 'EXCLUSIVE' && gstTaxType === 'CGST_SGST' ? num(body.cgstRate) ?? 0 : num(body.cgstRate);
+  const sgstRate = gstMode === 'EXCLUSIVE' && gstTaxType === 'CGST_SGST' ? num(body.sgstRate) ?? 0 : num(body.sgstRate);
+  const igstRate = gstMode === 'EXCLUSIVE' && gstTaxType === 'IGST' ? num(body.igstRate) ?? 0 : num(body.igstRate);
+  const freightMode = normalizeFreightMode(body.freightMode);
+  const freightAmountIn = num(body.freightAmount) ?? 0;
+  if (freightMode === 'EXCLUSIVE' && freightAmountIn < 0) {
+    throw new Error('Freight amount cannot be negative');
+  }
+  const deliveryDaysRaw = num(body.deliveryDays);
+  const deliveryDays =
+    deliveryDaysRaw == null ? null : Math.max(0, Math.floor(deliveryDaysRaw));
+  const ratingRaw = num(body.rating);
+  const rating =
+    ratingRaw == null ? null : Math.min(5, Math.max(0, round2(ratingRaw)));
+
+  const totals = computeCommercialTotals({
+    subtotal,
+    gstMode,
+    gstTaxType,
+    cgstRate,
+    sgstRate,
+    igstRate,
+    freightMode,
+    freightAmount: freightAmountIn,
+  });
+
+  return {
+    gstMode,
+    gstTaxType,
+    vendorStateCode,
+    cgstRate: cgstRate == null ? null : dec(cgstRate),
+    sgstRate: sgstRate == null ? null : dec(sgstRate),
+    igstRate: igstRate == null ? null : dec(igstRate),
+    cgstAmount: dec(totals.cgstAmount),
+    sgstAmount: dec(totals.sgstAmount),
+    igstAmount: dec(totals.igstAmount),
+    freightMode,
+    freightAmount: dec(totals.freightAmount),
+    paymentTerms: str(body.paymentTerms),
+    deliveryDays,
+    rating: rating == null ? null : dec(rating),
+    totalAmount: dec(totals.totalAmount),
+    finalAmount: dec(totals.finalAmount),
+  };
+}
+
 function serializeQuote(
   row: Prisma.ErpPurchaseQuotationGetPayload<{ include: typeof quoteInclude }>,
 ) {
   return {
     ...row,
     totalAmount: Number(row.totalAmount),
+    finalAmount: Number(row.finalAmount),
+    cgstRate: row.cgstRate != null ? Number(row.cgstRate) : null,
+    sgstRate: row.sgstRate != null ? Number(row.sgstRate) : null,
+    igstRate: row.igstRate != null ? Number(row.igstRate) : null,
+    cgstAmount: Number(row.cgstAmount),
+    sgstAmount: Number(row.sgstAmount),
+    igstAmount: Number(row.igstAmount),
+    freightAmount: Number(row.freightAmount),
+    rating: row.rating != null ? Number(row.rating) : null,
     selectedBy: mapEmployeeName(row.selectedBy),
     purchaseOrder: row.purchaseOrder
       ? {
@@ -202,7 +320,8 @@ export const quotationService = {
       }));
     }
 
-    const totalAmount = linesData.reduce((s, l) => s + Number(l.amount), 0);
+    const subtotal = linesData.reduce((s, l) => s + Number(l.amount), 0);
+    const commercial = parseCommercial(body, subtotal);
     const quotationNo = str(body.quotationNo) || (await nextQuotationNo(pr.prNumber));
 
     const row = await prisma.erpPurchaseQuotation.create({
@@ -217,8 +336,10 @@ export const quotationService = {
         gstNo: str(body.gstNo),
         panNo: str(body.panNo),
         remarks: str(body.remarks),
+        vendorEmail: str(body.vendorEmail),
+        submittedViaPortal: body.submittedViaPortal === true,
         status: ErpPurchaseQuotationStatus.DRAFT,
-        totalAmount: dec(totalAmount),
+        ...commercial,
         createdBy: opts.userId ?? null,
         lines: { create: linesData },
       },
@@ -239,9 +360,26 @@ export const quotationService = {
 
     const linesData =
       Array.isArray(body.lines) && body.lines.length > 0 ? parseLines(body.lines) : null;
-    const totalAmount = linesData
+    const subtotal = linesData
       ? linesData.reduce((s, l) => s + Number(l.amount), 0)
-      : null;
+      : Number(existing.totalAmount);
+
+    const commercialBody: Record<string, unknown> = {
+      gstMode: body.gstMode !== undefined ? body.gstMode : existing.gstMode,
+      gstTaxType: body.gstTaxType !== undefined ? body.gstTaxType : existing.gstTaxType,
+      vendorStateCode:
+        body.vendorStateCode !== undefined ? body.vendorStateCode : existing.vendorStateCode,
+      cgstRate: body.cgstRate !== undefined ? body.cgstRate : existing.cgstRate,
+      sgstRate: body.sgstRate !== undefined ? body.sgstRate : existing.sgstRate,
+      igstRate: body.igstRate !== undefined ? body.igstRate : existing.igstRate,
+      freightMode: body.freightMode !== undefined ? body.freightMode : existing.freightMode,
+      freightAmount:
+        body.freightAmount !== undefined ? body.freightAmount : existing.freightAmount,
+      paymentTerms: body.paymentTerms !== undefined ? body.paymentTerms : existing.paymentTerms,
+      deliveryDays: body.deliveryDays !== undefined ? body.deliveryDays : existing.deliveryDays,
+      rating: body.rating !== undefined ? body.rating : existing.rating,
+    };
+    const commercial = parseCommercial(commercialBody, subtotal);
 
     const row = await prisma.$transaction(async (tx) => {
       if (linesData) {
@@ -267,7 +405,7 @@ export const quotationService = {
             body.quotationDate !== undefined
               ? dateOnly(body.quotationDate) ?? existing.quotationDate
               : undefined,
-          ...(totalAmount != null ? { totalAmount: dec(totalAmount) } : {}),
+          ...commercial,
         },
         include: quoteInclude,
       });
@@ -354,12 +492,22 @@ export const quotationService = {
     }
 
     const poNumber = `PO-${quote.purchaseRequest.prNumber}-${Date.now().toString().slice(-4)}`;
-    const totalAmount = Number(quote.totalAmount);
+    const totalAmount = Number(quote.finalAmount || quote.totalAmount);
     const terms = parseTerms(
       Array.isArray(settings.defaultPoTerms) && settings.defaultPoTerms.length > 0
         ? settings.defaultPoTerms
         : DEFAULT_PO_TERMS,
     );
+    // Carry quotation GST into PO (IGST mapped to cgst when CGST/SGST not used)
+    const quoteGstExclusive = quote.gstMode === 'EXCLUSIVE';
+    const poCgst =
+      quoteGstExclusive && quote.gstTaxType === 'CGST_SGST'
+        ? Number(quote.cgstRate ?? 0)
+        : quoteGstExclusive && quote.gstTaxType === 'IGST'
+          ? Number(quote.igstRate ?? 0)
+          : 0;
+    const poSgst =
+      quoteGstExclusive && quote.gstTaxType === 'CGST_SGST' ? Number(quote.sgstRate ?? 0) : 0;
 
     const result = await prisma.$transaction(async (tx) => {
       await tx.erpPurchaseQuotation.update({
@@ -394,9 +542,18 @@ export const quotationService = {
           status: 'OPEN',
           totalAmount: dec(totalAmount),
           termsAndConditions: terms,
-          cgstRate: 9,
-          sgstRate: 9,
-          remarks: `Created from quotation ${quote.quotationNo} (CS approved)`,
+          cgstRate: poCgst,
+          sgstRate: poSgst,
+          remarks: [
+            `Created from quotation ${quote.quotationNo} (CS approved)`,
+            quote.paymentTerms ? `Payment: ${quote.paymentTerms}` : null,
+            quote.deliveryDays != null ? `Delivery: ${quote.deliveryDays} day(s)` : null,
+            quote.freightMode === 'EXCLUSIVE' && Number(quote.freightAmount) > 0
+              ? `Freight (extra): ${Number(quote.freightAmount)}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' · '),
           createdBy: null,
           items: {
             create: quote.lines.map((l, idx) => ({

@@ -8,6 +8,7 @@ import '../../data/work_order_repository.dart';
 import '../../domain/resource_models.dart';
 import '../../domain/work_order_lookup_keys.dart';
 import '../../domain/work_order_models.dart';
+import '../widgets/material_stock_logs_sheet.dart';
 import '../widgets/quick_create_masters.dart';
 
 class MaterialsConfigScreen extends StatefulWidget {
@@ -139,7 +140,7 @@ class _MaterialsConfigScreenState extends State<MaterialsConfigScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Materials'),
-        leading: const AppBackButton(fallbackLocation: '/erp/configurations'),
+        leading: const AppBackButton(fallbackLocation: '/erp/home'),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -150,6 +151,16 @@ class _MaterialsConfigScreenState extends State<MaterialsConfigScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Text(
+                    'Materials ledger',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Store manages all materials. Use this ledger when the catalogue is large — tap a row for inward/outward history.',
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+                  ),
+                  const SizedBox(height: 16),
                   const Text('Add Material', style: TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 12),
                   TextField(controller: _brandCtrl, decoration: const InputDecoration(labelText: 'Brand', border: OutlineInputBorder())),
@@ -221,13 +232,14 @@ class _MaterialsConfigScreenState extends State<MaterialsConfigScreen> {
                 const Text('Materials ledger', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                 const SizedBox(height: 4),
                 Text(
-                  'Total · Used · Available · Used today',
+                  'Total · Used · Available · Used today · Tap row for Store history',
                   style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
                 ),
                 const SizedBox(height: 8),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
+                    showCheckboxColumn: false,
                     columns: const [
                       DataColumn(label: Text('Material')),
                       DataColumn(label: Text('UOM')),
@@ -240,16 +252,35 @@ class _MaterialsConfigScreenState extends State<MaterialsConfigScreen> {
                     rows: [
                       for (final m in _materials)
                         DataRow(
+                          onSelectChanged: (_) => showMaterialStockLogsSheet(context, m),
                           cells: [
-                            DataCell(Text(
-                              '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} · ' : ''}${m.name}',
-                              overflow: TextOverflow.ellipsis,
-                            )),
-                            DataCell(Text(m.unitCode ?? '—')),
-                            DataCell(Text(m.qtyTotal.toStringAsFixed(2))),
-                            DataCell(Text(m.qtyUsed.toStringAsFixed(2))),
-                            DataCell(Text(m.qtyAvailable.toStringAsFixed(2))),
-                            DataCell(Text(m.qtyUsedToday.toStringAsFixed(2))),
+                            DataCell(
+                              Text(
+                                '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} · ' : ''}${m.name}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              onTap: () => showMaterialStockLogsSheet(context, m),
+                            ),
+                            DataCell(
+                              Text(m.unitCode ?? '—'),
+                              onTap: () => showMaterialStockLogsSheet(context, m),
+                            ),
+                            DataCell(
+                              Text(m.qtyTotal.toStringAsFixed(2)),
+                              onTap: () => showMaterialStockLogsSheet(context, m),
+                            ),
+                            DataCell(
+                              Text(m.qtyUsed.toStringAsFixed(2)),
+                              onTap: () => showMaterialStockLogsSheet(context, m),
+                            ),
+                            DataCell(
+                              Text(m.qtyAvailable.toStringAsFixed(2)),
+                              onTap: () => showMaterialStockLogsSheet(context, m),
+                            ),
+                            DataCell(
+                              Text(m.qtyUsedToday.toStringAsFixed(2)),
+                              onTap: () => showMaterialStockLogsSheet(context, m),
+                            ),
                             DataCell(IconButton(
                               icon: const Icon(Icons.add_shopping_cart_outlined),
                               tooltip: 'Add purchase',

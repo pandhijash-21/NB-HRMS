@@ -5,8 +5,10 @@ import { ok, fail } from '../../utils/response';
 import { prisma } from '../../config/prisma';
 import { purchaseService } from './purchase.service';
 import { quotationService } from './quotation.service';
+import { vendorPortalAdminRouter } from './vendor-portal.routes';
 
 export const purchaseRouter = Router();
+purchaseRouter.use(vendorPortalAdminRouter);
 const p = (v: string | string[]) => (Array.isArray(v) ? v[0] : v);
 
 async function resolveEmployeeId(userId?: string): Promise<number | undefined> {

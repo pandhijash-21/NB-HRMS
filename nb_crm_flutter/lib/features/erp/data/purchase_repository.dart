@@ -24,10 +24,13 @@ class PurchaseRepository {
     List<String>? defaultPoTerms,
     int? priorityHighWithinDays,
     int? priorityMedWithinDays,
+    bool? vendorPortalEnabled,
+    bool? vendorPortalAutoEmail,
     bool updatePrApprover = false,
     bool updateCsApprover = false,
     bool updateDefaultPoTerms = false,
     bool updatePriorityThresholds = false,
+    bool updateVendorPortal = false,
   }) {
     return _dio.patchEnvelope(
       'erp/purchase/settings',
@@ -39,8 +42,46 @@ class PurchaseRepository {
           'priorityHighWithinDays': priorityHighWithinDays,
           'priorityMedWithinDays': priorityMedWithinDays,
         },
+        if (updateVendorPortal) ...{
+          if (vendorPortalEnabled != null) 'vendorPortalEnabled': vendorPortalEnabled,
+          if (vendorPortalAutoEmail != null) 'vendorPortalAutoEmail': vendorPortalAutoEmail,
+        },
       },
       parse: (raw) => ErpPurchaseSettings.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<Map<String, dynamic>> getVendorPortalInvite(String purchaseRequestId) {
+    return _dio.getEnvelope(
+      'erp/purchase/requests/$purchaseRequestId/vendor-portal',
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> ensureVendorPortalInvite(String purchaseRequestId) {
+    return _dio.postEnvelope(
+      'erp/purchase/requests/$purchaseRequestId/vendor-portal/ensure',
+      data: const {},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> rotateVendorPortalInvite(String purchaseRequestId) {
+    return _dio.postEnvelope(
+      'erp/purchase/requests/$purchaseRequestId/vendor-portal/rotate',
+      data: const {},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> emailVendorPortalInvite(
+    String purchaseRequestId, {
+    required List<String> emails,
+  }) {
+    return _dio.postEnvelope(
+      'erp/purchase/requests/$purchaseRequestId/vendor-portal/email',
+      data: {'emails': emails},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
     );
   }
 

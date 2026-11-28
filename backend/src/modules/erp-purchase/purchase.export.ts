@@ -132,7 +132,21 @@ export type CsExportInput = {
     vendorName: string;
     status: string;
     totalAmount: number;
+    finalAmount?: number | null;
     gstNo?: string | null;
+    gstMode?: string | null;
+    gstTaxType?: string | null;
+    cgstRate?: number | null;
+    sgstRate?: number | null;
+    igstRate?: number | null;
+    cgstAmount?: number | null;
+    sgstAmount?: number | null;
+    igstAmount?: number | null;
+    freightMode?: string | null;
+    freightAmount?: number | null;
+    paymentTerms?: string | null;
+    deliveryDays?: number | null;
+    rating?: number | null;
     lines: Array<{
       purchaseRequestLineId?: string | null;
       itemName: string;
@@ -203,11 +217,51 @@ export function buildComparisonSheetXlsx(input: CsExportInput): { buffer: Buffer
   }
 
   aoa.push([]);
-  const totalRow: (string | number)[] = ['TOTAL'];
+  const subtotalRow: (string | number)[] = ['Subtotal'];
+  for (const q of quotations) subtotalRow.push(money(Number(q.totalAmount)));
+  aoa.push(subtotalRow);
+
+  const gstModeRow: (string | number)[] = ['GST'];
   for (const q of quotations) {
-    totalRow.push(money(Number(q.totalAmount)));
+    if ((q.gstMode ?? 'INCLUSIVE') === 'INCLUSIVE') {
+      gstModeRow.push('Inclusive');
+    } else if (q.gstTaxType === 'IGST') {
+      gstModeRow.push(`Exclusive IGST ${q.igstRate ?? 0}% = ${money(Number(q.igstAmount ?? 0))}`);
+    } else {
+      gstModeRow.push(
+        `Exclusive CGST ${q.cgstRate ?? 0}% (${money(Number(q.cgstAmount ?? 0))}) + SGST ${q.sgstRate ?? 0}% (${money(Number(q.sgstAmount ?? 0))})`,
+      );
+    }
   }
-  aoa.push(totalRow);
+  aoa.push(gstModeRow);
+
+  const freightRow: (string | number)[] = ['Freight'];
+  for (const q of quotations) {
+    if ((q.freightMode ?? 'INCLUSIVE') === 'INCLUSIVE') {
+      freightRow.push('Inclusive');
+    } else {
+      freightRow.push(`Exclusive ${money(Number(q.freightAmount ?? 0))}`);
+    }
+  }
+  aoa.push(freightRow);
+
+  const finalRow: (string | number)[] = ['Final amount'];
+  for (const q of quotations) {
+    finalRow.push(money(Number(q.finalAmount ?? q.totalAmount)));
+  }
+  aoa.push(finalRow);
+
+  const payRow: (string | number)[] = ['Payment terms'];
+  for (const q of quotations) payRow.push(q.paymentTerms ?? '');
+  aoa.push(payRow);
+
+  const delRow: (string | number)[] = ['Delivery (days)'];
+  for (const q of quotations) delRow.push(q.deliveryDays ?? '');
+  aoa.push(delRow);
+
+  const ratingRow: (string | number)[] = ['Rating'];
+  for (const q of quotations) ratingRow.push(q.rating ?? '');
+  aoa.push(ratingRow);
 
   const statusRow: (string | number)[] = ['Status'];
   for (const q of quotations) statusRow.push(q.status);

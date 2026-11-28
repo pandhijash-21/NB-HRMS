@@ -5,8 +5,10 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/open_url.dart';
+import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../data/purchase_repository.dart';
 import '../../data/work_order_repository.dart';
+import '../../domain/contractor_lookup_keys.dart';
 import '../../domain/purchase_models.dart';
 import '../../domain/work_order_models.dart';
 import '../widgets/quick_create_vendor_dialog.dart';
@@ -319,20 +321,27 @@ class _PurchaseQuotationScreenState extends State<PurchaseQuotationScreen>
               : TabBarView(
                   controller: _tabs,
                   children: [
-                    _QuotationsTab(
-                      quotes: quotes,
-                      hasSelected: hasSelected,
-                      onAdd: () => _addOrEditQuotation(),
-                      onEdit: (q) => _addOrEditQuotation(existing: q),
-                      onSubmit: _submit,
-                      onDelete: _delete,
-                      onSelect: hasSelected || _selecting ? null : _selectWinner,
-                      onPrintPo: (q) {
-                        if (q.purchaseOrderId != null) _printPo(q.purchaseOrderId!);
-                      },
-                      onEditTerms: (q) {
-                        if (q.purchaseOrderId != null) _editPoTerms(q.purchaseOrderId!);
-                      },
+                    Column(
+                      children: [
+                        _VendorPortalInviteCard(purchaseRequestId: widget.purchaseRequestId),
+                        Expanded(
+                          child: _QuotationsTab(
+                            quotes: quotes,
+                            hasSelected: hasSelected,
+                            onAdd: () => _addOrEditQuotation(),
+                            onEdit: (q) => _addOrEditQuotation(existing: q),
+                            onSubmit: _submit,
+                            onDelete: _delete,
+                            onSelect: hasSelected || _selecting ? null : _selectWinner,
+                            onPrintPo: (q) {
+                              if (q.purchaseOrderId != null) _printPo(q.purchaseOrderId!);
+                            },
+                            onEditTerms: (q) {
+                              if (q.purchaseOrderId != null) _editPoTerms(q.purchaseOrderId!);
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                     _ComparisonTab(
                       sheet: _sheet!,
@@ -348,6 +357,194 @@ class _PurchaseQuotationScreenState extends State<PurchaseQuotationScreen>
                     ),
                   ],
                 ),
+    );
+  }
+}
+
+class _VendorPortalInviteCard extends StatefulWidget {
+  const _VendorPortalInviteCard({required this.purchaseRequestId});
+
+  final String purchaseRequestId;
+
+  @override
+  State<_VendorPortalInviteCard> createState() => _VendorPortalInviteCardState();
+}
+
+class _VendorPortalInviteCardState extends State<_VendorPortalInviteCard> {
+  Map<String, dynamic>? _invite;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final data =
+          await context.read<PurchaseRepository>().getVendorPortalInvite(widget.purchaseRequestId);
+      if (!mounted) return;
+      setState(() {
+        _invite = data;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  Future<void> _ensure() async {
+    try {
+      final data =
+          await context.read<PurchaseRepository>().ensureVendorPortalInvite(widget.purchaseRequestId);
+      if (!mounted) return;
+      setState(() => _invite = data);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _rotate() async {
+    try {
+      final data =
+          await context.read<PurchaseRepository>().rotateVendorPortalInvite(widget.purchaseRequestId);
+      if (!mounted) return;
+      setState(() => _invite = data);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invite link regenerated')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _email() async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Email invite link'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(
+            labelText: 'Vendor emails',
+            hintText: 'a@x.com, b@y.com',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Send')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final emails = ctrl.text
+        .split(RegExp(r'[,;\s]+'))
+        .map((e) => e.trim())
+        .where((e) => e.contains('@'))
+        .toList();
+    if (emails.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter at least one email')),
+      );
+      return;
+    }
+    try {
+      final res = await context.read<PurchaseRepository>().emailVendorPortalInvite(
+            widget.purchaseRequestId,
+            emails: emails,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sent to ${res['sent']} recipient(s)')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const LinearProgressIndicator(minHeight: 2);
+    }
+    final enabled = _invite?['vendorPortalEnabled'] == true;
+    final link = _invite?['link']?.toString();
+    return Material(
+      color: enabled ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.link,
+                  size: 18,
+                  color: enabled ? const Color(0xFF1e3a5f) : Colors.grey,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    enabled
+                        ? 'Vendor quotation link (unique for this PR)'
+                        : 'Vendor portal disabled — enable in Purchase → Settings',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                  ),
+                ),
+                if (enabled)
+                  TextButton(onPressed: _ensure, child: const Text('Generate')),
+              ],
+            ),
+            if (_error != null)
+              Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+            if (enabled && link != null && link.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              SelectableText(link, style: const TextStyle(fontSize: 12)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: link));
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Link copied')),
+                      );
+                    },
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Copy'),
+                  ),
+                  if (_invite?['vendorPortalAutoEmail'] == true)
+                    OutlinedButton.icon(
+                      onPressed: _email,
+                      icon: const Icon(Icons.mail_outline, size: 16),
+                      label: const Text('Email vendors'),
+                    ),
+                  TextButton(onPressed: _rotate, child: const Text('Rotate link')),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -412,8 +609,11 @@ class _QuotationsTab extends StatelessWidget {
             subtitle: Text(
               [
                 q.status,
-                money.format(q.totalAmount),
-                if (q.gstNo != null && q.gstNo!.isNotEmpty) 'GST ${q.gstNo}',
+                money.format(q.displayFinal),
+                if (q.gstMode == 'EXCLUSIVE') 'GST excl.',
+                if (q.freightMode == 'EXCLUSIVE') 'Freight excl.',
+                if (q.deliveryDays != null) '${q.deliveryDays}d',
+                if (q.rating != null) '★ ${q.rating}',
                 if (q.purchaseOrderNo != null) 'PO ${q.purchaseOrderNo}',
               ].join(' · '),
             ),
@@ -544,7 +744,7 @@ class _ComparisonTab extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(q.vendorName, style: const TextStyle(fontWeight: FontWeight.w800)),
-                    Text('${q.status} · ${money.format(q.totalAmount)}',
+                    Text('${q.status} · ${money.format(q.displayFinal)}',
                         style: const TextStyle(fontSize: 11)),
                     if (onSelect != null &&
                         (q.status == 'DRAFT' || q.status == 'SUBMITTED'))
@@ -581,14 +781,65 @@ class _ComparisonTab extends StatelessWidget {
               ),
             DataRow(
               cells: [
-                const DataCell(Text('TOTAL', style: TextStyle(fontWeight: FontWeight.w800))),
+                const DataCell(Text('Subtotal')),
+                for (final q in quotes) DataCell(Text(money.format(q.totalAmount))),
+              ],
+            ),
+            DataRow(
+              cells: [
+                const DataCell(Text('GST')),
+                for (final q in quotes)
+                  DataCell(Text(() {
+                    if (q.gstMode != 'EXCLUSIVE') return 'Inclusive';
+                    if (q.gstTaxType == 'IGST') {
+                      return 'IGST ${q.igstRate ?? 0}% = ${money.format(q.igstAmount)}';
+                    }
+                    return 'CGST ${q.cgstRate ?? 0}% (${money.format(q.cgstAmount)}) + '
+                        'SGST ${q.sgstRate ?? 0}% (${money.format(q.sgstAmount)})';
+                  }())),
+              ],
+            ),
+            DataRow(
+              cells: [
+                const DataCell(Text('Freight')),
+                for (final q in quotes)
+                  DataCell(Text(
+                    q.freightMode == 'EXCLUSIVE'
+                        ? 'Extra ${money.format(q.freightAmount)}'
+                        : 'Inclusive',
+                  )),
+              ],
+            ),
+            DataRow(
+              cells: [
+                const DataCell(Text('Final amount', style: TextStyle(fontWeight: FontWeight.w800))),
                 for (final q in quotes)
                   DataCell(
                     Text(
-                      money.format(q.totalAmount),
+                      money.format(q.displayFinal),
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ),
+              ],
+            ),
+            DataRow(
+              cells: [
+                const DataCell(Text('Payment terms')),
+                for (final q in quotes) DataCell(Text(q.paymentTerms ?? '—')),
+              ],
+            ),
+            DataRow(
+              cells: [
+                const DataCell(Text('Delivery (days)')),
+                for (final q in quotes)
+                  DataCell(Text(q.deliveryDays?.toString() ?? '—')),
+              ],
+            ),
+            DataRow(
+              cells: [
+                const DataCell(Text('Rating')),
+                for (final q in quotes)
+                  DataCell(Text(q.rating != null ? q.rating!.toStringAsFixed(1) : '—')),
               ],
             ),
           ],
@@ -621,7 +872,18 @@ class _QuotationEditorDialogState extends State<_QuotationEditorDialog> {
   late TextEditingController _gstCtrl;
   late TextEditingController _panCtrl;
   late TextEditingController _remarksCtrl;
+  late TextEditingController _cgstRateCtrl;
+  late TextEditingController _sgstRateCtrl;
+  late TextEditingController _igstRateCtrl;
+  late TextEditingController _freightAmtCtrl;
+  late TextEditingController _deliveryCtrl;
+  late TextEditingController _ratingCtrl;
   String? _vendorId;
+  String? _vendorStateCode;
+  String _gstMode = 'INCLUSIVE';
+  String _gstTaxType = 'CGST_SGST'; // CGST_SGST | IGST
+  String _freightMode = 'INCLUSIVE';
+  String? _paymentTerms;
   List<ErpContractor> _vendors = [];
   late List<ErpPurchaseQuotationLine> _lines;
   bool _saving = false;
@@ -636,6 +898,29 @@ class _QuotationEditorDialogState extends State<_QuotationEditorDialog> {
     _gstCtrl = TextEditingController(text: e?.gstNo ?? '');
     _panCtrl = TextEditingController(text: e?.panNo ?? '');
     _remarksCtrl = TextEditingController(text: e?.remarks ?? '');
+    _gstMode = e?.gstMode ?? 'INCLUSIVE';
+    _gstTaxType = e?.gstTaxType == 'IGST' ? 'IGST' : 'CGST_SGST';
+    _vendorStateCode = e?.vendorStateCode;
+    _freightMode = e?.freightMode ?? 'INCLUSIVE';
+    _paymentTerms = e?.paymentTerms;
+    _cgstRateCtrl = TextEditingController(
+      text: e?.cgstRate != null && e!.cgstRate! > 0 ? e.cgstRate!.toString() : '2.5',
+    );
+    _sgstRateCtrl = TextEditingController(
+      text: e?.sgstRate != null && e!.sgstRate! > 0 ? e.sgstRate!.toString() : '2.5',
+    );
+    _igstRateCtrl = TextEditingController(
+      text: e?.igstRate != null && e!.igstRate! > 0 ? e.igstRate!.toString() : '5',
+    );
+    _freightAmtCtrl = TextEditingController(
+      text: e != null && e.freightAmount > 0 ? e.freightAmount.toString() : '',
+    );
+    _deliveryCtrl = TextEditingController(
+      text: e?.deliveryDays != null ? e!.deliveryDays!.toString() : '',
+    );
+    _ratingCtrl = TextEditingController(
+      text: e?.rating != null ? e!.rating!.toString() : '',
+    );
     _vendorId = e?.vendorId;
     if (e != null && e.lines.isNotEmpty) {
       _lines = List.of(e.lines);
@@ -674,10 +959,45 @@ class _QuotationEditorDialogState extends State<_QuotationEditorDialog> {
     _gstCtrl.dispose();
     _panCtrl.dispose();
     _remarksCtrl.dispose();
+    _cgstRateCtrl.dispose();
+    _sgstRateCtrl.dispose();
+    _igstRateCtrl.dispose();
+    _freightAmtCtrl.dispose();
+    _deliveryCtrl.dispose();
+    _ratingCtrl.dispose();
     super.dispose();
   }
 
-  double get _total => _lines.fold(0.0, (s, l) => s + l.amount);
+  double get _subtotal => _lines.fold(0.0, (s, l) => s + l.amount);
+
+  double get _cgstRate => double.tryParse(_cgstRateCtrl.text.trim()) ?? 0;
+  double get _sgstRate => double.tryParse(_sgstRateCtrl.text.trim()) ?? 0;
+  double get _igstRate => double.tryParse(_igstRateCtrl.text.trim()) ?? 0;
+  double get _freightAmt => double.tryParse(_freightAmtCtrl.text.trim()) ?? 0;
+
+  double get _cgstAmount =>
+      _gstMode == 'EXCLUSIVE' && _gstTaxType == 'CGST_SGST'
+          ? double.parse(((_subtotal * _cgstRate) / 100).toStringAsFixed(2))
+          : 0;
+  double get _sgstAmount =>
+      _gstMode == 'EXCLUSIVE' && _gstTaxType == 'CGST_SGST'
+          ? double.parse(((_subtotal * _sgstRate) / 100).toStringAsFixed(2))
+          : 0;
+  double get _igstAmount =>
+      _gstMode == 'EXCLUSIVE' && _gstTaxType == 'IGST'
+          ? double.parse(((_subtotal * _igstRate) / 100).toStringAsFixed(2))
+          : 0;
+  double get _freightAdd => _freightMode == 'EXCLUSIVE' ? _freightAmt : 0;
+  double get _finalAmount =>
+      double.parse((_subtotal + _cgstAmount + _sgstAmount + _igstAmount + _freightAdd)
+          .toStringAsFixed(2));
+
+  void _setTaxTypeFromState(String? stateCode) {
+    final state = (stateCode ?? '').trim().toUpperCase();
+    if (state.isEmpty) return;
+    _vendorStateCode = state;
+    _gstTaxType = state == 'GUJARAT' ? 'CGST_SGST' : 'IGST';
+  }
 
   Future<void> _onVendorPicked(String? id) async {
     setState(() => _vendorId = id);
@@ -685,7 +1005,6 @@ class _QuotationEditorDialogState extends State<_QuotationEditorDialog> {
     final v = _vendors.where((c) => c.id == id).firstOrNull;
     if (v == null) return;
     _nameCtrl.text = v.name;
-    // Prefer first location for GST/PAN/address if present on model
     try {
       final detail = await context.read<WorkOrderRepository>().getContractor(id);
       if (!mounted) return;
@@ -701,6 +1020,7 @@ class _QuotationEditorDialogState extends State<_QuotationEditorDialog> {
             loc.stateCode,
           ].where((x) => x != null && x.trim().isNotEmpty).join(', ');
           if (addr.isNotEmpty) _addressCtrl.text = addr;
+          _setTaxTypeFromState(loc.stateCode);
         }
       });
     } catch (_) {}
@@ -710,6 +1030,21 @@ class _QuotationEditorDialogState extends State<_QuotationEditorDialog> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_nameCtrl.text.trim().isEmpty) {
       setState(() => _error = 'Company / vendor name is required');
+      return;
+    }
+    if (_gstMode == 'EXCLUSIVE' &&
+        _gstTaxType == 'CGST_SGST' &&
+        _cgstRate <= 0 &&
+        _sgstRate <= 0) {
+      setState(() => _error = 'Enter CGST and/or SGST % for exclusive GST');
+      return;
+    }
+    if (_gstMode == 'EXCLUSIVE' && _gstTaxType == 'IGST' && _igstRate <= 0) {
+      setState(() => _error = 'Enter IGST % for exclusive GST');
+      return;
+    }
+    if (_freightMode == 'EXCLUSIVE' && _freightAmt < 0) {
+      setState(() => _error = 'Freight amount cannot be negative');
       return;
     }
     setState(() {
@@ -724,6 +1059,19 @@ class _QuotationEditorDialogState extends State<_QuotationEditorDialog> {
         'gstNo': _gstCtrl.text.trim().isEmpty ? null : _gstCtrl.text.trim(),
         'panNo': _panCtrl.text.trim().isEmpty ? null : _panCtrl.text.trim(),
         'remarks': _remarksCtrl.text.trim().isEmpty ? null : _remarksCtrl.text.trim(),
+        'gstMode': _gstMode,
+        'gstTaxType': _gstMode == 'EXCLUSIVE' ? _gstTaxType : null,
+        'vendorStateCode': _vendorStateCode,
+        'cgstRate': _gstMode == 'EXCLUSIVE' && _gstTaxType == 'CGST_SGST' ? _cgstRate : null,
+        'sgstRate': _gstMode == 'EXCLUSIVE' && _gstTaxType == 'CGST_SGST' ? _sgstRate : null,
+        'igstRate': _gstMode == 'EXCLUSIVE' && _gstTaxType == 'IGST' ? _igstRate : null,
+        'freightMode': _freightMode,
+        'freightAmount': _freightAmt,
+        'paymentTerms': _paymentTerms,
+        'deliveryDays':
+            _deliveryCtrl.text.trim().isEmpty ? null : int.tryParse(_deliveryCtrl.text.trim()),
+        'rating':
+            _ratingCtrl.text.trim().isEmpty ? null : double.tryParse(_ratingCtrl.text.trim()),
         'lines': _lines.map((l) => l.toJson()).toList(),
       };
       final repo = context.read<PurchaseRepository>();
@@ -741,13 +1089,42 @@ class _QuotationEditorDialogState extends State<_QuotationEditorDialog> {
     }
   }
 
+  Widget _modeToggle({
+    required String label,
+    required String value,
+    required ValueChanged<String> onChanged,
+  }) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      child: Row(
+        children: [
+          ChoiceChip(
+            label: const Text('Inclusive'),
+            selected: value == 'INCLUSIVE',
+            onSelected: (_) => onChanged('INCLUSIVE'),
+          ),
+          const SizedBox(width: 8),
+          ChoiceChip(
+            label: const Text('Exclusive'),
+            selected: value == 'EXCLUSIVE',
+            onSelected: (_) => onChanged('EXCLUSIVE'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
     return AlertDialog(
       title: Text(widget.existing == null ? 'Add quotation' : 'Edit quotation'),
       content: SizedBox(
-        width: 640,
+        width: 680,
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
@@ -803,7 +1180,7 @@ class _QuotationEditorDialogState extends State<_QuotationEditorDialog> {
                       child: TextFormField(
                         controller: _gstCtrl,
                         decoration: const InputDecoration(
-                          labelText: 'GST',
+                          labelText: 'GST No.',
                           border: OutlineInputBorder(),
                         ),
                       ),
@@ -865,8 +1242,187 @@ class _QuotationEditorDialogState extends State<_QuotationEditorDialog> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: Text(
-                    'Total: ${money.format(_total)}',
-                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                    'Subtotal: ${money.format(_subtotal)}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('GST', style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                _modeToggle(
+                  label: 'GST (Inclusive / Exclusive)',
+                  value: _gstMode,
+                  onChanged: (v) => setState(() => _gstMode = v),
+                ),
+                if (_gstMode == 'EXCLUSIVE') ...[
+                  const SizedBox(height: 10),
+                  InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Tax type',
+                      border: OutlineInputBorder(),
+                      helperText:
+                          'Gujarat vendor → CGST + SGST; outside Gujarat → IGST (auto from vendor state)',
+                    ),
+                    child: Wrap(
+                      spacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('CGST'),
+                          selected: _gstTaxType == 'CGST_SGST',
+                          onSelected: (_) => setState(() => _gstTaxType = 'CGST_SGST'),
+                        ),
+                        ChoiceChip(
+                          label: const Text('SGST'),
+                          selected: _gstTaxType == 'CGST_SGST',
+                          onSelected: (_) => setState(() => _gstTaxType = 'CGST_SGST'),
+                        ),
+                        ChoiceChip(
+                          label: const Text('IGST'),
+                          selected: _gstTaxType == 'IGST',
+                          onSelected: (_) => setState(() => _gstTaxType = 'IGST'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (_gstTaxType == 'CGST_SGST')
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _cgstRateCtrl,
+                            decoration: InputDecoration(
+                              labelText: 'CGST %',
+                              border: const OutlineInputBorder(),
+                              helperText: 'Amt: ${money.format(_cgstAmount)}',
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                            ],
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _sgstRateCtrl,
+                            decoration: InputDecoration(
+                              labelText: 'SGST %',
+                              border: const OutlineInputBorder(),
+                              helperText: 'Amt: ${money.format(_sgstAmount)}',
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                            ],
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    TextFormField(
+                      controller: _igstRateCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'IGST %',
+                        border: const OutlineInputBorder(),
+                        helperText: 'Amt: ${money.format(_igstAmount)}',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                      ],
+                      onChanged: (_) => setState(() {}),
+                    ),
+                ],
+                const SizedBox(height: 16),
+                const Text('Freight', style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                _modeToggle(
+                  label: 'Freight (Inclusive / Exclusive)',
+                  value: _freightMode,
+                  onChanged: (v) => setState(() => _freightMode = v),
+                ),
+                if (_freightMode == 'EXCLUSIVE') ...[
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _freightAmtCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Freight amount',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    ],
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                lookupDropdown(
+                  context: context,
+                  category: kPaymentTerms,
+                  value: _paymentTerms,
+                  label: 'Payment terms',
+                  onChanged: (v) => setState(() => _paymentTerms = v),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _deliveryCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Delivery time (days)',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _ratingCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Rating (optional)',
+                          hintText: '0 – 5',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Subtotal: ${money.format(_subtotal)}'),
+                      if (_gstMode == 'EXCLUSIVE' && _gstTaxType == 'CGST_SGST') ...[
+                        Text('CGST: ${money.format(_cgstAmount)}'),
+                        Text('SGST: ${money.format(_sgstAmount)}'),
+                      ],
+                      if (_gstMode == 'EXCLUSIVE' && _gstTaxType == 'IGST')
+                        Text('IGST: ${money.format(_igstAmount)}'),
+                      if (_freightMode == 'EXCLUSIVE')
+                        Text('Freight: ${money.format(_freightAdd)}'),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Final amount: ${money.format(_finalAmount)}',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 10),

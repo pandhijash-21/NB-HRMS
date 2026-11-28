@@ -13,6 +13,7 @@ const kInventoryUom = 'INVENTORY_UOM';
 const kInventorySize = 'INVENTORY_SIZE';
 const kPrType = 'PR_TYPE';
 const kPrPriority = 'PR_PRIORITY';
+const kPaymentTerms = 'PAYMENT_TERMS';
 
 const kContractorLookupKeys = <String>[
   kContractorTds,
@@ -34,4 +35,5 @@ const kInventoryLookupKeys = <String>[
 const kPurchaseLookupKeys = <String>[
   kPrType,
   kPrPriority,
+  kPaymentTerms,
 ];

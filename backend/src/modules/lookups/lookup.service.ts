@@ -61,6 +61,7 @@ export const LOOKUP_CATEGORIES = [
   // Purchase request
   { key: 'PR_TYPE', label: 'PR Type', description: 'Purchase request types' },
   { key: 'PR_PRIORITY', label: 'PR Priority', description: 'Low, Medium, High' },
+  { key: 'PAYMENT_TERMS', label: 'Payment Terms', description: 'Quotation / PO payment terms' },
   { key: 'DPR_GRADE', label: 'DPR Grade', description: 'Grade options for daily progress report lines' },
   { key: 'DPR_STATUS', label: 'DPR Status', description: 'Not Started, In Progress, Completed, …' },
 ] as const;

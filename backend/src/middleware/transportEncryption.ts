@@ -29,7 +29,9 @@ function isPublicCrmEndpoint(req: Request): boolean {
     p.includes('/terms') ||
     p.includes('/contactus') ||
     p.includes('/api/contactus') ||
-    p.includes('/api/contact-us')
+    p.includes('/api/contact-us') ||
+    p.includes('/api/purchase-portal') ||
+    p.includes('/vendor-quote')
   ) {
     return true;
   }

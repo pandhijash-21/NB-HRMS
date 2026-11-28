@@ -146,6 +146,21 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
     }
   }
 
+  Future<void> _saveVendorPortal({bool? enabled, bool? autoEmail}) async {
+    try {
+      final settings = await context.read<PurchaseRepository>().updateSettings(
+            vendorPortalEnabled: enabled,
+            vendorPortalAutoEmail: autoEmail,
+            updateVendorPortal: true,
+          );
+      if (!mounted) return;
+      setState(() => _settings = settings);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
   Future<void> _editDefaultPoTerms() async {
     final current = _settings?.defaultPoTerms ?? const <String>[];
     final ctrl = TextEditingController(text: current.join('\n'));
@@ -361,6 +376,7 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
                       onSaveCsApprover: _saveCsApprover,
                       onEditDefaultPoTerms: _editDefaultPoTerms,
                       onSavePriorityThresholds: _savePriorityThresholds,
+                      onSaveVendorPortal: _saveVendorPortal,
                     ),
                     _RequestList(
                       items: _pending,
@@ -399,6 +415,7 @@ class _SettingsTab extends ConsumerWidget {
     required this.onSaveCsApprover,
     required this.onEditDefaultPoTerms,
     required this.onSavePriorityThresholds,
+    required this.onSaveVendorPortal,
   });
 
   final ErpPurchaseSettings? settings;
@@ -406,6 +423,7 @@ class _SettingsTab extends ConsumerWidget {
   final ValueChanged<int?> onSaveCsApprover;
   final VoidCallback onEditDefaultPoTerms;
   final void Function(int highDays, int medDays) onSavePriorityThresholds;
+  final Future<void> Function({bool? enabled, bool? autoEmail}) onSaveVendorPortal;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -512,6 +530,32 @@ class _SettingsTab extends ConsumerWidget {
                   highDays: settings?.priorityHighWithinDays ?? 3,
                   medDays: settings?.priorityMedWithinDays ?? 7,
                   onSave: onSavePriorityThresholds,
+                ),
+                const SizedBox(height: 28),
+                const Text(
+                  'Vendor quotation portal',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Unique link per approved PR. Vendors verify email with OTP, see item/qty only, submit quotation. Appears in CS as usual; staff can still edit.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enable vendor portal links'),
+                  value: settings?.vendorPortalEnabled ?? false,
+                  onChanged: (v) => onSaveVendorPortal(enabled: v),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Allow emailing invite links'),
+                  subtitle: const Text('Use “Email vendors” on the Quotations screen'),
+                  value: settings?.vendorPortalAutoEmail ?? false,
+                  onChanged: (settings?.vendorPortalEnabled ?? false)
+                      ? (v) => onSaveVendorPortal(autoEmail: v)
+                      : null,
                 ),
               ],
             );

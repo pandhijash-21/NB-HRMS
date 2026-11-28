@@ -179,11 +179,82 @@ class _StorePoInwardPanelState extends State<StorePoInwardPanel> {
       final po = await context.read<BoqRepository>().getPurchaseOrder(id);
       if (!mounted) return;
       setState(() => _selectedPo = po);
+      await _maybeShowRemainingAlert(po);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to load PO: $e')),
       );
+    }
+  }
+
+  Future<void> _maybeShowRemainingAlert(ErpPurchaseOrder po) async {
+    final pending = po.items.where((i) => i.remainingQty > 0).toList();
+    final partial = pending.where((i) => i.receivedQty > 0).toList();
+    if (partial.isEmpty) return;
+    if (!mounted) return;
+    final lines = partial
+        .map(
+          (i) =>
+              '• ${i.itemName}: ${i.remainingQty.toStringAsFixed(2)} still remaining '
+              '(ordered ${i.orderedQty.toStringAsFixed(0)}, received ${i.receivedQty.toStringAsFixed(0)})',
+        )
+        .join('\n');
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${po.poNumber} — pending arrivals'),
+        content: SingleChildScrollView(
+          child: Text(
+            'Some materials from this PO are still not fully received:\n\n$lines\n\n'
+            'What would you like to do?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'keep'),
+            child: const Text('Keep pending'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'new'),
+            child: const Text('Create new PO'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+            onPressed: () => Navigator.pop(ctx, 'cancel'),
+            child: const Text('Cancel remaining'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || action == null || action == 'keep') return;
+    if (action == 'new') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Create a new PO from Purchase → Quotations / CS for the remaining qty.'),
+        ),
+      );
+      return;
+    }
+    if (action == 'cancel') {
+      try {
+        await context.read<BoqRepository>().cancelPurchaseOrder(
+              po.id,
+              reason: 'Remaining qty cancelled from store inward',
+            );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${po.poNumber} cancelled (remaining closed)')),
+        );
+        await _reload();
+        setState(() {
+          _poId = null;
+          _selectedPo = null;
+        });
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
     }
   }
 

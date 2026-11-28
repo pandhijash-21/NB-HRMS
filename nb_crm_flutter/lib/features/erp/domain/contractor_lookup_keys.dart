@@ -1,6 +1,6 @@
-/// SystemLookup categories for ERP Vendors (Configurations → Vendors).
+/// SystemLookup categories for ERP Agencies (Configurations → Agencies).
 const kContractorTds = 'CONTRACTOR_TDS';
-const kContractorType = 'CONTRACTOR_TYPE'; // Type of vendor
+const kContractorType = 'CONTRACTOR_TYPE'; // Who are they: Vendor / Contractor / Other
 const kContractorAddressType = 'CONTRACTOR_ADDRESS_TYPE';
 const kContractorCountry = 'CONTRACTOR_COUNTRY';
 const kContractorState = 'CONTRACTOR_STATE';

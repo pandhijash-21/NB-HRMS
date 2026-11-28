@@ -61,11 +61,13 @@ function blockLabel(line: {
   floorNo?: number | null;
   unitLabel?: string | null;
 }): string {
-  const parts = [
-    line.towerName,
-    line.floorNo != null ? `Floor ${line.floorNo}` : null,
-    line.unitLabel,
-  ].filter(Boolean);
+  const floorPart =
+    line.floorNo === -1
+      ? 'ALL Floors'
+      : line.floorNo != null
+        ? `Floor ${line.floorNo}`
+        : null;
+  const parts = [line.towerName, floorPart, line.unitLabel].filter(Boolean);
   return parts.length ? parts.join(' / ') : 'Site';
 }
 
@@ -192,7 +194,6 @@ export function buildDprDailyReportXlsx(dpr: DprExportSource): { buffer: Buffer;
   rows.push(header);
 
   const totals = emptyTrades();
-  let staffCount = 0;
 
   for (const line of dpr.lines || []) {
     const trades = emptyTrades();
@@ -214,15 +215,12 @@ export function buildDprDailyReportXlsx(dpr: DprExportSource): { buffer: Buffer;
     ]);
   }
 
-  if (dpr.createdByName) staffCount = 1;
-
-  const totalManpower =
-    Object.values(totals).reduce((s, n) => s + n, 0) + staffCount;
+  const totalManpower = Object.values(totals).reduce((s, n) => s + n, 0);
 
   rows.push([
-    `${projectName.toUpperCase()}   STAFF`,
+    `${projectName.toUpperCase()}`,
     '',
-    staffCount || '',
+    '',
     ' Total Manpower',
     '',
     totalManpower,

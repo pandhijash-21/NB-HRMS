@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { emitErpUpdate } from '../collaboration/socket';
+import { dprService } from '../erp-dpr/dpr.service';
 
 function str(v: unknown): string | null {
   if (v == null) return null;
@@ -256,6 +257,24 @@ export const storeInwardService = {
     const allItemIds = rows.flatMap((r) => r.items.map((i) => i.id));
     const accepted = await acceptedByPoItem(allItemIds);
     return rows.map((r) => mapPoWithRemaining(r, accepted));
+  },
+
+  async cancelPurchaseOrder(id: string, opts?: { reason?: string | null }) {
+    const po = await prisma.erpPurchaseOrder.findUnique({ where: { id } });
+    if (!po) throw new Error('Purchase order not found');
+    if (po.status === 'CANCELLED') throw new Error('PO is already cancelled');
+    if (po.status === 'RECEIVED') throw new Error('Fully received POs cannot be cancelled');
+    const updated = await prisma.erpPurchaseOrder.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        remarks: opts?.reason
+          ? [po.remarks, `Cancelled: ${opts.reason}`].filter(Boolean).join('\n')
+          : po.remarks,
+      },
+    });
+    emitErpUpdate({ module: 'purchase', id, action: 'cancelled' });
+    return updated;
   },
 
   async getPurchaseOrder(id: string) {
@@ -708,8 +727,65 @@ export const storeInwardService = {
     });
 
     if (purchaseOrderId) await refreshPoStatus(purchaseOrderId);
+
+    // Auto-create / append DPR for material inward on that project + date
+    if (resourceType === 'MATERIAL') {
+      try {
+        let projectId: string | null = null;
+        let vendorId: string | null = null;
+        let vendorName: string | null = str(body.vendorName) ?? inward.vendorName ?? null;
+
+        if (purchaseOrderId) {
+          const po = await prisma.erpPurchaseOrder.findUnique({
+            where: { id: purchaseOrderId },
+            select: {
+              projectId: true,
+              vendorId: true,
+              vendorName: true,
+              purchaseRequest: { select: { projectId: true } },
+            },
+          });
+          projectId = po?.projectId ?? po?.purchaseRequest?.projectId ?? null;
+          vendorId = po?.vendorId ?? null;
+          vendorName = vendorName ?? po?.vendorName ?? null;
+        }
+
+        if (projectId) {
+          const mats = (inward.lines ?? [])
+            .filter((l) => Number(l.quantityAccepted) > 0)
+            .map((l) => ({
+              materialId: l.materialId,
+              itemName: l.itemName,
+              brand: l.brand,
+              unitCode: l.unitCode,
+              size: l.size,
+              consumedQty: 0,
+              remarks: `Inward ${inward.challanNumber ?? inward.id}`,
+            }));
+          if (mats.length) {
+            await dprService.ensureFromMaterialInward({
+              projectId,
+              inwardDate: inward.inwardDate,
+              vendorId,
+              vendorName,
+              materials: mats,
+              userId,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[store-inward] auto DPR create failed:', err);
+      }
+    }
+
+    emitErpUpdate({
+      module: 'store-inward',
+      id: inward.id,
+      action: 'created',
+    });
     return inward;
   },
+
 
   /**
    * Link an NA (no-PO) inward to a purchase order later.

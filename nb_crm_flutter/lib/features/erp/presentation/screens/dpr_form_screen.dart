@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/realtime/app_event_bus.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/services/form_draft_service.dart';
 import '../../../../core/widgets/form_draft_banner.dart';
@@ -23,7 +26,10 @@ import '../widgets/quick_create_masters.dart';
 import '../widgets/quick_create_vendor_dialog.dart';
 
 class DprFormScreen extends StatefulWidget {
-  const DprFormScreen({super.key});
+  const DprFormScreen({super.key, this.dprId});
+
+  /// When set, form loads this DPR for edit (within admin edit window).
+  final String? dprId;
 
   @override
   State<DprFormScreen> createState() => _DprFormScreenState();
@@ -43,12 +49,13 @@ class _DprFormScreenState extends State<DprFormScreen> {
   // Draft line
   String? _contractorId;
   String? _activityId;
-  String? _subtaskId;
+  /// Multi-select work details (subtasks) under the chosen activity.
+  final Set<String> _selectedSubtaskIds = {};
   String? _towerId; // null after clear; '__ALL__' for all blocks
-  int? _floorNo;
-  String? _unitId;
+  int? _floorNo; // null unset; -1 = ALL floors
+  String? _unitId; // null unset; '__ALL__' = ALL units
   String? _unitCode;
-  final _consumedCtrl = TextEditingController(text: '0');
+  final _consumedCtrl = TextEditingController();
   String? _gradeCode;
   final _remarksCtrl = TextEditingController();
   String? _statusCode;
@@ -57,9 +64,15 @@ class _DprFormScreenState extends State<DprFormScreen> {
   DateTime? _actualEnd;
 
   List<ErpDprMaterialLine> _draftMaterials = [];
-  List<ErpDprLabourLine> _draftLabour = [];
+  /// labourId -> qty text (inline on main form; all labour masters shown)
+  final Map<String, TextEditingController> _labourQtyCtrls = {};
   List<ErpDprMachineLine> _draftMachines = [];
   final List<ErpDprLine> _lines = [];
+  String? _editingDprId;
+  int _editWindowDays = 10;
+  bool _editLocked = false;
+  StreamSubscription<ErpRealtimeEvent>? _erpSub;
+  bool _remoteReloadQueued = false;
 
   List<ErpProject> _projects = [];
   List<ErpContractor> _contractors = [];
@@ -75,18 +88,69 @@ class _DprFormScreenState extends State<DprFormScreen> {
   FormDraftInfo? _draftInfo;
 
   static const _allTower = '__ALL__';
+  static const _allFloor = -1;
+  static const _allUnit = '__ALL__';
 
   @override
   void initState() {
     super.initState();
+    _editingDprId = widget.dprId;
     _remarksCtrl.addListener(_autoSaveDraft);
     _consumedCtrl.addListener(_autoSaveDraft);
     _completionCtrl.addListener(_autoSaveDraft);
+    _erpSub = AppEventBus.instance.on<ErpRealtimeEvent>().listen((e) {
+      if (_editingDprId == null) return;
+      if (e.module != 'dpr' && e.module != 'erp' && e.module != 'store-inward') return;
+      if (e.entityId != null && e.entityId != _editingDprId && e.entityId != 'settings') return;
+      if (_remoteReloadQueued || _saving) return;
+      _remoteReloadQueued = true;
+      Future<void>.delayed(const Duration(milliseconds: 400), () async {
+        _remoteReloadQueued = false;
+        if (!mounted || _editingDprId == null) return;
+        await _loadExistingDpr(_editingDprId!);
+      });
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final name = context.read<AuthBloc>().state.user?.name;
       if (name != null && _createdByCtrl.text.isEmpty) _createdByCtrl.text = name;
       _loadInitialData();
     });
+  }
+
+  List<ErpDprLabourLine> _collectLabourFromForm() {
+    final out = <ErpDprLabourLine>[];
+    for (final lb in _labour) {
+      final ctrl = _labourQtyCtrls[lb.id];
+      if (ctrl == null) continue;
+      final qty = double.tryParse(ctrl.text.trim()) ?? 0;
+      if (qty <= 0) continue;
+      out.add(ErpDprLabourLine(
+        labourId: lb.id,
+        name: lb.name,
+        unitCode: lb.unitCode,
+        consumedQty: qty,
+      ));
+    }
+    return out;
+  }
+
+  void _syncLabourQtyControllers() {
+    for (final lb in _labour) {
+      _labourQtyCtrls.putIfAbsent(lb.id, () => TextEditingController(text: ''));
+    }
+  }
+
+  void _applyLabourToControllers(List<ErpDprLabourLine> labour) {
+    _syncLabourQtyControllers();
+    for (final c in _labourQtyCtrls.values) {
+      c.text = '';
+    }
+    for (final row in labour) {
+      final id = row.labourId;
+      if (id == null) continue;
+      final ctrl = _labourQtyCtrls[id];
+      if (ctrl != null) ctrl.text = row.consumedQty > 0 ? row.consumedQty.toString() : '';
+    }
   }
 
   String get _currentDraftTitle {
@@ -108,7 +172,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
       'createdByName': _createdByCtrl.text.trim(),
       'contractorId': _contractorId,
       'activityId': _activityId,
-      'subtaskId': _subtaskId,
+      'subtaskIds': _selectedSubtaskIds.toList(),
       'towerId': _towerId,
       'floorNo': _floorNo,
       'unitId': _unitId,
@@ -120,7 +184,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
       'completion': _completionCtrl.text.trim(),
       'lines': _lines.map((l) => l.toJson()).toList(),
       'draftMaterials': _draftMaterials.map((m) => m.toJson()).toList(),
-      'draftLabour': _draftLabour.map((l) => l.toJson()).toList(),
+      'draftLabour': _collectLabourFromForm().map((l) => l.toJson()).toList(),
       'draftMachines': _draftMachines.map((m) => m.toJson()).toList(),
     };
 
@@ -201,7 +265,13 @@ class _DprFormScreenState extends State<DprFormScreen> {
     }
     _contractorId = d['contractorId'] as String?;
     _activityId = d['activityId'] as String?;
-    _subtaskId = d['subtaskId'] as String?;
+    _selectedSubtaskIds
+      ..clear()
+      ..addAll(
+        (d['subtaskIds'] is List)
+            ? (d['subtaskIds'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty)
+            : (d['subtaskId'] != null ? [d['subtaskId'].toString()] : const <String>[]),
+      );
     _towerId = d['towerId'] as String?;
     _floorNo = d['floorNo'] as int?;
     _unitId = d['unitId'] as String?;
@@ -226,7 +296,10 @@ class _DprFormScreenState extends State<DprFormScreen> {
     }
     if (d['draftLabour'] is List) {
       try {
-        _draftLabour = (d['draftLabour'] as List).map((l) => ErpDprLabourLine.fromJson(l as Map<String, dynamic>)).toList();
+        final labour = (d['draftLabour'] as List)
+            .map((l) => ErpDprLabourLine.fromJson(l as Map<String, dynamic>))
+            .toList();
+        _applyLabourToControllers(labour);
       } catch (_) {}
     }
     if (d['draftMachines'] is List) {
@@ -260,16 +333,16 @@ class _DprFormScreenState extends State<DprFormScreen> {
       _projectId = null;
       _contractorId = null;
       _activityId = null;
-      _subtaskId = null;
+      _selectedSubtaskIds.clear();
       _towerId = null;
       _floorNo = null;
       _unitId = null;
       _unitCode = null;
-      _consumedCtrl.text = '0';
+      _consumedCtrl.clear();
       _remarksCtrl.clear();
       _completionCtrl.clear();
       _draftMaterials = [];
-      _draftLabour = [];
+      _applyLabourToControllers(const []);
       _draftMachines = [];
     });
     FormDraftService.instance.setActiveMultiDraftId('erp_dpr', _currentDraftId);
@@ -472,6 +545,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
       final projectRepo = context.read<ProjectRepository>();
       final workRepo = context.read<WorkOrderRepository>();
       final boqRepo = context.read<BoqRepository>();
+      final dprRepo = context.read<DprRepository>();
       final res = await Future.wait([
         projectRepo.list(),
         workRepo.listContractors(),
@@ -479,17 +553,23 @@ class _DprFormScreenState extends State<DprFormScreen> {
         boqRepo.listMaterials(),
         boqRepo.listMachines(),
         boqRepo.listLabour(),
+        dprRepo.getSettings(),
       ]);
-      if (mounted) {
-        setState(() {
-          _projects = res[0] as List<ErpProject>;
-          _contractors = res[1] as List<ErpContractor>;
-          _activities = res[2] as List<ErpActivity>;
-          _materials = res[3] as List<ErpMaterial>;
-          _machines = res[4] as List<ErpMachine>;
-          _labour = res[5] as List<ErpLabour>;
-          _loadingInitial = false;
-        });
+      if (!mounted) return;
+      setState(() {
+        _projects = res[0] as List<ErpProject>;
+        _contractors = res[1] as List<ErpContractor>;
+        _activities = res[2] as List<ErpActivity>;
+        _materials = res[3] as List<ErpMaterial>;
+        _machines = res[4] as List<ErpMachine>;
+        _labour = res[5] as List<ErpLabour>;
+        _editWindowDays = (res[6] as ErpDprSettings).editWindowDays;
+        _syncLabourQtyControllers();
+        _loadingInitial = false;
+      });
+      if (_editingDprId != null) {
+        await _loadExistingDpr(_editingDprId!);
+      } else {
         await _restoreDraftIfAny();
       }
     } catch (e) {
@@ -497,6 +577,33 @@ class _DprFormScreenState extends State<DprFormScreen> {
         setState(() => _loadingInitial = false);
         _toast('Failed to load initial data: $e');
       }
+    }
+  }
+
+  Future<void> _loadExistingDpr(String id) async {
+    try {
+      final dpr = await context.read<DprRepository>().getById(id);
+      if (!mounted) return;
+      final today = DateTime.now();
+      final report = DateTime(dpr.reportDate.year, dpr.reportDate.month, dpr.reportDate.day);
+      final now = DateTime(today.year, today.month, today.day);
+      final diffDays = now.difference(report).inDays;
+      setState(() {
+        _editingDprId = dpr.id;
+        _reportDate = dpr.reportDate;
+        _projectId = dpr.projectId;
+        if (dpr.createdByName != null) _createdByCtrl.text = dpr.createdByName!;
+        _lines
+          ..clear()
+          ..addAll(dpr.lines);
+        _editLocked = diffDays > _editWindowDays;
+      });
+      if (_projectId != null) await _fetchTowersForProject(_projectId!);
+      if (_editLocked && mounted) {
+        _toast('Edit window of $_editWindowDays day(s) has expired for this DPR');
+      }
+    } catch (e) {
+      if (mounted) _toast('Failed to load DPR: $e');
     }
   }
 
@@ -515,11 +622,15 @@ class _DprFormScreenState extends State<DprFormScreen> {
 
   @override
   void dispose() {
-    _autoSaveDraft(immediate: true);
+    _erpSub?.cancel();
+    if (_editingDprId == null) _autoSaveDraft(immediate: true);
     _createdByCtrl.dispose();
     _consumedCtrl.dispose();
     _remarksCtrl.dispose();
     _completionCtrl.dispose();
+    for (final c in _labourQtyCtrls.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -545,7 +656,8 @@ class _DprFormScreenState extends State<DprFormScreen> {
   }
 
   List<int> get _floors {
-    if (_towerId == null || _towerId == _allTower) {
+    if (_towerId == null) return const [];
+    if (_towerId == _allTower) {
       final set = <int>{};
       for (final t in _towers) {
         set.addAll(towerFloorNumbers(t));
@@ -563,7 +675,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
     if (_towerId != null && _towerId != _allTower) {
       all = all.where((u) => u.towerId == _towerId);
     }
-    if (_floorNo != null) {
+    if (_floorNo != null && _floorNo != _allFloor) {
       all = all.where((u) => u.floorNo == _floorNo);
     }
     return all.toList();
@@ -581,12 +693,12 @@ class _DprFormScreenState extends State<DprFormScreen> {
       }
       _contractorId = null;
       _activityId = null;
-      _subtaskId = null;
+      _selectedSubtaskIds.clear();
       _towerId = null;
       _floorNo = null;
       _unitId = null;
       _unitCode = null;
-      _consumedCtrl.text = '0';
+      _consumedCtrl.clear();
       _gradeCode = null;
       _remarksCtrl.clear();
       _statusCode = null;
@@ -594,7 +706,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
       _actualStart = null;
       _actualEnd = null;
       _draftMaterials = [];
-      _draftLabour = [];
+      _applyLabourToControllers(const []);
       _draftMachines = [];
     });
   }
@@ -636,46 +748,75 @@ class _DprFormScreenState extends State<DprFormScreen> {
   }
 
   void _addTask() {
-    if (_projectId == null) {
+    if (_editLocked) {
+      _toast('This DPR can no longer be edited');
+      return;
+    }
+    if (_projectId == null || _projectId!.isEmpty) {
       _toast('Select a project first');
       return;
     }
-    if (_contractorId == null || _activityId == null || _unitCode == null) {
-      _toast('Vendor, Activity and Unit (UOM) are required');
+    final contractorId = _contractorId?.trim();
+    final activityId = _activityId?.trim();
+    final unitCode = _unitCode?.trim();
+    if (contractorId == null || contractorId.isEmpty) {
+      _toast('Agency is required');
       return;
     }
-    final consumed = double.tryParse(_consumedCtrl.text) ?? 0;
-    final completion = double.tryParse(_completionCtrl.text);
+    if (activityId == null || activityId.isEmpty) {
+      _toast('Activity is required');
+      return;
+    }
+    if (unitCode == null || unitCode.isEmpty) {
+      _toast('Unit (UOM) is required');
+      return;
+    }
+    final consumed = double.tryParse(_consumedCtrl.text.trim()) ?? 0;
+    final completion = double.tryParse(_completionCtrl.text.trim());
     if (completion == null) {
       _toast('Total task completion % is required');
       return;
     }
-    final contractor = _contractors.where((c) => c.id == _contractorId).firstOrNull;
-    final activity = _activities.where((a) => a.id == _activityId).firstOrNull;
-    final subtask = _subtasks.where((s) => s.id == _subtaskId).firstOrNull;
+    final contractor = _contractors.where((c) => c.id == contractorId).firstOrNull;
+    final activity = _activities.where((a) => a.id == activityId).firstOrNull;
+    final selectedSubtasks = _subtasks.where((s) => _selectedSubtaskIds.contains(s.id)).toList();
+    // One DPR line covering all selected work details for this activity.
+    final taskName = selectedSubtasks.isEmpty
+        ? null
+        : selectedSubtasks.map((s) => s.name).join(', ');
+    final primarySubtaskId = selectedSubtasks.length == 1 ? selectedSubtasks.first.id : null;
     String? towerName;
     if (_towerId == _allTower) {
       towerName = 'ALL';
     } else if (_towerId != null) {
       towerName = _towers.where((t) => t.id == _towerId).firstOrNull?.name;
     }
-    final unit = _units.where((u) => u.id == _unitId).firstOrNull;
+    String? unitLabel;
+    String? unitId;
+    if (_unitId == _allUnit) {
+      unitLabel = 'ALL';
+      unitId = null;
+    } else if (_unitId != null) {
+      unitId = _unitId;
+      unitLabel = _units.where((u) => u.id == _unitId).firstOrNull?.unitNo;
+    }
+    final floorNo = _floorNo; // may be -1 for ALL
 
     setState(() {
       _lines.add(
         ErpDprLine(
-          contractorId: _contractorId,
+          contractorId: contractorId,
           contractorName: contractor?.name,
-          activityId: _activityId,
+          activityId: activityId,
           activityName: activity?.name,
-          subtaskId: _subtaskId,
-          taskName: subtask?.name,
+          subtaskId: primarySubtaskId,
+          taskName: taskName,
           towerId: _towerId == _allTower ? null : _towerId,
           towerName: towerName,
-          floorNo: _floorNo,
-          unitId: _unitId,
-          unitLabel: unit?.unitNo,
-          unitCode: _unitCode,
+          floorNo: floorNo,
+          unitId: unitId,
+          unitLabel: unitLabel,
+          unitCode: unitCode,
           consumedQty: consumed,
           gradeCode: _gradeCode,
           remarks: _remarksCtrl.text.trim().isEmpty ? null : _remarksCtrl.text.trim(),
@@ -684,17 +825,23 @@ class _DprFormScreenState extends State<DprFormScreen> {
           actualStartDate: _actualStart,
           actualEndDate: _actualEnd,
           materials: List.of(_draftMaterials),
-          labour: List.of(_draftLabour),
+          labour: _collectLabourFromForm(),
           machines: List.of(_draftMachines),
         ),
       );
     });
     _clearDraft();
     _autoSaveDraft();
-    _toast('Task added');
+    _toast(selectedSubtasks.length > 1
+        ? 'Task added with ${selectedSubtasks.length} work details'
+        : 'Task added');
   }
 
   Future<void> _submit() async {
+    if (_editLocked) {
+      _toast('This DPR can no longer be edited');
+      return;
+    }
     if (_projectId == null) {
       _toast('Project is required');
       return;
@@ -705,21 +852,26 @@ class _DprFormScreenState extends State<DprFormScreen> {
     }
     setState(() => _saving = true);
     try {
-      final created = await context.read<DprRepository>().create({
+      final body = {
         'reportDate': _reportDate.toIso8601String(),
         'projectId': _projectId,
         'createdByName': _createdByCtrl.text.trim().isEmpty ? null : _createdByCtrl.text.trim(),
         'lines': _lines.map((l) => l.toJson()).toList(),
-      });
+      };
+      final ErpDpr saved;
+      if (_editingDprId != null) {
+        saved = await context.read<DprRepository>().update(_editingDprId!, body);
+      } else {
+        saved = await context.read<DprRepository>().create(body);
+      }
       await FormDraftService.instance.clearSubmittedMultiDraft('erp_dpr', _currentDraftId);
       await FormDraftService.instance.clearDraft('erp_dpr');
       await _refreshSavedDraftsList();
       if (!mounted) return;
-      // Open printable Daily Report view once mandatory data is saved.
-      context.go('/erp/dpr/${created.id}');
+      context.go('/erp/dpr/${saved.id}');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${created.dprNo} saved — view / print Daily Report'),
+          content: Text('${saved.dprNo} ${_editingDprId != null ? 'updated' : 'saved'} — view / print Daily Report'),
           backgroundColor: Colors.green.shade700,
         ),
       );
@@ -816,77 +968,20 @@ class _DprFormScreenState extends State<DprFormScreen> {
     _autoSaveDraft();
   }
 
-  Future<void> _addLabourDialog() async {
-    var labour = List<ErpLabour>.from(_labour);
-    String? selectedId;
-    final qtyCtrl = TextEditingController(text: '0');
-    final remCtrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Add Labour'),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LabourDropdownWithCreate(
-                  value: selectedId,
-                  labour: labour,
-                  required: true,
-                  decoration: _dec('Labour Type', required: true),
-                  onChanged: (v) => setLocal(() => selectedId = v),
-                  onLabourCreated: (created) {
-                    setState(() => _labour = [..._labour, created]);
-                    setLocal(() {
-                      labour = [...labour, created];
-                      selectedId = created.id;
-                    });
-                  },
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: qtyCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: _dec('Consumed Qty', required: true),
-                ),
-                const SizedBox(height: 10),
-                TextField(controller: remCtrl, decoration: _dec('Remarks')),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
-          ],
-        ),
-      ),
-    );
-    if (ok != true || selectedId == null) return;
-    final lb = labour.where((x) => x.id == selectedId).firstOrNull;
-    if (lb == null) return;
-    final qty = double.tryParse(qtyCtrl.text) ?? 0;
-    setState(() {
-      _draftLabour = [
-        ..._draftLabour,
-        ErpDprLabourLine(
-          labourId: lb.id,
-          name: lb.name,
-          unitCode: lb.unitCode,
-          consumedQty: qty,
-          remarks: remCtrl.text.trim().isEmpty ? null : remCtrl.text.trim(),
-        ),
-      ];
-    });
-    _autoSaveDraft();
-  }
-
   Future<void> _addMachineDialog() async {
     var machines = List<ErpMachine>.from(_machines);
     String? selectedId;
-    final qtyCtrl = TextEditingController(text: '0');
+    final qtyCtrl = TextEditingController(text: '1');
     final remCtrl = TextEditingController();
+    final slots = <({TimeOfDay? from, TimeOfDay? to})>[(from: null, to: null)];
+    String fmt(TimeOfDay? t) =>
+        t == null ? '—' : '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+    Future<TimeOfDay?> pickTime(TimeOfDay? initial) => showTimePicker(
+          context: context,
+          initialTime: initial ?? TimeOfDay.now(),
+        );
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -895,39 +990,93 @@ class _DprFormScreenState extends State<DprFormScreen> {
           return AlertDialog(
             title: const Text('Add Machinery'),
             content: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  MachineDropdownWithCreate(
-                    value: selectedId,
-                    machines: machines,
-                    required: true,
-                    decoration: _dec('Machine', required: true),
-                    itemLabel: (x) => x.name,
-                    onChanged: (v) => setLocal(() => selectedId = v),
-                    onMachineCreated: (created) {
-                      setState(() => _machines = [..._machines, created]);
-                      setLocal(() {
-                        machines = [...machines, created];
-                        selectedId = created.id;
-                      });
-                    },
-                  ),
-                  if (m != null) ...[
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    MachineDropdownWithCreate(
+                      value: selectedId,
+                      machines: machines,
+                      required: true,
+                      decoration: _dec('Machine', required: true),
+                      itemLabel: (x) => x.name,
+                      onChanged: (v) => setLocal(() => selectedId = v),
+                      onMachineCreated: (created) {
+                        setState(() => _machines = [..._machines, created]);
+                        setLocal(() {
+                          machines = [...machines, created];
+                          selectedId = created.id;
+                        });
+                      },
+                    ),
+                    if (m != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Brand: ${m.brand ?? '—'} · Available: ${m.qtyAvailable.toStringAsFixed(2)}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: qtyCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: _dec('Qty', required: true),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Time slots', style: TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    for (var i = 0; i < slots.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () async {
+                                  final t = await pickTime(slots[i].from);
+                                  if (t != null) {
+                                    setLocal(() => slots[i] = (from: t, to: slots[i].to));
+                                  }
+                                },
+                                child: Text('From ${fmt(slots[i].from)}'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () async {
+                                  final t = await pickTime(slots[i].to);
+                                  if (t != null) {
+                                    setLocal(() => slots[i] = (from: slots[i].from, to: t));
+                                  }
+                                },
+                                child: Text('To ${fmt(slots[i].to)}'),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Remove slot',
+                              onPressed: slots.length <= 1
+                                  ? null
+                                  : () => setLocal(() => slots.removeAt(i)),
+                              icon: const Icon(Icons.close, size: 18),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => setLocal(() => slots.add((from: null, to: null))),
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Add time slot'),
+                      ),
+                    ),
                     const SizedBox(height: 8),
-                    Text('Brand: ${m.brand ?? '—'} · Available: ${m.qtyAvailable.toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 12)),
+                    TextField(controller: remCtrl, decoration: _dec('Remarks')),
                   ],
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: qtyCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: _dec('Consumed Qty', required: true),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(controller: remCtrl, decoration: _dec('Remarks')),
-                ],
+                ),
               ),
             ),
             actions: [
@@ -942,6 +1091,10 @@ class _DprFormScreenState extends State<DprFormScreen> {
     final m = machines.where((x) => x.id == selectedId).firstOrNull;
     if (m == null) return;
     final qty = double.tryParse(qtyCtrl.text) ?? 0;
+    final timeSlots = slots
+        .where((s) => s.from != null && s.to != null)
+        .map((s) => ErpDprMachineTimeSlot(from: fmt(s.from), to: fmt(s.to)))
+        .toList();
     setState(() {
       _draftMachines = [
         ..._draftMachines,
@@ -952,6 +1105,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
           unitCode: m.unitCode,
           size: m.size,
           consumedQty: qty,
+          timeSlots: timeSlots,
           remarks: remCtrl.text.trim().isEmpty ? null : remCtrl.text.trim(),
         ),
       ];
@@ -971,7 +1125,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
       child: Scaffold(
         backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
         appBar: AppBar(
-          title: const Text('Daily Progress Report'),
+          title: Text(_editingDprId != null ? 'Edit Daily Progress Report' : 'Daily Progress Report'),
           leading: const AppBackButton(fallbackLocation: '/erp/dpr'),
           actions: [
             if (_savedDrafts.isNotEmpty)
@@ -1080,8 +1234,8 @@ class _DprFormScreenState extends State<DprFormScreen> {
                                         value: _contractorId,
                                         vendors: _contractors,
                                         required: true,
-                                        decoration: _dec('Vendor', required: true),
-                                        hint: const Text('Select Vendor'),
+                                        decoration: _dec('Agency', required: true),
+                                        hint: const Text('Select Agency'),
                                         onChanged: (v) {
                                           setState(() => _contractorId = v);
                                           _fetchContractorResources(v, _reportDate);
@@ -1106,32 +1260,16 @@ class _DprFormScreenState extends State<DprFormScreen> {
                                         hint: const Text('Select Activity'),
                                         onChanged: (v) => setState(() {
                                           _activityId = v;
-                                          _subtaskId = null;
+                                          _selectedSubtaskIds.clear();
                                           _autoSaveDraft();
                                         }),
                                         onActivityCreated: (created) => setState(() {
                                           _activities = [..._activities, created];
                                           _activityId = created.id;
-                                          _subtaskId = null;
+                                          _selectedSubtaskIds.clear();
                                           _autoSaveDraft();
                                         }),
                                       ),
-                                DropdownButtonFormField<String>(
-                                  key: ValueKey('subtask_$_subtaskId'),
-                                  isExpanded: true,
-                                  initialValue: _subtaskId,
-                                  decoration: _dec('Task'),
-                                  hint: const Text('Select Work Details'),
-                                  items: _subtasks
-                                      .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name, overflow: TextOverflow.ellipsis)))
-                                      .toList(),
-                                  onChanged: _activityId == null
-                                      ? null
-                                      : (v) => setState(() {
-                                            _subtaskId = v;
-                                            _autoSaveDraft();
-                                          }),
-                                ),
                                 DropdownButtonFormField<String>(
                                   key: ValueKey('tower_$_towerId'),
                                   isExpanded: true,
@@ -1151,6 +1289,32 @@ class _DprFormScreenState extends State<DprFormScreen> {
                                             _autoSaveDraft();
                                           }),
                                 ),
+                                InputDecorator(
+                                  decoration: _dec('Tasks / Work Details'),
+                                  child: _activityId == null
+                                      ? Text('Select activity first', style: TextStyle(color: Theme.of(context).hintColor))
+                                      : _subtasks.isEmpty
+                                          ? Text('No tasks under this activity', style: TextStyle(color: Theme.of(context).hintColor))
+                                          : Wrap(
+                                              spacing: 4,
+                                              runSpacing: 0,
+                                              children: [
+                                                for (final s in _subtasks)
+                                                  FilterChip(
+                                                    label: Text(s.name, overflow: TextOverflow.ellipsis),
+                                                    selected: _selectedSubtaskIds.contains(s.id),
+                                                    onSelected: (on) => setState(() {
+                                                      if (on) {
+                                                        _selectedSubtaskIds.add(s.id);
+                                                      } else {
+                                                        _selectedSubtaskIds.remove(s.id);
+                                                      }
+                                                      _autoSaveDraft();
+                                                    }),
+                                                  ),
+                                              ],
+                                            ),
+                                ),
                               ]),
                               const SizedBox(height: 12),
                               _grid([
@@ -1160,7 +1324,10 @@ class _DprFormScreenState extends State<DprFormScreen> {
                                   initialValue: _floorNo,
                                   decoration: _dec('Property Floor'),
                                   hint: const Text('Select Floor'),
-                                  items: _floors.map((f) => DropdownMenuItem(value: f, child: Text('Floor $f'))).toList(),
+                                  items: [
+                                    const DropdownMenuItem(value: _allFloor, child: Text('ALL')),
+                                    ..._floors.map((f) => DropdownMenuItem(value: f, child: Text('Floor $f'))),
+                                  ],
                                   onChanged: _towerId == null
                                       ? null
                                       : (v) => setState(() {
@@ -1175,13 +1342,16 @@ class _DprFormScreenState extends State<DprFormScreen> {
                                   initialValue: _unitId,
                                   decoration: _dec('Property Unit'),
                                   hint: const Text('Select Unit'),
-                                  items: _units
-                                      .map((u) => DropdownMenuItem(value: u.id, child: Text(u.unitNo)))
-                                      .toList(),
-                                  onChanged: (v) => setState(() {
-                                    _unitId = v;
-                                    _autoSaveDraft();
-                                  }),
+                                  items: [
+                                    const DropdownMenuItem(value: _allUnit, child: Text('ALL')),
+                                    ..._units.map((u) => DropdownMenuItem(value: u.id, child: Text(u.unitNo))),
+                                  ],
+                                  onChanged: _towerId == null
+                                      ? null
+                                      : (v) => setState(() {
+                                            _unitId = v;
+                                            _autoSaveDraft();
+                                          }),
                                 ),
                                 lookupDropdown(
                                   context: context,
@@ -1198,7 +1368,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
                                   controller: _consumedCtrl,
                                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                   inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                                  decoration: _dec("Today's Consumed Work Qty", required: true),
+                                  decoration: _dec("Today's Consumed Work Qty", hint: 'Optional'),
                                 ),
                               ]),
                               const SizedBox(height: 12),
@@ -1309,7 +1479,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
                     ),
                     child: _saving
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Submit'),
+                        : Text(_editingDprId != null ? 'Update DPR' : 'Submit'),
                   ),
                   const SizedBox(width: 10),
                   OutlinedButton.icon(
@@ -1357,11 +1527,9 @@ class _DprFormScreenState extends State<DprFormScreen> {
                   style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1e3a5f)),
                 ),
               if (_resourceTab == 1)
-                FilledButton.icon(
-                  onPressed: _addLabourDialog,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add Labour'),
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1e3a5f)),
+                Text(
+                  'Enter qty for each labour type',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
                 ),
               if (_resourceTab == 2)
                 FilledButton.icon(
@@ -1440,40 +1608,47 @@ class _DprFormScreenState extends State<DprFormScreen> {
   }
 
   Widget _labourTable() {
-    if (_draftLabour.isEmpty) {
-      return const Padding(padding: EdgeInsets.all(12), child: Text('No labour added for this task draft.'));
+    _syncLabourQtyControllers();
+    if (_labour.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: Text('No labour types configured. Add them under BOQ / Labour masters.'),
+      );
     }
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columns: const [
-          DataColumn(label: Text('SR#')),
-          DataColumn(label: Text('NAME')),
-          DataColumn(label: Text('UOM')),
-          DataColumn(label: Text('CONSUMED QTY')),
-          DataColumn(label: Text('REMARKS')),
-          DataColumn(label: Text('ACTION')),
-        ],
-        rows: [
-          for (var i = 0; i < _draftLabour.length; i++)
-            DataRow(
-              cells: [
-                DataCell(Text('${i + 1}')),
-                DataCell(Text(_draftLabour[i].name)),
-                DataCell(Text(_draftLabour[i].unitCode ?? '—')),
-                DataCell(Text(_draftLabour[i].consumedQty.toStringAsFixed(2))),
-                DataCell(Text(_draftLabour[i].remarks ?? '—')),
-                DataCell(IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () {
-                    setState(() => _draftLabour = [..._draftLabour]..removeAt(i));
-                    _autoSaveDraft();
-                  },
-                )),
+    return Column(
+      children: [
+        for (var i = 0; i < _labour.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                SizedBox(width: 36, child: Text('${i + 1}', style: const TextStyle(fontWeight: FontWeight.w600))),
+                Expanded(
+                  flex: 3,
+                  child: Text(_labour[i].name, overflow: TextOverflow.ellipsis),
+                ),
+                SizedBox(
+                  width: 72,
+                  child: Text(_labour[i].unitCode ?? '—', style: TextStyle(color: Theme.of(context).hintColor)),
+                ),
+                SizedBox(
+                  width: 110,
+                  child: TextField(
+                    controller: _labourQtyCtrls[_labour[i].id],
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                    decoration: const InputDecoration(
+                      labelText: 'Qty',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) => _autoSaveDraft(),
+                  ),
+                ),
               ],
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
@@ -1492,8 +1667,8 @@ class _DprFormScreenState extends State<DprFormScreen> {
           DataColumn(label: Text('NAME')),
           DataColumn(label: Text('BRAND')),
           DataColumn(label: Text('UOM')),
-          DataColumn(label: Text('USAGE TYPE')),
-          DataColumn(label: Text('QTY IN USE')),
+          DataColumn(label: Text('TIME SLOTS')),
+          DataColumn(label: Text('QTY')),
           DataColumn(label: Text('REMARKS')),
           DataColumn(label: Text('ACTION')),
         ],
@@ -1506,27 +1681,10 @@ class _DprFormScreenState extends State<DprFormScreen> {
                 DataCell(Text(_draftMachines[i].brand ?? '—')),
                 DataCell(Text(_draftMachines[i].unitCode ?? '—')),
                 DataCell(
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.all_inclusive_rounded, size: 14, color: Color(0xFF7C3AED)),
-                        SizedBox(width: 4),
-                        Text(
-                          'Cumulative use',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF7C3AED),
-                          ),
-                        ),
-                      ],
-                    ),
+                  Text(
+                    _draftMachines[i].timeSlots.isEmpty
+                        ? '—'
+                        : _draftMachines[i].timeSlots.map((s) => '${s.from}–${s.to}').join(', '),
                   ),
                 ),
                 DataCell(Text(_draftMachines[i].consumedQty.toStringAsFixed(2))),

@@ -75,6 +75,8 @@ type LabourInput = {
   sortOrder?: number;
 };
 
+type MachineTimeSlot = { from: string; to: string };
+
 type MachineInput = {
   machineId?: string | null;
   itemName: string;
@@ -82,6 +84,7 @@ type MachineInput = {
   unitCode?: string | null;
   size?: string | null;
   consumedQty?: number | null;
+  timeSlots?: MachineTimeSlot[] | null;
   remarks?: string | null;
   sortOrder?: number;
 };
@@ -157,6 +160,19 @@ function parseLabour(raw: unknown): LabourInput[] {
   return out;
 }
 
+function parseTimeSlots(raw: unknown): MachineTimeSlot[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: MachineTimeSlot[] = [];
+  for (const row of raw) {
+    const t = (row ?? {}) as Record<string, unknown>;
+    const from = str(t.from) ?? str(t.start) ?? str(t.fromTime);
+    const to = str(t.to) ?? str(t.end) ?? str(t.toTime);
+    if (!from || !to) continue;
+    out.push({ from, to });
+  }
+  return out.length ? out : null;
+}
+
 function parseMachines(raw: unknown): MachineInput[] {
   if (!Array.isArray(raw)) return [];
   const out: MachineInput[] = [];
@@ -171,6 +187,7 @@ function parseMachines(raw: unknown): MachineInput[] {
       unitCode: str(t.unitCode),
       size: str(t.size),
       consumedQty: num(t.consumedQty),
+      timeSlots: parseTimeSlots(t.timeSlots),
       remarks: str(t.remarks),
       sortOrder: num(t.sortOrder) ?? i,
     });
@@ -215,9 +232,69 @@ function parseLines(raw: unknown): LineInput[] {
   return out;
 }
 
-async function nextDprNo(): Promise<string> {
-  const count = await prisma.erpDpr.count();
-  return `DPR${String(count + 1).padStart(5, '0')}`;
+function formatDprDateStamp(d: Date): string {
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const yyyy = String(d.getUTCFullYear());
+  return `${dd}${mm}${yyyy}`;
+}
+
+/** Auto name: DPR-DDMMYYYY, with -2 / -3 suffix on collision. */
+async function nextDprNo(reportDate?: Date | null): Promise<string> {
+  const day = reportDate ?? todayUtc();
+  const stamp = formatDprDateStamp(day);
+  const base = `DPR-${stamp}`;
+  const existing = await prisma.erpDpr.findMany({
+    where: { dprNo: { startsWith: base } },
+    select: { dprNo: true },
+  });
+  if (!existing.length) return base;
+  const taken = new Set(existing.map((e) => e.dprNo));
+  if (!taken.has(base)) return base;
+  for (let i = 2; i < 1000; i++) {
+    const candidate = `${base}-${i}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${base}-${Date.now()}`;
+}
+
+async function getEditWindowDays(): Promise<number> {
+  const row = await prisma.erpDprSettings.findUnique({ where: { key: 'DEFAULT' } });
+  const days = row?.editWindowDays ?? 10;
+  return Math.max(0, Math.min(365, days));
+}
+
+function assertWithinEditWindow(reportDate: Date, editWindowDays: number) {
+  const report = new Date(
+    Date.UTC(reportDate.getUTCFullYear(), reportDate.getUTCMonth(), reportDate.getUTCDate()),
+  );
+  const today = todayUtc();
+  const diffMs = today.getTime() - report.getTime();
+  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  if (diffDays < 0) return; // future-dated allowed
+  if (diffDays > editWindowDays) {
+    throw new Error(
+      `DPR edit window of ${editWindowDays} day(s) has expired for this report date`,
+    );
+  }
+}
+
+function isMaterialInwardOnlyLine(l: LineInput): boolean {
+  const name = (l.activityName || '').toLowerCase();
+  return name.includes('material inward') && (l.materials?.length ?? 0) > 0;
+}
+
+function validateTaskLine(l: LineInput) {
+  if (isMaterialInwardOnlyLine(l)) {
+    if (!l.unitCode) l.unitCode = 'NOS';
+    if (l.completionPct == null) l.completionPct = 0;
+    return;
+  }
+  if (!l.contractorId) throw new Error('Contractor is required on each task');
+  if (!l.activityId && !l.activityName) throw new Error('Activity is required on each task');
+  if (!l.unitCode) throw new Error('Unit (UOM) is required on each task');
+  // Today's consumed work qty is optional (defaults to 0 via dec())
+  if (l.completionPct == null) throw new Error('Total task completion % is required');
 }
 
 async function applyResourceConsumption(
@@ -322,6 +399,7 @@ async function createLines(tx: Prisma.TransactionClient, dprId: string, lines: L
           unitCode: m.unitCode,
           size: m.size,
           consumedQty: dec(m.consumedQty),
+          timeSlots: m.timeSlots ? (m.timeSlots as Prisma.InputJsonValue) : undefined,
           remarks: m.remarks,
           sortOrder: m.sortOrder ?? mi,
         })),
@@ -468,6 +546,29 @@ export const dprService = {
     return buildDprDailyReportXlsx(row);
   },
 
+  async getSettings() {
+    const row =
+      (await prisma.erpDprSettings.findUnique({ where: { key: 'DEFAULT' } })) ??
+      (await prisma.erpDprSettings.create({
+        data: { key: 'DEFAULT', editWindowDays: 10 },
+      }));
+    return row;
+  },
+
+  async updateSettings(body: Record<string, unknown>) {
+    const days = num(body.editWindowDays);
+    if (days == null || days < 0 || days > 365) {
+      throw new Error('editWindowDays must be between 0 and 365');
+    }
+    const row = await prisma.erpDprSettings.upsert({
+      where: { key: 'DEFAULT' },
+      create: { key: 'DEFAULT', editWindowDays: Math.floor(days) },
+      update: { editWindowDays: Math.floor(days) },
+    });
+    emitErpUpdate({ module: 'dpr', id: 'settings', action: 'updated' });
+    return row;
+  },
+
   async create(body: Record<string, unknown>, userId?: string) {
     const projectId = str(body.projectId);
     if (!projectId) throw new Error('Project is required');
@@ -478,14 +579,11 @@ export const dprService = {
     if (!lines.length) throw new Error('Add at least one task line before submitting');
 
     for (const l of lines) {
-      if (!l.contractorId) throw new Error('Contractor is required on each task');
-      if (!l.activityId && !l.activityName) throw new Error('Activity is required on each task');
-      if (!l.unitCode) throw new Error('Unit (UOM) is required on each task');
-      if (l.consumedQty == null) throw new Error("Today's consumed work qty is required");
-      if (l.completionPct == null) throw new Error('Total task completion % is required');
+      validateTaskLine(l);
     }
 
-    const dprNo = str(body.dprNo) ?? (await nextDprNo());
+    const reportDate = dateOnly(body.reportDate) ?? todayUtc();
+    const dprNo = str(body.dprNo) ?? (await nextDprNo(reportDate));
     const existing = await prisma.erpDpr.findUnique({ where: { dprNo } });
     if (existing) throw new Error(`DPR number ${dprNo} already exists`);
 
@@ -494,7 +592,7 @@ export const dprService = {
       const header = await tx.erpDpr.create({
         data: {
           dprNo,
-          reportDate: dateOnly(body.reportDate) ?? todayUtc(),
+          reportDate,
           projectId,
           createdByName: str(body.createdByName),
           remarks: str(body.remarks),
@@ -503,6 +601,197 @@ export const dprService = {
         },
       });
       await createLines(tx, header.id, lines);
+      return header.id;
+    });
+
+    emitErpUpdate({ module: 'dpr', id, action: 'created', projectId });
+    return this.getById(id);
+  },
+
+  async update(id: string, body: Record<string, unknown>, userId?: string) {
+    const existing = await prisma.erpDpr.findUnique({
+      where: { id },
+      include: { lines: { select: { id: true } } },
+    });
+    if (!existing) throw new Error('DPR not found');
+
+    const editWindowDays = await getEditWindowDays();
+    assertWithinEditWindow(existing.reportDate, editWindowDays);
+
+    const projectId = str(body.projectId) ?? existing.projectId;
+    const project = await prisma.erpProject.findUnique({ where: { id: projectId } });
+    if (!project) throw new Error('Project not found');
+
+    const lines = parseLines(body.lines);
+    if (!lines.length) throw new Error('Add at least one task line before submitting');
+
+    for (const l of lines) {
+      validateTaskLine(l);
+    }
+
+    const reportDate = dateOnly(body.reportDate) ?? existing.reportDate;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.erpDprLine.deleteMany({ where: { dprId: id } });
+      await applyResourceConsumption(tx, lines, projectId, userId);
+      await tx.erpDpr.update({
+        where: { id },
+        data: {
+          reportDate,
+          projectId,
+          createdByName: str(body.createdByName) ?? existing.createdByName,
+          remarks: str(body.remarks) ?? existing.remarks,
+          updatedBy: userId ?? null,
+        },
+      });
+      await createLines(tx, id, lines);
+    });
+
+    emitErpUpdate({ module: 'dpr', id, action: 'updated', projectId });
+    return this.getById(id);
+  },
+
+  /**
+   * When store material inward happens for a project+date with no DPR yet,
+   * auto-create a DPR named DPR-DDMMYYYY containing only those materials.
+   * If a DPR already exists for that day, append materials onto a material-inward line.
+   */
+  async ensureFromMaterialInward(opts: {
+    projectId: string;
+    inwardDate: Date;
+    vendorId?: string | null;
+    vendorName?: string | null;
+    materials: Array<{
+      materialId?: string | null;
+      itemName: string;
+      brand?: string | null;
+      unitCode?: string | null;
+      size?: string | null;
+      consumedQty?: number | null;
+      remarks?: string | null;
+    }>;
+    userId?: string;
+  }) {
+    const projectId = opts.projectId;
+    if (!projectId || !opts.materials.length) return null;
+
+    const day = new Date(
+      Date.UTC(
+        opts.inwardDate.getUTCFullYear(),
+        opts.inwardDate.getUTCMonth(),
+        opts.inwardDate.getUTCDate(),
+      ),
+    );
+    const next = new Date(day);
+    next.setUTCDate(next.getUTCDate() + 1);
+
+    const materials = opts.materials.map((m, i) => ({
+      materialId: m.materialId ?? null,
+      itemName: m.itemName,
+      brand: m.brand ?? null,
+      unitCode: m.unitCode ?? null,
+      size: m.size ?? null,
+      consumedQty: m.consumedQty ?? 0,
+      remarks: m.remarks ?? 'Auto from store inward',
+      sortOrder: i,
+    }));
+
+    const existing = await prisma.erpDpr.findFirst({
+      where: { projectId, reportDate: { gte: day, lt: next } },
+      include: {
+        lines: {
+          orderBy: { sortOrder: 'asc' },
+          include: { materials: true },
+        },
+      },
+    });
+
+    if (existing) {
+      // Prefer a line tagged as material inward; else append to first line; else create a line.
+      const found =
+        existing.lines.find((l) => (l.activityName || '').toLowerCase().includes('material inward')) ??
+        existing.lines[0];
+
+      let targetLineId = found?.id;
+      let existingMatCount = found?.materials?.length ?? 0;
+
+      if (!targetLineId) {
+        const created = await prisma.erpDprLine.create({
+          data: {
+            dprId: existing.id,
+            contractorId: opts.vendorId ?? null,
+            contractorName: opts.vendorName ?? null,
+            activityName: 'Material Inward',
+            taskName: 'Auto from store inward',
+            unitCode: materials[0]?.unitCode ?? 'NOS',
+            consumedQty: new Prisma.Decimal(0),
+            completionPct: new Prisma.Decimal(0),
+            remarks: 'Auto-created from material inward',
+            sortOrder: 0,
+          },
+        });
+        targetLineId = created.id;
+        existingMatCount = 0;
+      }
+
+      await prisma.erpDprMaterialLine.createMany({
+        data: materials.map((m, mi) => ({
+          dprLineId: targetLineId!,
+          materialId: m.materialId,
+          itemName: m.itemName,
+          brand: m.brand,
+          unitCode: m.unitCode,
+          size: m.size,
+          consumedQty: dec(m.consumedQty),
+          remarks: m.remarks,
+          sortOrder: existingMatCount + mi,
+        })),
+      });
+
+      emitErpUpdate({ module: 'dpr', id: existing.id, action: 'updated', projectId });
+      return this.getById(existing.id);
+    }
+
+    const dprNo = await nextDprNo(day);
+    const id = await prisma.$transaction(async (tx) => {
+      const header = await tx.erpDpr.create({
+        data: {
+          dprNo,
+          reportDate: day,
+          projectId,
+          createdByName: 'System (Material Inward)',
+          remarks: 'Auto-created from material inward — edit to add tasks',
+          createdBy: opts.userId ?? null,
+          updatedBy: opts.userId ?? null,
+        },
+      });
+      const line = await tx.erpDprLine.create({
+        data: {
+          dprId: header.id,
+          contractorId: opts.vendorId ?? null,
+          contractorName: opts.vendorName ?? null,
+          activityName: 'Material Inward',
+          taskName: 'Auto from store inward',
+          unitCode: materials[0]?.unitCode ?? 'NOS',
+          consumedQty: new Prisma.Decimal(0),
+          completionPct: new Prisma.Decimal(0),
+          remarks: 'Auto-created from material inward',
+          sortOrder: 0,
+        },
+      });
+      await tx.erpDprMaterialLine.createMany({
+        data: materials.map((m, mi) => ({
+          dprLineId: line.id,
+          materialId: m.materialId,
+          itemName: m.itemName,
+          brand: m.brand,
+          unitCode: m.unitCode,
+          size: m.size,
+          consumedQty: dec(m.consumedQty),
+          remarks: m.remarks,
+          sortOrder: mi,
+        })),
+      });
       return header.id;
     });
 

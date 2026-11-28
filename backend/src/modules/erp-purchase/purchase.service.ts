@@ -55,7 +55,20 @@ const prInclude = {
       generalInfo: { select: { fullName: true, employeeCode: true } },
     },
   },
-  lines: { orderBy: { sortOrder: 'asc' as const } },
+  lines: {
+    orderBy: { sortOrder: 'asc' as const },
+    include: {
+      material: {
+        select: {
+          id: true,
+          name: true,
+          qtyOnHand: true,
+          itemCode: true,
+          unitCode: true,
+        },
+      },
+    },
+  },
 } satisfies Prisma.ErpPurchaseRequestInclude;
 
 function mapEmployeeName(e: {
@@ -72,16 +85,76 @@ function mapEmployeeName(e: {
 
 function serializePr(
   row: Prisma.ErpPurchaseRequestGetPayload<{ include: typeof prInclude }>,
+  stock?: Map<string, { qtyTotal: number; qtyUsed: number; qtyAvailable: number }>,
 ) {
   return {
     ...row,
     requestedBy: mapEmployeeName(row.requestedBy),
     approver: mapEmployeeName(row.approver),
-    lines: row.lines.map((l) => ({
-      ...l,
-      qty: Number(l.qty),
-    })),
+    lines: row.lines.map((l) => {
+      const matId = l.materialId;
+      const stockRow = matId && stock ? stock.get(matId) : undefined;
+      const qtyOnHand = l.material ? Number(l.material.qtyOnHand) : null;
+      return {
+        ...l,
+        qty: Number(l.qty),
+        qtyOnHand,
+        qtyAvailable: stockRow?.qtyAvailable ?? qtyOnHand,
+        qtyTotal: stockRow?.qtyTotal ?? qtyOnHand,
+        qtyUsed: stockRow?.qtyUsed ?? null,
+        materialName: l.material?.name ?? l.itemName,
+      };
+    }),
   };
+}
+
+async function materialStockMap(): Promise<
+  Map<string, { qtyTotal: number; qtyUsed: number; qtyAvailable: number }>
+> {
+  const [materials, uses] = await Promise.all([
+    prisma.erpMaterial.findMany({
+      where: { isActive: true },
+      select: { id: true, qtyOnHand: true },
+    }),
+    prisma.erpMaterialProjectUse.groupBy({
+      by: ['materialId'],
+      _sum: { qtyUsed: true },
+    }),
+  ]);
+  const usedById = new Map(
+    uses.map((u) => [u.materialId, Number(u._sum.qtyUsed ?? 0)]),
+  );
+  const map = new Map<string, { qtyTotal: number; qtyUsed: number; qtyAvailable: number }>();
+  for (const m of materials) {
+    const total = Number(m.qtyOnHand);
+    const used = usedById.get(m.id) ?? 0;
+    map.set(m.id, {
+      qtyTotal: total,
+      qtyUsed: used,
+      qtyAvailable: Math.max(0, total - used),
+    });
+  }
+  return map;
+}
+
+/** Days until need-by (0 = today). Negative if overdue. */
+function daysUntilNeedBy(needBy: Date): number {
+  const today = new Date();
+  const t0 = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const t1 = Date.UTC(needBy.getUTCFullYear(), needBy.getUTCMonth(), needBy.getUTCDate());
+  return Math.floor((t1 - t0) / (24 * 60 * 60 * 1000));
+}
+
+function autoPriorityCode(
+  needBy: Date | null,
+  highWithin: number,
+  medWithin: number,
+): string | null {
+  if (!needBy) return null;
+  const days = daysUntilNeedBy(needBy);
+  if (days <= highWithin) return 'HIGH';
+  if (days <= medWithin) return 'MEDIUM';
+  return 'LOW';
 }
 
 export const purchaseService = {
@@ -118,6 +191,8 @@ export const purchaseService = {
       csApproverEmployeeId: row.csApproverEmployeeId,
       csApprover: mapEmployeeName(row.csApprover),
       defaultPoTerms: parseTerms(row.defaultPoTerms),
+      priorityHighWithinDays: row.priorityHighWithinDays ?? 3,
+      priorityMedWithinDays: row.priorityMedWithinDays ?? 7,
     };
   },
 
@@ -141,6 +216,16 @@ export const purchaseService = {
     if ('defaultPoTerms' in body) {
       const terms = parseTerms(body.defaultPoTerms);
       data.defaultPoTerms = terms.length ? terms : DEFAULT_PO_TERMS;
+    }
+    if ('priorityHighWithinDays' in body) {
+      const n = num(body.priorityHighWithinDays);
+      if (n == null || n < 0 || n > 365) throw new Error('priorityHighWithinDays must be 0–365');
+      data.priorityHighWithinDays = Math.floor(n);
+    }
+    if ('priorityMedWithinDays' in body) {
+      const n = num(body.priorityMedWithinDays);
+      if (n == null || n < 0 || n > 365) throw new Error('priorityMedWithinDays must be 0–365');
+      data.priorityMedWithinDays = Math.floor(n);
     }
     await this.getSettings();
     const row = await prisma.erpPurchaseSettings.update({
@@ -169,6 +254,8 @@ export const purchaseService = {
       csApproverEmployeeId: row.csApproverEmployeeId,
       csApprover: mapEmployeeName(row.csApprover),
       defaultPoTerms: parseTerms(row.defaultPoTerms),
+      priorityHighWithinDays: row.priorityHighWithinDays ?? 3,
+      priorityMedWithinDays: row.priorityMedWithinDays ?? 7,
     };
   },
 
@@ -358,20 +445,26 @@ export const purchaseService = {
     if (params.requestedByEmployeeId != null) {
       where.requestedByEmployeeId = params.requestedByEmployeeId;
     }
-    const rows = await prisma.erpPurchaseRequest.findMany({
-      where,
-      orderBy: [{ prDate: 'desc' }, { createdAt: 'desc' }],
-      include: prInclude,
-    });
-    return rows.map(serializePr);
+    const [rows, stock] = await Promise.all([
+      prisma.erpPurchaseRequest.findMany({
+        where,
+        orderBy: [{ prDate: 'desc' }, { createdAt: 'desc' }],
+        include: prInclude,
+      }),
+      materialStockMap(),
+    ]);
+    return rows.map((row) => serializePr(row, stock));
   },
 
   async getById(id: string) {
-    const row = await prisma.erpPurchaseRequest.findUniqueOrThrow({
-      where: { id },
-      include: prInclude,
-    });
-    return serializePr(row);
+    const [row, stock] = await Promise.all([
+      prisma.erpPurchaseRequest.findUniqueOrThrow({
+        where: { id },
+        include: prInclude,
+      }),
+      materialStockMap(),
+    ]);
+    return serializePr(row, stock);
   },
 
   async create(
@@ -422,6 +515,16 @@ export const purchaseService = {
       };
     });
 
+    const requiredByDate = dateOnly(body.requiredByDate);
+    const settingsForPriority = await this.getSettings();
+    const priorityCode =
+      str(body.priorityCode) ??
+      autoPriorityCode(
+        requiredByDate,
+        settingsForPriority.priorityHighWithinDays,
+        settingsForPriority.priorityMedWithinDays,
+      );
+
     const row = await prisma.erpPurchaseRequest.create({
       data: {
         id: randomUUID(),
@@ -433,8 +536,8 @@ export const purchaseService = {
         vendorId: str(body.vendorId),
         requestedByEmployeeId: num(body.requestedByEmployeeId) ?? ctx.employeeId ?? null,
         requestedByUserId: str(body.requestedByUserId) ?? ctx.userId ?? null,
-        requiredByDate: dateOnly(body.requiredByDate),
-        priorityCode: str(body.priorityCode),
+        requiredByDate,
+        priorityCode,
         storeId: str(body.storeId),
         propertyId: str(body.propertyId),
         status,
@@ -446,7 +549,8 @@ export const purchaseService = {
       include: prInclude,
     });
     emitErpUpdate({ module: 'purchase', id: row.id, action: 'created' });
-    return serializePr(row);
+    const stock = await materialStockMap();
+    return serializePr(row, stock);
   },
 
   async update(id: string, body: Record<string, unknown>) {
@@ -484,7 +588,16 @@ export const purchaseService = {
     }
     if (body.propertyId !== undefined) data.propertyId = str(body.propertyId);
     if (body.requiredByDate !== undefined) data.requiredByDate = dateOnly(body.requiredByDate);
-    if (body.priorityCode !== undefined) data.priorityCode = str(body.priorityCode);
+    if (body.priorityCode !== undefined) {
+      data.priorityCode = str(body.priorityCode);
+    } else if (body.requiredByDate !== undefined) {
+      const settings = await this.getSettings();
+      data.priorityCode = autoPriorityCode(
+        dateOnly(body.requiredByDate),
+        settings.priorityHighWithinDays,
+        settings.priorityMedWithinDays,
+      );
+    }
     if (body.remarks !== undefined) data.remarks = str(body.remarks);
 
     if (Array.isArray(body.lines) && existing.status === 'DRAFT') {
@@ -523,7 +636,8 @@ export const purchaseService = {
       data,
       include: prInclude,
     });
-    return serializePr(row);
+    const stock = await materialStockMap();
+    return serializePr(row, stock);
   },
 
   async submit(id: string) {
@@ -550,7 +664,8 @@ export const purchaseService = {
       include: prInclude,
     });
     emitErpUpdate({ module: 'purchase', id: row.id, action: 'submitted' });
-    return serializePr(row);
+    const stock = await materialStockMap();
+    return serializePr(row, stock);
   },
 
   async approve(id: string, actorEmployeeId?: number) {
@@ -573,7 +688,8 @@ export const purchaseService = {
       include: prInclude,
     });
     emitErpUpdate({ module: 'purchase', id: row.id, action: 'approved' });
-    return serializePr(row);
+    const stock = await materialStockMap();
+    return serializePr(row, stock);
   },
 
   async reject(id: string, reason?: string | null, actorEmployeeId?: number) {
@@ -596,7 +712,8 @@ export const purchaseService = {
       include: prInclude,
     });
     emitErpUpdate({ module: 'purchase', id: row.id, action: 'rejected' });
-    return serializePr(row);
+    const stock = await materialStockMap();
+    return serializePr(row, stock);
   },
 
   async remove(id: string) {

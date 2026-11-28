@@ -815,7 +815,8 @@ class _LookupCodeDropdownState extends State<_LookupCodeDropdown> {
 
     if (matched == null && widget.required) {
       matched = options.first.code;
-      if (notifyParentIfDefaulted && widget.value != matched) {
+      // Always push required default into parent so form state matches UI.
+      if (widget.value != matched) {
         _defer(() {
           if (mounted) widget.onChanged(matched!);
         });

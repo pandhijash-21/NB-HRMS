@@ -49,8 +49,25 @@ class ErpDprCreated extends ErpDprEvent {
   List<Object?> get props => [body];
 }
 
+class ErpDprUpdated extends ErpDprEvent {
+  const ErpDprUpdated(this.id, this.body);
+  final String id;
+  final Map<String, dynamic> body;
+
+  @override
+  List<Object?> get props => [id, body];
+}
+
 class ErpDprDeleted extends ErpDprEvent {
   const ErpDprDeleted(this.id);
+  final String id;
+
+  @override
+  List<Object?> get props => [id];
+}
+
+class ErpDprSilentDetailRefreshRequested extends ErpDprEvent {
+  const ErpDprSilentDetailRefreshRequested(this.id);
   final String id;
 
   @override
@@ -140,13 +157,21 @@ class ErpDprBloc extends Bloc<ErpDprEvent, ErpDprState> {
     on<ErpDprListRequested>(_onListRequested);
     on<ErpDprSilentRefreshRequested>(_onSilentRefresh);
     on<ErpDprDetailRequested>(_onDetailRequested);
+    on<ErpDprSilentDetailRefreshRequested>(_onSilentDetailRefresh);
     on<ErpDprCreated>(_onDprCreated);
+    on<ErpDprUpdated>(_onDprUpdated);
     on<ErpDprDeleted>(_onDprDeleted);
     on<ErpDprContractorResourcesRequested>(_onContractorResourcesRequested);
 
     _erpSub = AppEventBus.instance.on<ErpRealtimeEvent>().listen((e) {
-      if (e.module == 'dpr' || e.module == 'erp') {
+      if (e.module == 'dpr' || e.module == 'erp' || e.module == 'store-inward') {
         add(const ErpDprSilentRefreshRequested());
+        final selectedId = state.selectedDpr?.id;
+        final entityId = e.entityId;
+        if (selectedId != null &&
+            (entityId == null || entityId == selectedId || entityId == 'settings')) {
+          add(ErpDprSilentDetailRefreshRequested(selectedId));
+        }
       }
     });
   }
@@ -196,6 +221,16 @@ class ErpDprBloc extends Bloc<ErpDprEvent, ErpDprState> {
     }
   }
 
+  Future<void> _onSilentDetailRefresh(
+    ErpDprSilentDetailRefreshRequested event,
+    Emitter<ErpDprState> emit,
+  ) async {
+    try {
+      final dpr = await _dprRepository.getById(event.id);
+      emit(state.copyWith(status: LoadStatus.success, selectedDpr: dpr));
+    } catch (_) {}
+  }
+
   Future<void> _onDprCreated(
     ErpDprCreated event,
     Emitter<ErpDprState> emit,
@@ -207,7 +242,27 @@ class ErpDprBloc extends Bloc<ErpDprEvent, ErpDprState> {
       emit(state.copyWith(
         isActing: false,
         dprs: updated,
+        selectedDpr: dpr,
         actionMessage: 'DPR submitted successfully',
+      ));
+    } catch (e) {
+      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onDprUpdated(
+    ErpDprUpdated event,
+    Emitter<ErpDprState> emit,
+  ) async {
+    emit(state.copyWith(isActing: true));
+    try {
+      final dpr = await _dprRepository.update(event.id, event.body);
+      final updated = state.dprs.map((d) => d.id == dpr.id ? dpr : d).toList();
+      emit(state.copyWith(
+        isActing: false,
+        dprs: updated,
+        selectedDpr: dpr,
+        actionMessage: 'DPR updated successfully',
       ));
     } catch (e) {
       emit(state.copyWith(isActing: false, errorMessage: e.toString()));
@@ -225,6 +280,7 @@ class ErpDprBloc extends Bloc<ErpDprEvent, ErpDprState> {
       emit(state.copyWith(
         isActing: false,
         dprs: updated,
+        clearSelectedDpr: state.selectedDpr?.id == event.id,
         actionMessage: 'DPR deleted successfully',
       ));
     } catch (e) {

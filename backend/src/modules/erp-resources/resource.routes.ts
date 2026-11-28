@@ -324,6 +324,20 @@ resourceRouter.post('/purchase-orders', requireAuth, requirePermission('STORE', 
   }
 });
 
+resourceRouter.post('/purchase-orders/:id/cancel', requireAuth, requirePermission('STORE', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    return res.json(
+      ok(
+        await storeInwardService.cancelPurchaseOrder(p(req.params.id), {
+          reason: req.body?.reason != null ? String(req.body.reason) : null,
+        }),
+      ),
+    );
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
 // ── Goods inward (PO receipt + QC) ─────────────────────────────────────────
 resourceRouter.get('/inwards', requireAuth, requirePermission('STORE', 'READ'), async (req, res) => {
   try {

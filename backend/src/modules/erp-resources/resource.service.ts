@@ -143,20 +143,40 @@ export const resourceService = {
   async listMaterials(opts?: { includeInactive?: boolean; projectId?: string }) {
     const includeInactive = opts?.includeInactive === true;
     const usage = await boqUsageMaps();
-    const rows = await prisma.erpMaterial.findMany({
-      where: includeInactive ? undefined : { isActive: true },
-      orderBy: [{ name: 'asc' }],
-      include: {
-        activity: { select: { id: true, name: true } },
-        subtask: { select: { id: true, name: true } },
-        stockLogs: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-          include: { contractor: { select: { id: true, name: true, phone: true } } },
+    const now = new Date();
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const [rows, todayLogs] = await Promise.all([
+      prisma.erpMaterial.findMany({
+        where: includeInactive ? undefined : { isActive: true },
+        orderBy: [{ name: 'asc' }],
+        include: {
+          activity: { select: { id: true, name: true } },
+          subtask: { select: { id: true, name: true } },
+          stockLogs: {
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+            include: { contractor: { select: { id: true, name: true, phone: true } } },
+          },
         },
-      },
-    });
-    return rows.map((m) => withStockFields(m, usage.materials.get(m.id) ?? 0));
+      }),
+      prisma.erpMaterialStockLog.findMany({
+        where: {
+          logType: 'CONSUMPTION',
+          createdAt: { gte: dayStart, lte: dayEnd },
+        },
+        select: { materialId: true, quantity: true },
+      }),
+    ]);
+    const usedTodayById = new Map<string, number>();
+    for (const log of todayLogs) {
+      const q = Math.abs(Number(log.quantity) || 0);
+      usedTodayById.set(log.materialId, (usedTodayById.get(log.materialId) ?? 0) + q);
+    }
+    return rows.map((m) => ({
+      ...withStockFields(m, usage.materials.get(m.id) ?? 0),
+      qtyUsedToday: usedTodayById.get(m.id) ?? 0,
+    }));
   },
 
   async materialStockSummary(projectId?: string) {

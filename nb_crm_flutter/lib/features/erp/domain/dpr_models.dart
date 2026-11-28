@@ -97,6 +97,19 @@ class ErpDprLabourLine {
       };
 }
 
+class ErpDprMachineTimeSlot {
+  const ErpDprMachineTimeSlot({required this.from, required this.to});
+  final String from;
+  final String to;
+
+  factory ErpDprMachineTimeSlot.fromJson(Map<String, dynamic> json) => ErpDprMachineTimeSlot(
+        from: json['from']?.toString() ?? json['start']?.toString() ?? '',
+        to: json['to']?.toString() ?? json['end']?.toString() ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {'from': from, 'to': to};
+}
+
 class ErpDprMachineLine {
   const ErpDprMachineLine({
     this.id,
@@ -106,6 +119,7 @@ class ErpDprMachineLine {
     this.unitCode,
     this.size,
     this.consumedQty = 0,
+    this.timeSlots = const [],
     this.remarks,
   });
 
@@ -116,18 +130,28 @@ class ErpDprMachineLine {
   final String? unitCode;
   final String? size;
   final double consumedQty;
+  final List<ErpDprMachineTimeSlot> timeSlots;
   final String? remarks;
 
-  factory ErpDprMachineLine.fromJson(Map<String, dynamic> json) => ErpDprMachineLine(
-        id: json['id']?.toString(),
-        machineId: json['machineId']?.toString(),
-        itemName: json['itemName']?.toString() ?? '',
-        brand: json['brand']?.toString(),
-        unitCode: json['unitCode']?.toString(),
-        size: json['size']?.toString(),
-        consumedQty: _d(json['consumedQty']),
-        remarks: json['remarks']?.toString(),
-      );
+  factory ErpDprMachineLine.fromJson(Map<String, dynamic> json) {
+    final slots = json['timeSlots'];
+    return ErpDprMachineLine(
+      id: json['id']?.toString(),
+      machineId: json['machineId']?.toString(),
+      itemName: json['itemName']?.toString() ?? '',
+      brand: json['brand']?.toString(),
+      unitCode: json['unitCode']?.toString(),
+      size: json['size']?.toString(),
+      consumedQty: _d(json['consumedQty']),
+      timeSlots: slots is List
+          ? slots
+              .map((e) => ErpDprMachineTimeSlot.fromJson(Map<String, dynamic>.from(e as Map)))
+              .where((s) => s.from.isNotEmpty && s.to.isNotEmpty)
+              .toList()
+          : const [],
+      remarks: json['remarks']?.toString(),
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         if (machineId != null) 'machineId': machineId,
@@ -136,6 +160,7 @@ class ErpDprMachineLine {
         if (unitCode != null) 'unitCode': unitCode,
         if (size != null) 'size': size,
         'consumedQty': consumedQty,
+        if (timeSlots.isNotEmpty) 'timeSlots': timeSlots.map((e) => e.toJson()).toList(),
         if (remarks != null) 'remarks': remarks,
       };
 }
@@ -401,6 +426,24 @@ class ErpDpr {
       ),
     );
   }
+}
+
+class ErpDprSettings {
+  const ErpDprSettings({
+    required this.id,
+    this.key = 'DEFAULT',
+    this.editWindowDays = 10,
+  });
+
+  final String id;
+  final String key;
+  final int editWindowDays;
+
+  factory ErpDprSettings.fromJson(Map<String, dynamic> json) => ErpDprSettings(
+        id: json['id']?.toString() ?? '',
+        key: json['key']?.toString() ?? 'DEFAULT',
+        editWindowDays: int.tryParse('${json['editWindowDays']}') ?? 10,
+      );
 }
 
 double _d(dynamic v) => double.tryParse('$v') ?? 0;

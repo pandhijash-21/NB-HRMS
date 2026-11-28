@@ -850,6 +850,13 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             builder: (context, state) => const DprFormScreen(),
           ),
           GoRoute(
+            path: '/erp/dpr/:id/edit',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return DprFormScreen(dprId: id);
+            },
+          ),
+          GoRoute(
             path: '/erp/dpr/:id',
             builder: (context, state) {
               final id = state.pathParameters['id'] ?? '';

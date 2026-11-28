@@ -59,6 +59,7 @@ class ErpMaterial {
     this.qtyTotal = 0,
     this.qtyUsed = 0,
     this.qtyAvailable = 0,
+    this.qtyUsedToday = 0,
     this.isActive = true,
     this.stockLogs = const [],
   });
@@ -80,6 +81,7 @@ class ErpMaterial {
   final double qtyTotal;
   final double qtyUsed;
   final double qtyAvailable;
+  final double qtyUsedToday;
   final bool isActive;
   final List<ErpMaterialStockLog> stockLogs;
 
@@ -101,6 +103,7 @@ class ErpMaterial {
         qtyTotal: _d(json['qtyTotal'] ?? json['qtyOnHand']),
         qtyUsed: _d(json['qtyUsed']),
         qtyAvailable: _d(json['qtyAvailable']),
+        qtyUsedToday: _d(json['qtyUsedToday']),
         isActive: json['isActive'] != false,
         stockLogs: json['stockLogs'] is List
             ? (json['stockLogs'] as List)

@@ -25,6 +25,7 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
   ErpPurchaseSettings? _settings;
   List<ErpPurchaseRequest> _pending = [];
   List<ErpPurchaseRequest> _approved = [];
+  List<ErpPurchaseRequest> _rejected = [];
   bool _loading = true;
   String? _error;
   StreamSubscription<ErpRealtimeEvent>? _erpSub;
@@ -32,7 +33,7 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
     _load();
     _erpSub = AppEventBus.instance.on<ErpRealtimeEvent>().listen((event) {
       if (event.module == 'purchase' || event.module == 'erp') {
@@ -54,11 +55,13 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
       final settings = await repo.getSettings();
       final pending = await repo.listRequests(status: 'PENDING');
       final approved = await repo.listRequests(status: 'APPROVED');
+      final rejected = await repo.listRequests(status: 'REJECTED');
       if (!mounted) return;
       setState(() {
         _settings = settings;
         _pending = pending;
         _approved = approved;
+        _rejected = rejected;
       });
     } catch (_) {}
   }
@@ -73,11 +76,13 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
       final settings = await repo.getSettings();
       final pending = await repo.listRequests(status: 'PENDING');
       final approved = await repo.listRequests(status: 'APPROVED');
+      final rejected = await repo.listRequests(status: 'REJECTED');
       if (!mounted) return;
       setState(() {
         _settings = settings;
         _pending = pending;
         _approved = approved;
+        _rejected = rejected;
         _loading = false;
       });
     } catch (e) {
@@ -116,6 +121,24 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
       setState(() => _settings = settings);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Comparison Sheet (PO) approver saved')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _savePriorityThresholds(int highDays, int medDays) async {
+    try {
+      final settings = await context.read<PurchaseRepository>().updateSettings(
+            updatePriorityThresholds: true,
+            priorityHighWithinDays: highDays,
+            priorityMedWithinDays: medDays,
+          );
+      if (!mounted) return;
+      setState(() => _settings = settings);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Auto priority thresholds saved')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -217,6 +240,94 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
     }
   }
 
+  Future<void> _showRequestDetail(ErpPurchaseRequest pr) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        final isPending = pr.status == 'PENDING';
+        final isApproved = pr.status == 'APPROVED';
+        return AlertDialog(
+          title: Text('${pr.prNumber} · ${pr.status}'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (pr.requiredByDate != null)
+                    Text('Required by: ${DateFormat('dd/MM/yyyy').format(pr.requiredByDate!)}'),
+                  if (pr.priorityCode != null) Text('Priority: ${pr.priorityCode}'),
+                  if (pr.projectName != null) Text('Project: ${pr.projectName}'),
+                  if (pr.vendorName != null) Text('Vendor: ${pr.vendorName}'),
+                  if (pr.remarks != null && pr.remarks!.isNotEmpty) Text('Remarks: ${pr.remarks}'),
+                  if (pr.rejectionReason != null && pr.rejectionReason!.isNotEmpty)
+                    Text('Rejection reason: ${pr.rejectionReason}'),
+                  const SizedBox(height: 12),
+                  const Text('Lines', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  if (pr.lines.isEmpty)
+                    const Text('No lines.')
+                  else
+                    ...pr.lines.map((line) {
+                      final avail = line.qtyAvailable;
+                      final unit = line.unitCode ?? '';
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(line.itemName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            Text(
+                              'Qty requested: ${line.qty}${unit.isNotEmpty ? ' $unit' : ''}',
+                            ),
+                            Text(
+                              'Available now: ${avail == null ? '—' : avail}',
+                              style: TextStyle(
+                                color: Theme.of(ctx).colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+            if (isApproved)
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  context.push('/erp/purchase/requests/${pr.id}/quotations');
+                },
+                child: const Text('Quotations / CS'),
+              ),
+            if (isPending) ...[
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _reject(pr);
+                },
+                child: const Text('Reject'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _approve(pr);
+                },
+                child: const Text('Approve'),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -228,10 +339,12 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
         actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
         bottom: TabBar(
           controller: _tabs,
+          isScrollable: true,
           tabs: const [
             Tab(text: 'Settings'),
             Tab(text: 'PR Approvals'),
             Tab(text: 'Quotations / CS'),
+            Tab(text: 'Rejected'),
           ],
         ),
       ),
@@ -247,10 +360,13 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
                       onSavePrApprover: _savePrApprover,
                       onSaveCsApprover: _saveCsApprover,
                       onEditDefaultPoTerms: _editDefaultPoTerms,
+                      onSavePriorityThresholds: _savePriorityThresholds,
                     ),
                     _RequestList(
                       items: _pending,
                       emptyLabel: 'No pending purchase requests.',
+                      showStockInSubtitle: true,
+                      onTap: _showRequestDetail,
                       trailingBuilder: (pr) => Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -262,8 +378,13 @@ class _PurchaseHomeScreenState extends State<PurchaseHomeScreen>
                     _RequestList(
                       items: _approved,
                       emptyLabel: 'No approved purchase requests yet.',
-                      onTap: (pr) => context.push('/erp/purchase/requests/${pr.id}/quotations'),
+                      onTap: _showRequestDetail,
                       trailingBuilder: (pr) => const Icon(Icons.chevron_right),
+                    ),
+                    _RequestList(
+                      items: _rejected,
+                      emptyLabel: 'No rejected purchase requests.',
+                      onTap: _showRequestDetail,
                     ),
                   ],
                 ),
@@ -277,12 +398,14 @@ class _SettingsTab extends ConsumerWidget {
     required this.onSavePrApprover,
     required this.onSaveCsApprover,
     required this.onEditDefaultPoTerms,
+    required this.onSavePriorityThresholds,
   });
 
   final ErpPurchaseSettings? settings;
   final ValueChanged<int?> onSavePrApprover;
   final ValueChanged<int?> onSaveCsApprover;
   final VoidCallback onEditDefaultPoTerms;
+  final void Function(int highDays, int medDays) onSavePriorityThresholds;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -384,9 +507,116 @@ class _SettingsTab extends ConsumerWidget {
                         : 'Set default TnC',
                   ),
                 ),
+                const SizedBox(height: 28),
+                _AutoPrioritySection(
+                  highDays: settings?.priorityHighWithinDays ?? 3,
+                  medDays: settings?.priorityMedWithinDays ?? 7,
+                  onSave: onSavePriorityThresholds,
+                ),
               ],
             );
           },
+        ),
+      ],
+    );
+  }
+}
+
+class _AutoPrioritySection extends StatefulWidget {
+  const _AutoPrioritySection({
+    required this.highDays,
+    required this.medDays,
+    required this.onSave,
+  });
+
+  final int highDays;
+  final int medDays;
+  final void Function(int highDays, int medDays) onSave;
+
+  @override
+  State<_AutoPrioritySection> createState() => _AutoPrioritySectionState();
+}
+
+class _AutoPrioritySectionState extends State<_AutoPrioritySection> {
+  late final TextEditingController _highCtrl;
+  late final TextEditingController _medCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _highCtrl = TextEditingController(text: '${widget.highDays}');
+    _medCtrl = TextEditingController(text: '${widget.medDays}');
+  }
+
+  @override
+  void didUpdateWidget(covariant _AutoPrioritySection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.highDays != widget.highDays) {
+      _highCtrl.text = '${widget.highDays}';
+    }
+    if (oldWidget.medDays != widget.medDays) {
+      _medCtrl.text = '${widget.medDays}';
+    }
+  }
+
+  @override
+  void dispose() {
+    _highCtrl.dispose();
+    _medCtrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final high = int.tryParse(_highCtrl.text.trim());
+    final med = int.tryParse(_medCtrl.text.trim());
+    if (high == null || med == null || high < 0 || med < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter valid non-negative day counts')),
+      );
+      return;
+    }
+    widget.onSave(high, med);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Auto Priority',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Need-by ≤ High days → HIGH; ≤ Med days → MEDIUM; else LOW',
+          style: TextStyle(fontSize: 13),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _highCtrl,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'High within N days',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _medCtrl,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Med within N days',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton(
+            onPressed: _submit,
+            child: const Text('Save'),
+          ),
         ),
       ],
     );
@@ -399,12 +629,37 @@ class _RequestList extends StatelessWidget {
     required this.emptyLabel,
     this.trailingBuilder,
     this.onTap,
+    this.showStockInSubtitle = false,
   });
 
   final List<ErpPurchaseRequest> items;
   final String emptyLabel;
   final Widget Function(ErpPurchaseRequest pr)? trailingBuilder;
   final ValueChanged<ErpPurchaseRequest>? onTap;
+  final bool showStockInSubtitle;
+
+  String _subtitle(ErpPurchaseRequest pr) {
+    final parts = <String>[
+      DateFormat('dd/MM/yyyy').format(pr.prDate),
+      if (pr.projectName != null) pr.projectName!,
+      if (pr.vendorName != null) pr.vendorName!,
+      if (pr.requestedByName != null) 'By ${pr.requestedByName}',
+      '${pr.lines.length} line(s)',
+    ];
+    if (showStockInSubtitle && pr.lines.isNotEmpty) {
+      final stock = pr.lines
+          .map((l) {
+            final avail = l.qtyAvailable;
+            return '${l.itemName}: Available now: ${avail == null ? '—' : avail}';
+          })
+          .join(' · ');
+      parts.add(stock);
+    }
+    if (pr.rejectionReason != null && pr.rejectionReason!.isNotEmpty) {
+      parts.add('Reason: ${pr.rejectionReason}');
+    }
+    return parts.join(' · ');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -419,15 +674,7 @@ class _RequestList extends StatelessWidget {
           child: ListTile(
             onTap: onTap == null ? null : () => onTap!(pr),
             title: Text('${pr.prNumber} · ${pr.status}', style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text(
-              [
-                DateFormat('dd/MM/yyyy').format(pr.prDate),
-                if (pr.projectName != null) pr.projectName!,
-                if (pr.vendorName != null) pr.vendorName!,
-                if (pr.requestedByName != null) 'By ${pr.requestedByName}',
-                '${pr.lines.length} line(s)',
-              ].join(' · '),
-            ),
+            subtitle: Text(_subtitle(pr)),
             isThreeLine: true,
             trailing: trailingBuilder?.call(pr),
           ),

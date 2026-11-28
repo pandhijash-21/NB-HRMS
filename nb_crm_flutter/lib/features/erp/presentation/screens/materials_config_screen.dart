@@ -218,22 +218,48 @@ class _MaterialsConfigScreenState extends State<MaterialsConfigScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Stock summary', style: TextStyle(fontWeight: FontWeight.w700)),
+                const Text('Materials ledger', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                const SizedBox(height: 4),
+                Text(
+                  'Total · Used · Available · Used today',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+                ),
                 const SizedBox(height: 8),
-                for (final m in _materials)
-                  Card(
-                    child: ListTile(
-                      title: Text('${m.brand != null ? '${m.brand} ' : ''}${m.name}'),
-                      subtitle: Text(
-                        'Total: ${m.qtyTotal} · Used: ${m.qtyUsed} · Available: ${m.qtyAvailable}${m.unitCode != null ? ' ${m.unitCode}' : ''}',
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.add_shopping_cart_outlined),
-                        tooltip: 'Add purchase',
-                        onPressed: () => _addStock(m.id),
-                      ),
-                    ),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    columns: const [
+                      DataColumn(label: Text('Material')),
+                      DataColumn(label: Text('UOM')),
+                      DataColumn(label: Text('Total'), numeric: true),
+                      DataColumn(label: Text('Used'), numeric: true),
+                      DataColumn(label: Text('Available'), numeric: true),
+                      DataColumn(label: Text('Used today'), numeric: true),
+                      DataColumn(label: Text('')),
+                    ],
+                    rows: [
+                      for (final m in _materials)
+                        DataRow(
+                          cells: [
+                            DataCell(Text(
+                              '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} · ' : ''}${m.name}',
+                              overflow: TextOverflow.ellipsis,
+                            )),
+                            DataCell(Text(m.unitCode ?? '—')),
+                            DataCell(Text(m.qtyTotal.toStringAsFixed(2))),
+                            DataCell(Text(m.qtyUsed.toStringAsFixed(2))),
+                            DataCell(Text(m.qtyAvailable.toStringAsFixed(2))),
+                            DataCell(Text(m.qtyUsedToday.toStringAsFixed(2))),
+                            DataCell(IconButton(
+                              icon: const Icon(Icons.add_shopping_cart_outlined),
+                              tooltip: 'Add purchase',
+                              onPressed: () => _addStock(m.id),
+                            )),
+                          ],
+                        ),
+                    ],
                   ),
+                ),
               ],
             ),
         ],

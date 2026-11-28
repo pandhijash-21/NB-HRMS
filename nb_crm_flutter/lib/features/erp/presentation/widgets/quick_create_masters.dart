@@ -289,21 +289,28 @@ class ActivityDropdownWithCreate extends StatelessWidget {
         onActivityCreated(created);
         onChanged(created.id);
       },
-      child: DropdownButtonFormField<String?>(
-        key: ValueKey('activity-dd-$value-${activities.length}'),
-        isExpanded: true,
-        initialValue: value,
-        hint: hint,
-        decoration: decoration ??
-            InputDecoration(
-              labelText: required ? 'Activity *' : 'Activity',
-              border: const OutlineInputBorder(),
-            ),
-        items: items,
-        onChanged: enabled ? onChanged : null,
-        validator: required
-            ? (v) => (v == null || v.isEmpty) ? 'Activity is required' : null
-            : null,
+      child: InputDecorator(
+        decoration: (decoration ??
+                InputDecoration(
+                  labelText: required ? 'Activity *' : 'Activity',
+                  border: const OutlineInputBorder(),
+                ))
+            .copyWith(
+          errorText: required && (value == null || value!.isEmpty)
+              ? 'Activity is required'
+              : null,
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String?>(
+            key: ValueKey('activity-dd-$value-${activities.length}'),
+            isExpanded: true,
+            isDense: true,
+            value: value != null && items.any((i) => i.value == value) ? value : null,
+            hint: hint ?? const Text('Select activity'),
+            items: items,
+            onChanged: enabled ? onChanged : null,
+          ),
+        ),
       ),
     );
   }

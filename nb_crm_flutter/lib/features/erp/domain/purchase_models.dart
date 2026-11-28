@@ -6,6 +6,8 @@ class ErpPurchaseSettings {
     this.csApproverEmployeeId,
     this.csApproverName,
     this.defaultPoTerms = const [],
+    this.priorityHighWithinDays = 3,
+    this.priorityMedWithinDays = 7,
   });
 
   final String id;
@@ -14,6 +16,10 @@ class ErpPurchaseSettings {
   final int? csApproverEmployeeId;
   final String? csApproverName;
   final List<String> defaultPoTerms;
+  /// Need-by within this many days → HIGH
+  final int priorityHighWithinDays;
+  /// Need-by within this many days (above high) → MEDIUM; else LOW
+  final int priorityMedWithinDays;
 
   factory ErpPurchaseSettings.fromJson(Map<String, dynamic> json) {
     final approver = json['defaultApprover'];
@@ -32,6 +38,8 @@ class ErpPurchaseSettings {
       defaultPoTerms: termsRaw is List
           ? termsRaw.map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList()
           : const [],
+      priorityHighWithinDays: int.tryParse('${json['priorityHighWithinDays'] ?? 3}') ?? 3,
+      priorityMedWithinDays: int.tryParse('${json['priorityMedWithinDays'] ?? 7}') ?? 7,
     );
   }
 }
@@ -96,6 +104,10 @@ class ErpPurchaseRequestLine {
     this.size,
     required this.qty,
     this.remark,
+    this.qtyAvailable,
+    this.qtyTotal,
+    this.qtyUsed,
+    this.qtyOnHand,
   });
 
   final String? id;
@@ -110,6 +122,10 @@ class ErpPurchaseRequestLine {
   final String? size;
   final double qty;
   final String? remark;
+  final double? qtyAvailable;
+  final double? qtyTotal;
+  final double? qtyUsed;
+  final double? qtyOnHand;
 
   factory ErpPurchaseRequestLine.fromJson(Map<String, dynamic> json) => ErpPurchaseRequestLine(
         id: json['id']?.toString(),
@@ -124,6 +140,12 @@ class ErpPurchaseRequestLine {
         size: json['size']?.toString(),
         qty: double.tryParse('${json['qty'] ?? 0}') ?? 0,
         remark: json['remark']?.toString(),
+        qtyAvailable: json['qtyAvailable'] == null
+            ? null
+            : double.tryParse('${json['qtyAvailable']}'),
+        qtyTotal: json['qtyTotal'] == null ? null : double.tryParse('${json['qtyTotal']}'),
+        qtyUsed: json['qtyUsed'] == null ? null : double.tryParse('${json['qtyUsed']}'),
+        qtyOnHand: json['qtyOnHand'] == null ? null : double.tryParse('${json['qtyOnHand']}'),
       );
 
   Map<String, dynamic> toJson() => {

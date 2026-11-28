@@ -453,7 +453,7 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
       child: Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
       appBar: AppBar(
-        title: Text(widget.isEdit ? 'Edit Vendor' : 'Add Vendor'),
+        title: Text(widget.isEdit ? 'Edit Agency' : 'Add Agency'),
         leading: const AppBackButton(fallbackLocation: '/erp/configurations/vendors'),
       ),
       body: Form(
@@ -468,7 +468,7 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
               onDiscard: _draftInfo != null ? _discardDraft : null,
             ),
             _section(
-              title: 'Vendor Details',
+              title: 'Agency Details',
               child: Column(
                 children: [
                   _grid([
@@ -526,13 +526,13 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
                     lookupNullableDropdown(
                       context: context,
                       category: kContractorType,
-                      label: 'Type of Vendor',
+                      label: 'Who are they?',
                       value: _contractorTypeCode,
                       onChanged: (v) => setState(() => _contractorTypeCode = v),
                       fallback: const [
-                        LookupOption(id: 'AGENCY', category: 'CONTRACTOR_TYPE', code: 'AGENCY', label: 'Agency'),
+                        LookupOption(id: 'VENDOR', category: 'CONTRACTOR_TYPE', code: 'VENDOR', label: 'Vendor'),
                         LookupOption(id: 'CONTRACTOR', category: 'CONTRACTOR_TYPE', code: 'CONTRACTOR', label: 'Contractor'),
-                        LookupOption(id: 'SUPPLIER', category: 'CONTRACTOR_TYPE', code: 'SUPPLIER', label: 'Supplier'),
+                        LookupOption(id: 'OTHER', category: 'CONTRACTOR_TYPE', code: 'OTHER', label: 'Other'),
                       ],
                     ),
                     CheckboxListTile(

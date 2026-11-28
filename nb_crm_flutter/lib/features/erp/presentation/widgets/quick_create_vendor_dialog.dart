@@ -124,7 +124,7 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
               if (didPop) autoSave(immediate: true);
             },
             child: AlertDialog(
-            title: const Text('Add vendor'),
+            title: const Text('Add agency'),
             content: SizedBox(
               width: 560,
               child: Form(
@@ -165,13 +165,13 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
                           ),
                         ),
                       Text(
-                        'Creates a vendor in Configurations → Vendors with tax, address, and banking details.',
+                        'Creates an agency in Configurations → Agencies with tax, address, and banking details.',
                         style: Theme.of(ctx).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 14),
                       TextFormField(
                         controller: nameCtrl,
-                        decoration: dec('Vendor / Company name', required: true),
+                        decoration: dec('Agency / Company name', required: true),
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Required' : null,
                       ),
@@ -232,7 +232,7 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
                       lookupDropdown(
                         context: ctx,
                         category: kContractorType,
-                        label: 'Vendor type',
+                        label: 'Who are they?',
                         value: contractorTypeCode,
                         onChanged: (v) => setLocal(() => contractorTypeCode = v),
                       ),
@@ -427,7 +427,7 @@ Future<ErpContractor?> showQuickCreateVendorDialog(BuildContext context) async {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Add vendor'),
+                    : const Text('Add agency'),
               ),
             ],
           ),
@@ -472,7 +472,7 @@ class VendorDropdownWithCreate extends StatelessWidget {
     this.required = false,
     this.enabled = true,
     this.includeNullOption = false,
-    this.nullLabel = 'Select vendor',
+    this.nullLabel = 'Select agency',
     this.hint,
   });
 
@@ -514,28 +514,35 @@ class VendorDropdownWithCreate extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          child: DropdownButtonFormField<String?>(
-            key: ValueKey('vendor-dd-$value-${vendors.length}'),
-            isExpanded: true,
-            initialValue: value,
-            hint: hint,
-            decoration: decoration ??
-                InputDecoration(
-                  labelText: required ? 'Vendor *' : 'Vendor',
-                  hintText: 'Select vendor',
-                  border: const OutlineInputBorder(),
-                ),
-            items: items,
-            onChanged: enabled ? onChanged : null,
-            validator: required
-                ? (v) => (v == null || v.isEmpty) ? 'Vendor is required' : null
-                : null,
+          child: InputDecorator(
+            decoration: (decoration ??
+                    InputDecoration(
+                      labelText: required ? 'Agency *' : 'Agency',
+                      hintText: 'Select agency',
+                      border: const OutlineInputBorder(),
+                    ))
+                .copyWith(
+              errorText: required && (value == null || value!.isEmpty)
+                  ? 'Agency is required'
+                  : null,
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String?>(
+                key: ValueKey('vendor-dd-$value-${vendors.length}'),
+                isExpanded: true,
+                isDense: true,
+                value: value != null && items.any((i) => i.value == value) ? value : null,
+                hint: hint ?? const Text('Select agency'),
+                items: items,
+                onChanged: enabled ? onChanged : null,
+              ),
+            ),
           ),
         ),
         Padding(
           padding: const EdgeInsets.only(left: 4, top: 6),
           child: IconButton(
-            tooltip: 'Add new vendor',
+            tooltip: 'Add new agency',
             onPressed: !enabled
                 ? null
                 : () async {

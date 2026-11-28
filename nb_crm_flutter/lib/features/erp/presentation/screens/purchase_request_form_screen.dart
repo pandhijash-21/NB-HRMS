@@ -423,11 +423,27 @@ class _PurchaseRequestFormScreenState extends State<PurchaseRequestFormScreen> {
     setState(() {
       if (requiredBy) {
         _requiredBy = picked;
+        _priorityCode = _autoPriorityFor(picked) ?? _priorityCode;
       } else {
         _prDate = picked;
       }
     });
     _autoSaveDraft();
+  }
+
+  /// HIGH / MEDIUM / LOW from Purchase settings thresholds (need-by vs today).
+  String? _autoPriorityFor(DateTime needBy) {
+    // Defaults match backend ErpPurchaseSettings (3 / 7). Settings UI can change them;
+    // form uses same defaults so UI stays consistent before submit.
+    const highWithin = 3;
+    const medWithin = 7;
+    final today = DateTime.now();
+    final t0 = DateTime(today.year, today.month, today.day);
+    final t1 = DateTime(needBy.year, needBy.month, needBy.day);
+    final days = t1.difference(t0).inDays;
+    if (days <= highWithin) return 'HIGH';
+    if (days <= medWithin) return 'MEDIUM';
+    return 'LOW';
   }
 
   Future<void> _save({required bool submit}) async {

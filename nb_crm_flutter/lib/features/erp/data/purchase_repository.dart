@@ -22,9 +22,12 @@ class PurchaseRepository {
     int? defaultApproverEmployeeId,
     int? csApproverEmployeeId,
     List<String>? defaultPoTerms,
+    int? priorityHighWithinDays,
+    int? priorityMedWithinDays,
     bool updatePrApprover = false,
     bool updateCsApprover = false,
     bool updateDefaultPoTerms = false,
+    bool updatePriorityThresholds = false,
   }) {
     return _dio.patchEnvelope(
       'erp/purchase/settings',
@@ -32,6 +35,10 @@ class PurchaseRepository {
         if (updatePrApprover) 'defaultApproverEmployeeId': defaultApproverEmployeeId,
         if (updateCsApprover) 'csApproverEmployeeId': csApproverEmployeeId,
         if (updateDefaultPoTerms) 'defaultPoTerms': defaultPoTerms ?? const <String>[],
+        if (updatePriorityThresholds) ...{
+          'priorityHighWithinDays': priorityHighWithinDays,
+          'priorityMedWithinDays': priorityMedWithinDays,
+        },
       },
       parse: (raw) => ErpPurchaseSettings.fromJson(Map<String, dynamic>.from(raw as Map)),
     );

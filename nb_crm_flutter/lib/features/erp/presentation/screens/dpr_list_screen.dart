@@ -28,6 +28,52 @@ class DprListScreen extends StatelessWidget {
 class _DprListView extends StatelessWidget {
   const _DprListView();
 
+  Future<void> _showEditWindowSettings(BuildContext context) async {
+    final repo = context.read<DprRepository>();
+    try {
+      final settings = await repo.getSettings();
+      if (!context.mounted) return;
+      final ctrl = TextEditingController(text: '${settings.editWindowDays}');
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('DPR edit window'),
+          content: TextField(
+            controller: ctrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Editable for how many days after report date?',
+              helperText: 'Default 10. Example: report on 28th stays editable until day 10.',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+          ],
+        ),
+      );
+      if (ok != true || !context.mounted) return;
+      final days = int.tryParse(ctrl.text.trim());
+      if (days == null || days < 0 || days > 365) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a number between 0 and 365')),
+        );
+        return;
+      }
+      await repo.updateSettings(editWindowDays: days);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('DPR edit window set to $days day(s)')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthBloc>().state;
@@ -55,6 +101,12 @@ class _DprListView extends StatelessWidget {
             title: const Text('Daily Progress Report'),
             leading: const AppBackButton(fallbackLocation: '/erp/home'),
             actions: [
+              if (canWrite)
+                IconButton(
+                  tooltip: 'DPR edit window (days)',
+                  icon: const Icon(Icons.tune),
+                  onPressed: () => _showEditWindowSettings(context),
+                ),
               IconButton(
                 icon: const Icon(Icons.refresh),
                 onPressed: () => context.read<ErpDprBloc>().add(const ErpDprListRequested()),

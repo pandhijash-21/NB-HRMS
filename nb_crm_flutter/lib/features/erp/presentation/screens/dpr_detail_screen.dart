@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/network/api_envelope.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/open_url.dart';
+import '../../../auth/domain/permissions.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/dpr_repository.dart';
 import '../../domain/dpr_models.dart';
 import '../bloc/erp_dpr_bloc.dart';
@@ -140,6 +143,16 @@ class _DprDetailViewState extends State<_DprDetailView> {
             onPressed: () =>
                 context.read<ErpDprBloc>().add(ErpDprDetailRequested(widget.id)),
           ),
+          if (dpr != null &&
+              Permissions.canWriteDpr(
+                context.watch<AuthBloc>().state.permissions,
+                context.watch<AuthBloc>().state.user?.role,
+              ))
+            IconButton(
+              tooltip: 'Edit DPR',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () => context.go('/erp/dpr/${dpr.id}/edit'),
+            ),
           if (dpr != null)
             IconButton(
               tooltip: 'Download Excel (site DPR format)',
@@ -218,9 +231,7 @@ class _DprReportPreview extends StatelessWidget {
       lineTrades.add(trades);
     }
 
-    final staff = (dpr.createdByName != null && dpr.createdByName!.trim().isNotEmpty) ? 1.0 : 0.0;
-    final totalManpower =
-        totals.values.fold<double>(0, (s, n) => s + n) + staff;
+    final totalManpower = totals.values.fold<double>(0, (s, n) => s + n);
 
     // Material consumption = DPR-logged usage only (Store inward stays in Material Report)
     final mats = <String, _AggMat>{};
@@ -353,12 +364,12 @@ class _DprReportPreview extends StatelessWidget {
                 cells: [
                   DataCell(
                     Text(
-                      '${projectName.toUpperCase()} STAFF',
+                      projectName.toUpperCase(),
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
                   const DataCell(Text('')),
-                  DataCell(Text(staff > 0 ? staff.toStringAsFixed(0) : '')),
+                  const DataCell(Text('')),
                   DataCell(
                     Text(
                       'Total Manpower  $totalManpower',
@@ -596,7 +607,10 @@ class _DprReportPreview extends StatelessWidget {
   static String _blockLabel(ErpDprLine line) {
     final parts = <String>[
       if ((line.towerName ?? '').isNotEmpty) line.towerName!,
-      if (line.floorNo != null) 'Floor ${line.floorNo}',
+      if (line.floorNo == -1)
+        'ALL Floors'
+      else if (line.floorNo != null)
+        'Floor ${line.floorNo}',
       if ((line.unitLabel ?? '').isNotEmpty) line.unitLabel!,
     ];
     return parts.isEmpty ? 'Site' : parts.join(' / ');

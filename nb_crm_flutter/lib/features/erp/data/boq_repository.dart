@@ -336,6 +336,14 @@ class BoqRepository {
     );
   }
 
+  Future<void> cancelPurchaseOrder(String id, {String? reason}) async {
+    await _dio.postEnvelope(
+      'erp/resources/purchase-orders/$id/cancel',
+      data: {if (reason != null && reason.isNotEmpty) 'reason': reason},
+      parse: (_) => true,
+    );
+  }
+
   Future<List<ErpStoreInward>> listInwards({String? purchaseOrderId}) async {
     return _dio.getEnvelope<List<ErpStoreInward>>(
       'erp/resources/inwards',

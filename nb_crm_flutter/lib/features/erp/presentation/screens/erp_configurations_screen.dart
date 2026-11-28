@@ -162,10 +162,10 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
                     color: const Color(0xFF1e3a5f),
                     onTap: () => context.go('/erp/configurations/activities'),
                   ),
-                if (_matches(['Contractors', 'Vendors', 'contractors', 'vendors']))
+                if (_matches(['Contractors', 'Vendors', 'Agencies', 'contractors', 'vendors', 'agencies']))
                   ConfigSquareItem(
-                    title: 'Vendors',
-                    subtitle: 'Agency / Contractor / Supplier',
+                    title: 'Agencies',
+                    subtitle: 'Vendor / Contractor / Other',
                     icon: Icons.handshake_outlined,
                     color: const Color(0xFFdc2626),
                     onTap: () => context.go('/erp/configurations/vendors'),

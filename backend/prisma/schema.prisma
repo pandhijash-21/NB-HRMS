@@ -2970,6 +2970,10 @@ model ErpPurchaseSettings {
   csApproverEmployeeId      Int?     @map("cs_approver_employee_id")
   /// Default PO Terms & Conditions (JSON string array). Copied onto new POs; editable per PO.
   defaultPoTerms            Json?    @map("default_po_terms")
+  /// Auto priority from need-by date: HIGH if due within this many days (inclusive).
+  priorityHighWithinDays    Int      @default(3) @map("priority_high_within_days")
+  /// MEDIUM if due within this many days (and above high threshold). Else LOW.
+  priorityMedWithinDays     Int      @default(7) @map("priority_med_within_days")
   updatedAt                 DateTime @updatedAt @map("updated_at")
   createdAt                 DateTime @default(now()) @map("created_at")
 
@@ -3429,6 +3433,8 @@ model ErpDprMachineLine {
   unitCode    String? @map("unit_code")
   size        String?
   consumedQty Decimal @default(0) @map("consumed_qty") @db.Decimal(14, 4)
+  /// Multiple working windows: [{ "from": "09:00", "to": "12:00" }, ...]
+  timeSlots   Json?   @map("time_slots")
   remarks     String? @db.Text
   sortOrder   Int     @default(0) @map("sort_order")
 
@@ -3436,6 +3442,18 @@ model ErpDprMachineLine {
 
   @@index([dprLineId, sortOrder])
   @@map("erp_dpr_machine_lines")
+}
+
+/// Singleton-style DPR admin settings (edit window, etc.).
+model ErpDprSettings {
+  id             String   @id @default(uuid())
+  key            String   @unique @default("DEFAULT")
+  /// Days after reportDate during which a DPR remains editable (default 10).
+  editWindowDays Int      @default(10) @map("edit_window_days")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("erp_dpr_settings")
 }
 
 // =============================================================================

@@ -36,6 +36,29 @@ class DprRepository {
     );
   }
 
+  Future<ErpDpr> update(String id, Map<String, dynamic> body) async {
+    return _dio.putEnvelope<ErpDpr>(
+      'dpr/$id',
+      data: body,
+      parse: (raw) => ErpDpr.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<ErpDprSettings> getSettings() {
+    return _dio.getEnvelope<ErpDprSettings>(
+      'dpr/settings',
+      parse: (raw) => ErpDprSettings.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<ErpDprSettings> updateSettings({required int editWindowDays}) {
+    return _dio.patchEnvelope<ErpDprSettings>(
+      'dpr/settings',
+      data: {'editWindowDays': editWindowDays},
+      parse: (raw) => ErpDprSettings.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
   Future<Map<String, dynamic>> getContractorResources(
     String contractorId, {
     DateTime? date,

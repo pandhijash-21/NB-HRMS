@@ -27,6 +27,22 @@ dprRouter.get('/contractor-resources', requireAuth, requirePermission('DPR', 'RE
   }
 });
 
+dprRouter.get('/settings', requireAuth, requirePermission('DPR', 'READ'), async (_req, res) => {
+  try {
+    return res.json(ok(await dprService.getSettings()));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
+dprRouter.patch('/settings', requireAuth, requirePermission('DPR', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    return res.json(ok(await dprService.updateSettings(req.body ?? {})));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
 dprRouter.get('/:id/export.xlsx', requireAuth, requirePermission('DPR', 'READ'), async (req, res) => {
   try {
     const { buffer, fileName } = await dprService.exportDailyReportXlsx(p(req.params.id));
@@ -52,6 +68,14 @@ dprRouter.get('/:id', requireAuth, requirePermission('DPR', 'READ'), async (req,
 dprRouter.post('/', requireAuth, requirePermission('DPR', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.status(201).json(ok(await dprService.create(req.body ?? {}, req.user?.id)));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
+dprRouter.put('/:id', requireAuth, requirePermission('DPR', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    return res.json(ok(await dprService.update(p(req.params.id), req.body ?? {}, req.user?.id)));
   } catch (e: unknown) {
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
   }

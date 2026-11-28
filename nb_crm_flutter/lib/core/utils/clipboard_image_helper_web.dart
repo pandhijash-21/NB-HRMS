@@ -22,9 +22,9 @@ Future<PickedFileData?> _readImageFromFile(web.File file) async {
       completer.complete(
         PickedFileData(
           bytes: bytes,
-          name: file.name.isNotEmpty ? file.name : 'pasted_image_${DateTime.now().millisecondsSinceEpoch}.png',
-          mimeType: file.type.isNotEmpty ? file.type : 'image/png',
-          size: bytes.length,
+          name: file.name.isNotEmpty
+              ? file.name
+              : 'pasted_image_${DateTime.now().millisecondsSinceEpoch}.png',
         ),
       );
     }.toJS,
@@ -68,15 +68,15 @@ Future<PickedFileData?> pasteImageFromClipboard() async {
 /// Returns a disposer function to unregister the listener.
 void Function() attachClipboardPasteListener(void Function(PickedFileData data) onImagePasted) {
   final jsListener = (web.Event event) {
-    if (event is! web.ClipboardEvent) return;
-    final clipboardData = event.clipboardData;
+    if (!event.isA<web.ClipboardEvent>()) return;
+    final clipboardEvent = event as web.ClipboardEvent;
+    final clipboardData = clipboardEvent.clipboardData;
     if (clipboardData == null) return;
 
     final items = clipboardData.items;
     final len = items.length;
     for (var i = 0; i < len; i++) {
-      final item = items.item(i);
-      if (item == null) continue;
+      final item = items[i];
       if (item.type.startsWith('image/')) {
         final file = item.getAsFile();
         if (file != null) {

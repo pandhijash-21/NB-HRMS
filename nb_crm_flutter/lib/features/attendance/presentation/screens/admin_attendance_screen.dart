@@ -218,6 +218,22 @@ class _AdminAttendanceView extends StatelessWidget {
                           employeeId: row.employeeId,
                           dateYmd: date,
                         ),
+                        onEditPunchIn: () => showAdminPunchDialog(
+                          context,
+                          bloc: context.read<AdminAttendanceBloc>(),
+                          employeeId: row.employeeId,
+                          existing: row.firstPunch,
+                          defaultType: 'IN',
+                          dateYmd: date,
+                        ),
+                        onEditPunchOut: () => showAdminPunchDialog(
+                          context,
+                          bloc: context.read<AdminAttendanceBloc>(),
+                          employeeId: row.employeeId,
+                          existing: row.lastPunch,
+                          defaultType: 'OUT',
+                          dateYmd: date,
+                        ),
                       ),
                     )
                     .toList(),
@@ -964,17 +980,23 @@ class _EmployeeDayTile extends StatelessWidget {
     required this.row,
     required this.onOpen,
     required this.onAddPunch,
+    this.onEditPunchIn,
+    this.onEditPunchOut,
   });
 
   final AdminAttendanceEmployeeRow row;
   final VoidCallback onOpen;
   final VoidCallback onAddPunch;
+  final VoidCallback? onEditPunchIn;
+  final VoidCallback? onEditPunchOut;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final inTime = row.firstIn != null ? formatIsoTime(row.firstIn) : '—';
     final outTime = row.lastOut != null ? formatIsoTime(row.lastOut) : '—';
+    final firstPunch = row.firstPunch;
+    final lastPunch = row.lastPunch;
 
     return Card(
       elevation: 0,
@@ -1023,25 +1045,98 @@ class _EmployeeDayTile extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    'In $inTime',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                      color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                  Tooltip(
+                    message: firstPunch != null
+                        ? 'Edit Punch In (${firstPunch.source ?? 'Biometric'})'
+                        : 'Add Punch In',
+                    child: InkWell(
+                      onTap: onEditPunchIn ?? onAddPunch,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: firstPunch != null
+                              ? (isDark ? Colors.teal.withValues(alpha: 0.15) : Colors.teal.shade50)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: firstPunch != null
+                                ? (isDark ? Colors.teal.shade700 : Colors.teal.shade200)
+                                : Colors.transparent,
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'In $inTime',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.edit_outlined,
+                              size: 13,
+                              color: isDark ? const Color(0xFFC5A059) : const Color(0xFF0F766E),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  Text(
-                    'Out $outTime',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                      color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                  const SizedBox(height: 4),
+                  Tooltip(
+                    message: lastPunch != null
+                        ? 'Edit Punch Out (${lastPunch.source ?? 'Biometric'})'
+                        : 'Add Punch Out',
+                    child: InkWell(
+                      onTap: onEditPunchOut ?? onAddPunch,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: lastPunch != null
+                              ? (isDark ? Colors.amber.withValues(alpha: 0.15) : Colors.amber.shade50)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: lastPunch != null
+                                ? (isDark ? Colors.amber.shade700 : Colors.amber.shade200)
+                                : Colors.transparent,
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Out $outTime',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.edit_outlined,
+                              size: 13,
+                              color: isDark ? const Color(0xFFC5A059) : const Color(0xFF0F766E),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
+                  const SizedBox(height: 4),
                   Text(
                     '${row.punches.length} punches',
                     style: TextStyle(
@@ -1051,6 +1146,7 @@ class _EmployeeDayTile extends StatelessWidget {
                   ),
                 ],
               ),
+              const SizedBox(width: 6),
               HeaderActionButton(
                 tooltip: 'Add punch',
                 label: 'Add punch',
@@ -1076,8 +1172,10 @@ Future<void> showAdminPunchDialog(
   int? employeeId,
   AttendancePunch? existing,
   String? dateYmd,
+  String? defaultType,
 }) async {
-  if (employeeId == null && existing == null) return;
+  final targetEmployeeId = employeeId ?? existing?.employeeId;
+  if (targetEmployeeId == null && existing == null) return;
   final isDark = Theme.of(context).brightness == Brightness.dark;
 
   DateTime selectedDate;
@@ -1094,17 +1192,20 @@ Future<void> showAdminPunchDialog(
     selectedDate = DateTime.now();
   }
 
-  String time = '09:00';
-  String type = 'IN';
+  String time = (defaultType?.toUpperCase() == 'OUT') ? '18:30' : '09:30';
+  String type = defaultType?.toUpperCase() ?? 'IN';
   String terminal = 'MANUAL';
+  String reason = '';
 
   if (existing != null) {
     final d = DateTime.parse(existing.punchAt).toLocal();
     time = '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-    type = existing.punchType ?? 'IN';
+    type = existing.punchType ?? (defaultType?.toUpperCase() ?? 'IN');
     terminal = existing.terminalId ?? 'MANUAL';
+    reason = existing.reason ?? '';
   }
 
+  final timeController = TextEditingController(text: time);
   bool saving = false;
 
   await showDialog<void>(
@@ -1112,20 +1213,90 @@ Future<void> showAdminPunchDialog(
     builder: (ctx) {
       return StatefulBuilder(
         builder: (ctx, setDialogState) {
+          final isBiometric = existing != null &&
+              (existing.source == 'ESSL' || existing.source == 'ETIMEOFFICE');
+          final isApp = existing != null && existing.source == 'MOBILE_APP';
+
+          final dialogTitle = existing == null
+              ? 'Add Punch (${type == 'OUT' ? 'Punch Out' : 'Punch In'})'
+              : isBiometric
+                  ? 'Edit Biometric Punch (${existing.source})'
+                  : isApp
+                      ? 'Edit Mobile App Punch'
+                      : 'Edit Attendance Punch';
+
           return AlertDialog(
             backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: Text(
-              existing == null ? 'Add Manual Punch' : 'Edit Manual Punch',
+              dialogTitle,
               style: TextStyle(
                 fontWeight: FontWeight.w800,
+                fontSize: 16,
                 color: isDark ? Colors.white : const Color(0xFF212F3D),
               ),
             ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (existing != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isBiometric
+                            ? Colors.teal.withValues(alpha: 0.12)
+                            : isDark
+                                ? Colors.white10
+                                : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isBiometric
+                              ? Colors.teal.withValues(alpha: 0.3)
+                              : (isDark ? Colors.white12 : Colors.black12),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isBiometric
+                                ? Icons.fingerprint_rounded
+                                : isApp
+                                    ? Icons.phone_android_rounded
+                                    : Icons.access_time_filled_rounded,
+                            size: 22,
+                            color: isBiometric
+                                ? Colors.teal
+                                : (isDark ? const Color(0xFFC5A059) : const Color(0xFF0F766E)),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isBiometric
+                                      ? 'Biometric Machine Record (${existing.source})'
+                                      : 'Source: ${existing.source ?? 'MANUAL'}',
+                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                                ),
+                                Text(
+                                  'Original: ${formatIsoTime(existing.punchAt)} IST${existing.terminalId != null ? ' • Terminal: ${existing.terminalId}' : ''}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  // Date
                   InkWell(
                     onTap: () async {
                       final picked = await showDatePicker(
@@ -1148,32 +1319,99 @@ Future<void> showAdminPunchDialog(
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
+                  // Time with picker
                   TextFormField(
-                    decoration: const InputDecoration(
+                    controller: timeController,
+                    decoration: InputDecoration(
                       labelText: 'Time (HH:MM) *',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.access_time_rounded, size: 20),
+                        tooltip: 'Select Time',
+                        onPressed: () async {
+                          final parts = timeController.text.split(':');
+                          final initial = TimeOfDay(
+                            hour: int.tryParse(parts.isNotEmpty ? parts[0] : '9') ?? 9,
+                            minute: parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0,
+                          );
+                          final picked = await showTimePicker(
+                            context: ctx,
+                            initialTime: initial,
+                          );
+                          if (picked == null) return;
+                          final h = picked.hour.toString().padLeft(2, '0');
+                          final m = picked.minute.toString().padLeft(2, '0');
+                          timeController.text = '$h:$m';
+                          setDialogState(() => time = '$h:$m');
+                        },
+                      ),
                     ),
-                    initialValue: time,
-                    onChanged: (v) => time = v,
+                    onChanged: (v) => time = v.trim(),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 14),
+                  // Punch Type Segmented Selector
+                  Text(
+                    'Punch Type',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                          value: 'IN',
+                          label: Text('Punch In'),
+                          icon: Icon(Icons.login_rounded, size: 16),
+                        ),
+                        ButtonSegment(
+                          value: 'OUT',
+                          label: Text('Punch Out'),
+                          icon: Icon(Icons.logout_rounded, size: 16),
+                        ),
+                        ButtonSegment(
+                          value: 'MANUAL',
+                          label: Text('Other'),
+                          icon: Icon(Icons.fingerprint_rounded, size: 16),
+                        ),
+                      ],
+                      selected: {
+                        type.toUpperCase() == 'OUT'
+                            ? 'OUT'
+                            : type.toUpperCase() == 'IN'
+                                ? 'IN'
+                                : 'MANUAL'
+                      },
+                      onSelectionChanged: (val) {
+                        setDialogState(() => type = val.first);
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Terminal
                   TextFormField(
                     decoration: const InputDecoration(
-                      labelText: 'Type (IN/OUT)',
-                      border: OutlineInputBorder(),
-                    ),
-                    initialValue: type,
-                    onChanged: (v) => type = v,
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    decoration: const InputDecoration(
-                      labelText: 'Terminal',
+                      labelText: 'Terminal / Device ID',
                       border: OutlineInputBorder(),
                     ),
                     initialValue: terminal,
-                    onChanged: (v) => terminal = v,
+                    onChanged: (v) => terminal = v.trim(),
+                  ),
+                  const SizedBox(height: 12),
+                  // Reason (Optional)
+                  TextFormField(
+                    decoration: const InputDecoration(
+                      labelText: 'Reason / Admin Note (Optional)',
+                      hintText: 'e.g. Biometric device issue, corrected punch time',
+                      border: OutlineInputBorder(),
+                    ),
+                    initialValue: reason,
+                    onChanged: (v) => reason = v.trim(),
                   ),
                 ],
               ),
@@ -1189,13 +1427,14 @@ Future<void> showAdminPunchDialog(
                     : () async {
                         setDialogState(() => saving = true);
                         try {
+                          final currentTime = timeController.text.trim();
                           final ymd =
                               '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
-                          final punchAt = '${ymd}T$time:00+05:30';
+                          final punchAt = '${ymd}T$currentTime:00+05:30';
                           if (bloc != null) {
                             if (existing == null) {
                               bloc.add(AdminAttendancePunchAdded(
-                                employeeId: employeeId!,
+                                employeeId: targetEmployeeId!,
                                 punchAt: punchAt,
                                 punchType: type,
                                 terminalId: terminal,
@@ -1206,6 +1445,7 @@ Future<void> showAdminPunchDialog(
                                 punchAt: punchAt,
                                 punchType: type,
                                 terminalId: terminal,
+                                reason: reason,
                               ));
                             }
                             if (ctx.mounted) {
@@ -1214,7 +1454,7 @@ Future<void> showAdminPunchDialog(
                           } else if (ref != null) {
                             if (existing == null) {
                               await ref.read(attendanceRepositoryProvider).adminAddPunch(
-                                    employeeId: employeeId!,
+                                    employeeId: targetEmployeeId!,
                                     punchAt: punchAt,
                                     punchType: type,
                                     terminalId: terminal,
@@ -1225,6 +1465,7 @@ Future<void> showAdminPunchDialog(
                                     punchAt: punchAt,
                                     punchType: type,
                                     terminalId: terminal,
+                                    reason: reason,
                                   );
                             }
                             if (ctx.mounted) {

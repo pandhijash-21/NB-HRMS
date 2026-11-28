@@ -20,6 +20,18 @@ final _historyStatusFilterProvider =
   _HistoryStatusFilter.new,
 );
 
+class _HistoryCategoryFilter extends Notifier<String> {
+  @override
+  String build() => 'ALL';
+
+  void set(String category) => state = category;
+}
+
+final _historyCategoryFilterProvider =
+    NotifierProvider.autoDispose<_HistoryCategoryFilter, String>(
+  _HistoryCategoryFilter.new,
+);
+
 final _approvalHistoryProvider =
     FutureProvider.autoDispose<LeaveApplicationsPage>((ref) async {
   final status = ref.watch(_historyStatusFilterProvider);
@@ -37,6 +49,7 @@ class LeaveApprovalsHistoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(_historyStatusFilterProvider);
+    final category = ref.watch(_historyCategoryFilterProvider);
     final appsAsync = ref.watch(_approvalHistoryProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -47,7 +60,7 @@ class LeaveApprovalsHistoryScreen extends ConsumerWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'Leave Approval History',
+          'Approval History',
           style: TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 20,
@@ -112,6 +125,39 @@ class LeaveApprovalsHistoryScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: category,
+                      dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF212F3D),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      icon: const Icon(Icons.arrow_drop_down_rounded, color: Color(0xFFC5A059)),
+                      items: const [
+                        DropdownMenuItem(value: 'ALL', child: Text('All Categories')),
+                        DropdownMenuItem(value: 'LEAVE', child: Text('Leaves Only')),
+                        DropdownMenuItem(value: 'WFH', child: Text('Work From Home (WFH)')),
+                      ],
+                      onChanged: (v) {
+                        if (v == null) return;
+                        ref.read(_historyCategoryFilterProvider.notifier).set(v);
+                      },
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -121,7 +167,13 @@ class LeaveApprovalsHistoryScreen extends ConsumerWidget {
               emptyMessage: 'No records in this history.',
               onRetry: () => ref.invalidate(_approvalHistoryProvider),
               builder: (page) {
-                if (page.items.isEmpty) {
+                final filtered = page.items.where((a) {
+                  if (category == 'LEAVE') return !a.isWfh;
+                  if (category == 'WFH') return a.isWfh;
+                  return true;
+                }).toList();
+
+                if (filtered.isEmpty) {
                   return Center(
                     child: Text(
                       'No records for this filter.',
@@ -131,10 +183,10 @@ class LeaveApprovalsHistoryScreen extends ConsumerWidget {
                 }
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                  itemCount: page.items.length,
+                  itemCount: filtered.length,
                   itemBuilder: (ctx, i) => LeaveApplicationCard(
-                    application: page.items[i],
-                    subtitle: page.items[i].employee?.fullName,
+                    application: filtered[i],
+                    subtitle: filtered[i].employee?.fullName,
                   ),
                 );
               },

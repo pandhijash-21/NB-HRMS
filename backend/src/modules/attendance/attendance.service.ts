@@ -1448,7 +1448,7 @@ export const attendanceService = {
     };
   },
 
-  async updateAdminPunch(params: { punchId: string; punchAt: string; punchType?: string | null; terminalId?: string | null }) {
+  async updateAdminPunch(params: { punchId: string; punchAt: string; punchType?: string | null; terminalId?: string | null; reason?: string | null }) {
     const dt = new Date(params.punchAt);
     if (!Number.isFinite(dt.getTime())) throw new Error('Invalid punchAt datetime');
 
@@ -1458,8 +1458,9 @@ export const attendanceService = {
         punchAt: dt,
         punchType: params.punchType ?? undefined,
         terminalId: params.terminalId ?? undefined,
+        ...(params.reason !== undefined ? { reason: params.reason ?? null } : {}),
       },
-      select: { id: true, employeeId: true, punchAt: true, terminalId: true, punchType: true, source: true, latitude: true, longitude: true, locationId: true, location: true, deviceInfo: true },
+      select: { id: true, employeeId: true, punchAt: true, terminalId: true, punchType: true, source: true, latitude: true, longitude: true, locationId: true, location: true, deviceInfo: true, reason: true },
     });
 
     return {

@@ -348,6 +348,7 @@ class AttendanceRepository {
     required String punchAt,
     String? punchType,
     String? terminalId,
+    String? reason,
   }) async {
     await _dio.patchEnvelope<void>(
       'attendance/admin/punch/$punchId',
@@ -355,6 +356,7 @@ class AttendanceRepository {
         'punchAt': punchAt,
         if (punchType != null) 'punchType': punchType,
         if (terminalId != null) 'terminalId': terminalId,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
       },
       parse: (raw) {},
     );

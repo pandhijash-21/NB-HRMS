@@ -383,6 +383,13 @@ class AdminAttendanceEmployeeRow {
     return sorted.first.punchAt;
   }
 
+  AttendancePunch? get firstPunch {
+    if (punches.isEmpty) return null;
+    final sorted = [...punches]
+      ..sort((a, b) => a.punchAt.compareTo(b.punchAt));
+    return sorted.first;
+  }
+
   String? get lastOut {
     if (punches.isEmpty) return null;
     final sorted = [...punches]
@@ -404,6 +411,19 @@ class AdminAttendanceEmployeeRow {
         afterIn.where((p) => p.source == 'MOBILE_APP').toList();
     if (mobileAfter.isNotEmpty) return mobileAfter.last.punchAt;
     return afterIn.last.punchAt;
+  }
+
+  AttendancePunch? get lastPunch {
+    if (punches.isEmpty) return null;
+    final sorted = [...punches]
+      ..sort((a, b) => a.punchAt.compareTo(b.punchAt));
+    final outTime = lastOut;
+    if (outTime != null) {
+      try {
+        return sorted.lastWhere((p) => p.punchAt == outTime);
+      } catch (_) {}
+    }
+    return sorted.length > 1 ? sorted.last : null;
   }
 
   factory AdminAttendanceEmployeeRow.fromJson(Map<String, dynamic> json) {
@@ -442,6 +462,23 @@ class AdminAttendanceHistoryDay {
   final bool? meetsPunchOut;
   final String? dayStatus;
   final Map<String, dynamic>? wfhDetails;
+
+  AttendancePunch? get firstPunch {
+    if (punches.isEmpty) return null;
+    final sorted = [...punches]..sort((a, b) => a.punchAt.compareTo(b.punchAt));
+    return sorted.first;
+  }
+
+  AttendancePunch? get lastPunch {
+    if (punches.isEmpty) return null;
+    final sorted = [...punches]..sort((a, b) => a.punchAt.compareTo(b.punchAt));
+    if (lastOut != null) {
+      try {
+        return sorted.lastWhere((p) => p.punchAt == lastOut);
+      } catch (_) {}
+    }
+    return sorted.length > 1 ? sorted.last : null;
+  }
 
   bool get isWfh =>
       (dayStatus ?? '').toUpperCase() == 'WFH' ||

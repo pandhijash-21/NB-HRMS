@@ -281,6 +281,10 @@ class LeaveApplication {
   final LeaveEmployeeInfo? employee;
   final List<LeaveApprovalStep> approvalSteps;
 
+  bool get isWfh =>
+      (leaveType?.code ?? '').toUpperCase() == 'WFH' ||
+      (leaveType?.name ?? '').toLowerCase().contains('work from home');
+
   factory LeaveApplication.fromJson(Map<String, dynamic> json) {
     final lt = _asMap(json['leaveType']);
     final emp = _asMap(json['employee']);

@@ -57,15 +57,17 @@ class AdminAttendancePunchUpdated extends AdminAttendanceEvent {
     required this.punchAt,
     this.punchType,
     this.terminalId,
+    this.reason,
   });
 
   final String punchId;
   final String punchAt;
   final String? punchType;
   final String? terminalId;
+  final String? reason;
 
   @override
-  List<Object?> get props => [punchId, punchAt, punchType, terminalId];
+  List<Object?> get props => [punchId, punchAt, punchType, terminalId, reason];
 }
 
 class AdminAttendancePolicyUpdated extends AdminAttendanceEvent {
@@ -228,6 +230,7 @@ class AdminAttendanceBloc
         punchAt: event.punchAt,
         punchType: event.punchType,
         terminalId: event.terminalId,
+        reason: event.reason,
       );
       emit(state.copyWith(
         isActing: false,

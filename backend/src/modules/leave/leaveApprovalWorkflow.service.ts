@@ -45,11 +45,11 @@ async function isAdminAuthority(userId: string): Promise<boolean> {
   });
   if (!user) return false;
   const role = String(user.role?.name ?? '').toUpperCase();
-  if (role === 'ADMIN') return true;
+  if (['ADMIN', 'HR', 'HR_MANAGER', 'SUPER_ADMIN'].includes(role)) return true;
   const designation = String(user.employee?.generalInfo?.designation ?? '')
     .trim()
     .toUpperCase();
-  return designation === 'ADMIN';
+  return ['ADMIN', 'HR', 'HR_MANAGER', 'HR MANAGER', 'DIRECTOR'].includes(designation);
 }
 
 async function resolveApprovers(employeeId: number) {
@@ -202,9 +202,20 @@ export const leaveApprovalWorkflowService = {
     }
 
     if (steps.length === 0) {
-      throw new Error(
-        'No reporting manager configured for this employee. Please set at least one reporting layer before applying for leave.',
-      );
+      // Fallback to active Admin/HR user so applications can always be reviewed
+      const fallbackAdmin = await prisma.user.findFirst({
+        where: {
+          role: { name: { in: ['ADMIN', 'HR', 'HR_MANAGER'] } },
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      steps.push({
+        stepNumber: 1,
+        approverRole: 'THIRD_REPORTING',
+        approverUserId: fallbackAdmin ? fallbackAdmin.id : null,
+        windowExpiresAt: windowFor(firstHours),
+      });
     }
 
     await prisma.leaveApprovalStep.createMany({
@@ -266,7 +277,7 @@ export const leaveApprovalWorkflowService = {
     allowAdminOverride?: boolean;
   }) {
     const { applicationId, approverUserId, action, remarks, actorId, allowAdminOverride } = params;
-    const actorIsAdminFinal = await isAdminAuthority(approverUserId);
+    const actorIsAdminFinal = (await isAdminAuthority(approverUserId)) || Boolean(allowAdminOverride);
 
     return prisma.$transaction(async (tx) => {
       const app = await tx.leaveApplication.findUnique({
@@ -281,19 +292,72 @@ export const leaveApprovalWorkflowService = {
       const steps = app.approvalSteps;
       const finalTier = steps.length ? Math.max(...steps.map((s) => s.stepNumber)) : 0;
       const pendingSteps = steps.filter((s) => isPendingStep(s));
-      if (pendingSteps.length === 0) throw new Error('No pending approval steps');
+
+      if (pendingSteps.length === 0) {
+        if (!actorIsAdminFinal) {
+          throw new Error('No pending approval steps');
+        }
+
+        // Admin override directly approves or rejects even if steps are empty or already finalized
+        const finalStatus = action === 'REJECT' ? 'REJECTED' : 'APPROVED';
+        await tx.leaveApprovalStep.create({
+          data: {
+            applicationId: app.id,
+            stepNumber: (finalTier || 0) + 1,
+            approverRole: 'THIRD_REPORTING',
+            approverUserId,
+            action: action === 'REJECT' ? 'REJECTED' : 'APPROVED',
+            remarks: remarks || (action === 'REJECT' ? 'Rejected by Admin' : 'Directly approved by Admin'),
+            actionAt: new Date(),
+          },
+        });
+
+        await tx.leaveApplication.update({
+          where: { id: applicationId },
+          data: { status: finalStatus },
+        });
+
+        if (action === 'REJECT') {
+          if (!skipBalance) {
+            const year = app.fromDate.getUTCFullYear();
+            await leaveBalanceService.revertPending({
+              employeeId: app.employeeId,
+              leaveTypeId: app.leaveTypeId,
+              year,
+              days: app.totalDays,
+              actorId,
+              revertAction: 'REJECT_REVERT',
+              context: `LeaveApplication:${applicationId}`,
+            });
+          }
+        } else {
+          if (!skipBalance) {
+            const year = app.fromDate.getUTCFullYear();
+            await leaveBalanceService.approve({
+              employeeId: app.employeeId,
+              leaveTypeId: app.leaveTypeId,
+              year,
+              days: app.totalDays,
+              actorId,
+              context: `LeaveApplication:${applicationId}`,
+            });
+          }
+        }
+
+        return { status: finalStatus };
+      }
 
       const minTier = Math.min(...pendingSteps.map((s) => s.stepNumber));
       const tierPending = pendingSteps.filter((s) => s.stepNumber === minTier);
 
       const myStep =
         tierPending.find((s) => s.approverUserId === approverUserId) ??
-        (allowAdminOverride ? tierPending[0] : undefined);
+        (actorIsAdminFinal ? tierPending[0] : undefined);
       if (!myStep) {
         throw new Error('Not authorized for current approval tier');
       }
 
-      // Last reporting layer is final. Admin role/designation is also final authority.
+      // Last reporting layer is final. Admin role/designation/override is also final authority.
       const treatAsFinal = minTier >= finalTier || actorIsAdminFinal;
 
       const prismaAction =

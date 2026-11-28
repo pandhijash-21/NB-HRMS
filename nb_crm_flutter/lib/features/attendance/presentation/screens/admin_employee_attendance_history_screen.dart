@@ -287,13 +287,58 @@ class _HistoryDayCard extends StatelessWidget {
               color: isDark ? Colors.white : const Color(0xFF212F3D),
             ),
           ),
-          subtitle: Text(
-            'In ${day.firstIn != null ? '${formatIsoTime(day.firstIn)} IST' : '—'}  ·  '
-            'Out ${day.lastOut != null ? '${formatIsoTime(day.lastOut)} IST' : '—'}',
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? Colors.white54 : const Color(0xFF607D8B),
-            ),
+          subtitle: Row(
+            children: [
+              InkWell(
+                onTap: day.firstPunch != null ? () => onEdit(day.firstPunch!) : onAdd,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'In ${day.firstIn != null ? '${formatIsoTime(day.firstIn)} IST' : '—'}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+                        ),
+                      ),
+                      if (day.firstPunch != null) ...[
+                        const SizedBox(width: 3),
+                        Icon(Icons.edit_outlined, size: 12, color: isDark ? const Color(0xFFC5A059) : const Color(0xFF0F766E)),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const Text('  ·  '),
+              InkWell(
+                onTap: day.lastPunch != null ? () => onEdit(day.lastPunch!) : onAdd,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Out ${day.lastOut != null ? '${formatIsoTime(day.lastOut)} IST' : '—'}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+                        ),
+                      ),
+                      if (day.lastPunch != null) ...[
+                        const SizedBox(width: 3),
+                        Icon(Icons.edit_outlined, size: 12, color: isDark ? const Color(0xFFC5A059) : const Color(0xFF0F766E)),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
@@ -417,16 +462,34 @@ class _HistoryDayCard extends StatelessWidget {
                     );
                   }
                 ),
-                trailing: p.source == 'MOBILE_APP' 
-                  ? const IconButton(
-                      icon: Icon(Icons.verified_outlined, size: 18, color: Colors.green),
-                      onPressed: null,
-                      tooltip: 'Geofenced App Punch',
-                    )
-                  : IconButton(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (p.source == 'MOBILE_APP')
+                      const Padding(
+                        padding: EdgeInsets.only(right: 4),
+                        child: Tooltip(
+                          message: 'Geofenced Mobile App Punch',
+                          child: Icon(Icons.verified_outlined, size: 16, color: Colors.green),
+                        ),
+                      )
+                    else if (p.source == 'ESSL' || p.source == 'ETIMEOFFICE')
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Tooltip(
+                          message: 'Biometric Machine Punch (${p.source})',
+                          child: const Icon(Icons.fingerprint_rounded, size: 16, color: Colors.teal),
+                        ),
+                      ),
+                    IconButton(
                       icon: const Icon(Icons.edit_outlined, size: 18),
+                      tooltip: (p.source == 'ESSL' || p.source == 'ETIMEOFFICE')
+                          ? 'Edit Biometric Punch'
+                          : 'Edit Punch',
                       onPressed: () => onEdit(p),
                     ),
+                  ],
+                ),
               );
               },
             ),

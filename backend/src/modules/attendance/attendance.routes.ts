@@ -374,7 +374,7 @@ attendanceRouter.post('/admin/punch', requireAuth, requirePermission('ATTENDANCE
 attendanceRouter.patch('/admin/punch/:punchId', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     if (!requireAttendanceAdmin(req, res)) return;
-    const { punchAt, punchType, terminalId } = req.body;
+    const { punchAt, punchType, terminalId, reason } = req.body;
     if (!punchAt) {
       return res.status(400).json(fail('punchAt is required'));
     }
@@ -383,6 +383,7 @@ attendanceRouter.patch('/admin/punch/:punchId', requireAuth, requirePermission('
       punchAt: String(punchAt),
       punchType: punchType ? String(punchType) : null,
       terminalId: terminalId ? String(terminalId) : null,
+      reason: reason !== undefined ? (reason ? String(reason) : null) : undefined,
     });
     return res.json(ok(data));
   } catch (e: any) {

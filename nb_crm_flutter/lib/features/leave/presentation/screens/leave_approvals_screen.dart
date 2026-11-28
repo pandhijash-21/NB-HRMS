@@ -17,105 +17,249 @@ class LeaveApprovalsScreen extends ConsumerWidget {
     final queue = ref.watch(pendingApprovalsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'Leave Approvals',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 20,
-            color: isDark ? Colors.white : const Color(0xFF212F3D),
-            letterSpacing: -0.5,
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'Approvals Queue',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 20,
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+              letterSpacing: -0.5,
+            ),
           ),
-        ),
-        leading: const AppBackButton(fallbackLocation: '/leave'),
-        actions: [
-          TourTarget(
-            id: TourIds.step('hrms.leave', 5),
-            child: Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: TextButton.icon(
-              onPressed: () => context.go('/approvals/history'),
-              style: TextButton.styleFrom(
-                foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
-                textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+          leading: const AppBackButton(fallbackLocation: '/leave'),
+          actions: [
+            TourTarget(
+              id: TourIds.step('hrms.leave', 5),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: TextButton.icon(
+                  onPressed: () => context.go('/approvals/history'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                  ),
+                  icon: const Icon(Icons.history_rounded, size: 16, color: Color(0xFFC5A059)),
+                  label: const Text('History'),
+                ),
               ),
-              icon: const Icon(Icons.history_rounded, size: 16, color: Color(0xFFC5A059)),
-              label: const Text('History'),
             ),
-          ),
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.5),
-          child: Container(
-            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
-            height: 1.5,
-          ),
-        ),
-      ),
-      body: TweenAnimationBuilder<double>(
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOutCubic,
-        tween: Tween(begin: 0.0, end: 1.0),
-        builder: (context, value, child) {
-          return Transform.translate(
-            offset: Offset(0.0, 30.0 * (1.0 - value)),
-            child: Opacity(
-              opacity: value,
-              child: child,
-            ),
-          );
-        },
-        child: LeaveAsyncBody<List<LeaveApplication>>(
-          value: queue,
-          emptyMessage: 'No pending leave approvals.',
-          onRetry: () => ref.invalidate(pendingApprovalsProvider),
-          builder: (items) => ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            itemCount: items.length,
-            itemBuilder: (ctx, i) {
-              final app = items[i];
-              return LeaveApplicationCard(
-                application: app,
-                subtitle: app.employee?.fullName,
-                trailing: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: () => _act(context, ref, app, approve: false),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: const BorderSide(color: Colors.redAccent, width: 1.2),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(49.5),
+            child: Column(
+              children: [
+                TabBar(
+                  indicatorColor: const Color(0xFFC5A059),
+                  indicatorWeight: 3,
+                  labelColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF212F3D),
+                  unselectedLabelColor: isDark ? Colors.white54 : const Color(0xFF64748B),
+                  labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                  unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  tabs: [
+                    Tab(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.event_note_rounded, size: 16),
+                          const SizedBox(width: 8),
+                          queue.when(
+                            data: (items) {
+                              final leaveCount = items.where((a) => !a.isWfh).length;
+                              return Text(
+                                leaveCount > 0 ? 'Leave Requests ($leaveCount)' : 'Leave Requests',
+                              );
+                            },
+                            loading: () => const Text('Leave Requests'),
+                            error: (_, __) => const Text('Leave Requests'),
+                          ),
+                        ],
                       ),
-                      icon: const Icon(Icons.close_rounded, size: 16),
-                      label: const Text('Reject', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
                     ),
-                    const SizedBox(width: 12),
-                    FilledButton.icon(
-                      onPressed: () => _act(context, ref, app, approve: true),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-                        foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    Tab(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.home_work_rounded, size: 16),
+                          const SizedBox(width: 8),
+                          queue.when(
+                            data: (items) {
+                              final wfhCount = items.where((a) => a.isWfh).length;
+                              return Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    wfhCount > 0 ? 'Work From Home ($wfhCount)' : 'Work From Home',
+                                  ),
+                                  if (wfhCount > 0) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0D9488),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        '$wfhCount',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              );
+                            },
+                            loading: () => const Text('Work From Home'),
+                            error: (_, __) => const Text('Work From Home'),
+                          ),
+                        ],
                       ),
-                      icon: const Icon(Icons.check_rounded, size: 16),
-                      label: const Text('Approve', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
                     ),
                   ],
                 ),
-              );
-            },
+                Container(
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
+                  height: 1.5,
+                ),
+              ],
+            ),
           ),
         ),
+        body: LeaveAsyncBody<List<LeaveApplication>>(
+          value: queue,
+          emptyMessage: 'No pending requests.',
+          onRetry: () => ref.invalidate(pendingApprovalsProvider),
+          builder: (items) {
+            final leaveItems = items.where((a) => !a.isWfh).toList();
+            final wfhItems = items.where((a) => a.isWfh).toList();
+
+            return TabBarView(
+              children: [
+                // ─── Section 1: Leave Requests ──────────────────────────────────
+                _buildSectionList(
+                  context,
+                  ref,
+                  items: leaveItems,
+                  emptyMessage: 'No pending leave requests.',
+                  emptyIcon: Icons.event_available_rounded,
+                  isDark: isDark,
+                ),
+                // ─── Section 2: Work From Home (WFH) Requests ───────────────────
+                _buildSectionList(
+                  context,
+                  ref,
+                  items: wfhItems,
+                  emptyMessage: 'No pending Work From Home (WFH) requests.',
+                  emptyIcon: Icons.home_work_outlined,
+                  isDark: isDark,
+                  isWfhSection: true,
+                ),
+              ],
+            );
+          },
+        ),
       ),
+    );
+  }
+
+  Widget _buildSectionList(
+    BuildContext context,
+    WidgetRef ref, {
+    required List<LeaveApplication> items,
+    required String emptyMessage,
+    required IconData emptyIcon,
+    required bool isDark,
+    bool isWfhSection = false,
+  }) {
+    if (items.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                emptyIcon,
+                size: 56,
+                color: isDark ? Colors.white24 : const Color(0xFFB0BEC5),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                emptyMessage,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      itemCount: items.length,
+      itemBuilder: (ctx, i) {
+        final app = items[i];
+        final employeeDesc = [
+          if (app.employee?.employeeCode != null && app.employee!.employeeCode!.isNotEmpty)
+            'Code: ${app.employee!.employeeCode}'
+          else if (app.employee?.id != null)
+            'ID: ${app.employee!.id}',
+          if (app.employee?.department != null && app.employee!.department!.isNotEmpty)
+            app.employee!.department!,
+          if (app.employee?.designation != null && app.employee!.designation!.isNotEmpty)
+            app.employee!.designation!,
+        ].join(' • ');
+
+        return LeaveApplicationCard(
+          application: app,
+          subtitle: employeeDesc.isNotEmpty ? employeeDesc : null,
+          trailing: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _act(context, ref, app, approve: false),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.redAccent, width: 1.2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                icon: const Icon(Icons.close_rounded, size: 16),
+                label: const Text('Reject', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: () => _act(context, ref, app, approve: true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: isWfhSection
+                      ? const Color(0xFF0D9488)
+                      : (isDark ? const Color(0xFFC5A059) : const Color(0xFF263238)),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                icon: const Icon(Icons.check_rounded, size: 16),
+                label: const Text('Approve', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -127,7 +271,9 @@ class LeaveApprovalsScreen extends ConsumerWidget {
   }) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final remarksController = TextEditingController();
-    
+    final isWfh = app.isWfh;
+    final categoryName = isWfh ? 'Work From Home' : 'Leave';
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -140,7 +286,7 @@ class LeaveApprovalsScreen extends ConsumerWidget {
           ),
         ),
         title: Text(
-          approve ? 'Approve Leave Request' : 'Reject Leave Request',
+          approve ? 'Approve $categoryName Request' : 'Reject $categoryName Request',
           style: TextStyle(
             color: isDark ? Colors.white : const Color(0xFF212F3D),
             fontWeight: FontWeight.w800,
@@ -191,17 +337,19 @@ class LeaveApprovalsScreen extends ConsumerWidget {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             child: Text(
-              approve ? 'Approve' : 'Reject', 
+              approve ? 'Approve' : 'Reject',
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
           ),
         ],
       ),
     );
+
     if (ok != true) {
       remarksController.dispose();
       return;
     }
+
     try {
       final repo = ref.read(leaveRepositoryProvider);
       if (approve) {
@@ -212,12 +360,18 @@ class LeaveApprovalsScreen extends ConsumerWidget {
       invalidateLeaveApprovalData(ref);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(approve ? 'Request approved successfully.' : 'Request rejected.')),
+          SnackBar(
+            content: Text(
+              approve ? '$categoryName request approved successfully.' : '$categoryName request rejected.',
+            ),
+          ),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        );
       }
     } finally {
       remarksController.dispose();

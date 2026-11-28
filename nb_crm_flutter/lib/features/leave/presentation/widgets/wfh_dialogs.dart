@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/form_draft_service.dart';
 import '../../../../core/widgets/form_draft_banner.dart';
@@ -233,7 +234,23 @@ class _WfhSectionCardState extends State<WfhSectionCard> {
                       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                     ),
                   ),
-                  if (_isAdmin)
+                  if (_isAdmin) ...[
+                    OutlinedButton.icon(
+                      onPressed: () => context.go('/approvals'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: accentColor,
+                        side: const BorderSide(color: accentColor, width: 1.2),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      icon: const Icon(Icons.rule_folder_rounded, size: 16),
+                      label: const Text(
+                        'WFH Approvals Queue',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                    ),
                     OutlinedButton.icon(
                       onPressed: () => showAdminWfhConfigDialog(
                         context,
@@ -242,8 +259,11 @@ class _WfhSectionCardState extends State<WfhSectionCard> {
                         },
                       ),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: accentColor,
-                        side: const BorderSide(color: accentColor, width: 1.2),
+                        foregroundColor: isDark ? Colors.white70 : const Color(0xFF607D8B),
+                        side: BorderSide(
+                          color: isDark ? Colors.white24 : Colors.grey.shade300,
+                          width: 1.2,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -255,6 +275,7 @@ class _WfhSectionCardState extends State<WfhSectionCard> {
                         style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                       ),
                     ),
+                  ],
                 ],
               ),
             ],

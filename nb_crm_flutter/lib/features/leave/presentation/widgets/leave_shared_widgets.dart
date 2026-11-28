@@ -194,9 +194,9 @@ class LeaveApplicationCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
               ],
-              if (subtitle != null) ...[
+              if (subtitle != null && subtitle != employeeName) ...[
                 Text(
-                  subtitle!, 
+                  subtitle!,
                   style: TextStyle(
                     color: isDark ? Colors.white60 : const Color(0xFF607D8B).withValues(alpha: 0.8),
                     fontSize: 13,

@@ -1325,7 +1325,136 @@ export const supportService = {
       roomName: session.roomName,
     };
   },
+
+  // Remote Desktop Control Command Queue for Windows Agent
+  pushRemoteCommand(ticketId: string, cmd: { type: string; x?: number; y?: number; button?: string; key?: string; text?: string }) {
+    if (!remoteCommandQueues.has(ticketId)) {
+      remoteCommandQueues.set(ticketId, []);
+    }
+    const q = remoteCommandQueues.get(ticketId)!;
+    q.push({
+      id: Math.random().toString(36).substring(2, 9),
+      ...cmd,
+      timestamp: Date.now(),
+    });
+    // keep at most 50 recent commands
+    if (q.length > 50) q.splice(0, q.length - 50);
+    return { ok: true };
+  },
+
+  popRemoteCommands(ticketId: string) {
+    agentStatusMap.set(ticketId, { lastHeartbeat: Date.now(), online: true });
+    const q = remoteCommandQueues.get(ticketId) || [];
+    remoteCommandQueues.set(ticketId, []);
+    return q;
+  },
+
+  getAgentStatus(ticketId: string) {
+    const status = agentStatusMap.get(ticketId);
+    if (!status) return { online: false, lastSeen: 0 };
+    const online = Date.now() - status.lastHeartbeat < 15000;
+    return { online, lastSeen: status.lastHeartbeat };
+  },
+
+  generateAgentScript(ticketId: string, serverUrl: string): string {
+    return `# NB-HRMS Remote Desktop Control Agent
+# Ticket: ${ticketId}
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+$code = @"
+using System;
+using System.Runtime.InteropServices;
+namespace NBAgent {
+    public class Native {
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint cButtons, uint dwExtraInfo);
+    }
+}
+"@
+Add-Type -TypeDefinition $code -Language CSharp -ErrorAction SilentlyContinue
+
+Clear-Host
+Write-Host "==========================================================" -ForegroundColor Cyan
+Write-Host "       NB-HRMS IT Support Remote Agent (Option 1)        " -ForegroundColor Yellow
+Write-Host "       Ticket ID: ${ticketId}" -ForegroundColor White
+Write-Host "==========================================================" -ForegroundColor Cyan
+Write-Host "[*] Windows OS Input Bridge Loaded." -ForegroundColor Green
+Write-Host "[*] Connected to Server: ${serverUrl}" -ForegroundColor Green
+Write-Host "[+] ACTIVE: IT Support now has real mouse and keyboard control." -ForegroundColor Cyan
+Write-Host "[!] Press Ctrl+C in this console window to disconnect anytime." -ForegroundColor Gray
+Write-Host ""
+
+$screenWidth = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
+$screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
+
+while ($true) {
+    try {
+        $url = "${serverUrl}/api/v1/support/${ticketId}/remote/commands"
+        $resp = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 4
+        if ($resp -and $resp.data) {
+            foreach ($cmd in $resp.data) {
+                if ($cmd.type -eq "mouse_move" -and $cmd.x -ne $null -and $cmd.y -ne $null) {
+                    $x = [int]($cmd.x * $screenWidth)
+                    $y = [int]($cmd.y * $screenHeight)
+                    [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point($x, $y)
+                }
+                elseif ($cmd.type -eq "mouse_click") {
+                    if ($cmd.x -ne $null -and $cmd.y -ne $null) {
+                        $x = [int]($cmd.x * $screenWidth)
+                        $y = [int]($cmd.y * $screenHeight)
+                        [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point($x, $y)
+                    }
+                    if ($cmd.button -eq "right") {
+                        [NBAgent.Native]::mouse_event(0x08, 0, 0, 0, 0)
+                        Start-Sleep -Milliseconds 15
+                        [NBAgent.Native]::mouse_event(0x10, 0, 0, 0, 0)
+                    } else {
+                        [NBAgent.Native]::mouse_event(0x02, 0, 0, 0, 0)
+                        Start-Sleep -Milliseconds 15
+                        [NBAgent.Native]::mouse_event(0x04, 0, 0, 0, 0)
+                    }
+                }
+                elseif ($cmd.type -eq "key" -and $cmd.key) {
+                    [System.Windows.Forms.SendKeys]::SendWait($cmd.key)
+                }
+                elseif ($cmd.type -eq "special_key") {
+                    if ($cmd.key -eq "Win+R") {
+                        [System.Windows.Forms.SendKeys]::SendWait("^{ESC}r")
+                    } elseif ($cmd.key -eq "TaskMgr") {
+                        Start-Process "taskmgr.exe"
+                    } elseif ($cmd.key -eq "Win+X") {
+                        [System.Windows.Forms.SendKeys]::SendWait("^{ESC}x")
+                    } elseif ($cmd.key -eq "Alt+Tab") {
+                        [System.Windows.Forms.SendKeys]::SendWait("%{TAB}")
+                    }
+                }
+                elseif ($cmd.type -eq "clipboard" -and $cmd.text) {
+                    [System.Windows.Forms.Clipboard]::SetText($cmd.text)
+                }
+            }
+        }
+    } catch {}
+    Start-Sleep -Milliseconds 50
+}
+`;
+  },
 };
+
+interface RemoteControlCommand {
+  id: string;
+  type: string;
+  x?: number;
+  y?: number;
+  button?: string;
+  key?: string;
+  text?: string;
+  timestamp: number;
+}
+
+const remoteCommandQueues = new Map<string, RemoteControlCommand[]>();
+const agentStatusMap = new Map<string, { lastHeartbeat: number; online: boolean }>();
 
 export type SupportTicketWithRelations = Prisma.SupportTicketGetPayload<{
   include: typeof ticketInclude;

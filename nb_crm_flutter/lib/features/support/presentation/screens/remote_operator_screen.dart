@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../support_providers.dart';
 
@@ -34,6 +36,7 @@ class RemoteOperatorScreen extends ConsumerStatefulWidget {
 
 class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
   final FocusNode _canvasFocus = FocusNode();
+  final GlobalKey _canvasKey = GlobalKey();
 
   Room? _room;
   EventsListener<RoomEvent>? _listener;
@@ -47,17 +50,216 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
   bool _audioMuted = false;
   bool _ending = false;
 
+  bool _agentOnline = false;
+  Timer? _agentPollTimer;
+  DateTime? _lastMouseMoveSent;
+
   @override
   void initState() {
     super.initState();
     _initLiveKit();
+    _checkAgentStatus();
+    _agentPollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      _checkAgentStatus();
+    });
   }
 
   @override
   void dispose() {
+    _agentPollTimer?.cancel();
     _canvasFocus.dispose();
     _cleanupLiveKit();
     super.dispose();
+  }
+
+  Future<void> _checkAgentStatus() async {
+    try {
+      final res = await ref
+          .read(supportRepositoryProvider)
+          .getAgentStatus(widget.ticketId);
+      final isOnline = res['online'] == true;
+      if (mounted && isOnline != _agentOnline) {
+        setState(() => _agentOnline = isOnline);
+      }
+    } catch (_) {}
+  }
+
+  void _dispatchCommand(Map<String, dynamic> payload) {
+    // 1. LiveKit DataChannel
+    final room = _room;
+    if (room != null && _connected) {
+      try {
+        final bytes = Uint8List.fromList(jsonEncode(payload).codeUnits);
+        room.localParticipant?.publishData(bytes);
+      } catch (_) {}
+    }
+    // 2. Windows Native Support Agent backend queue
+    ref.read(supportRepositoryProvider).sendRemoteControlCommand(
+          widget.ticketId,
+          payload,
+        );
+  }
+
+  void _handlePointerMove(PointerEvent event) {
+    final now = DateTime.now();
+    if (_lastMouseMoveSent != null &&
+        now.difference(_lastMouseMoveSent!).inMilliseconds < 40) {
+      return;
+    }
+    _lastMouseMoveSent = now;
+    final box = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || box.size.width <= 0 || box.size.height <= 0) return;
+    final local = box.globalToLocal(event.position);
+    final nx = (local.dx / box.size.width).clamp(0.0, 1.0);
+    final ny = (local.dy / box.size.height).clamp(0.0, 1.0);
+    _dispatchCommand({
+      'type': 'mouse_move',
+      'x': nx,
+      'y': ny,
+    });
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    _canvasFocus.requestFocus();
+    final box = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || box.size.width <= 0 || box.size.height <= 0) return;
+    final local = box.globalToLocal(event.position);
+    final nx = (local.dx / box.size.width).clamp(0.0, 1.0);
+    final ny = (local.dy / box.size.height).clamp(0.0, 1.0);
+    final button = event.buttons == 2 ? 'right' : 'left';
+    _dispatchCommand({
+      'type': 'mouse_click',
+      'x': nx,
+      'y': ny,
+      'button': button,
+    });
+  }
+
+  void _handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return;
+    final keyLabel = event.logicalKey.keyLabel;
+    String? sendKey;
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      sendKey = '{ENTER}';
+    } else if (event.logicalKey == LogicalKeyboardKey.backspace) {
+      sendKey = '{BACKSPACE}';
+    } else if (event.logicalKey == LogicalKeyboardKey.delete) {
+      sendKey = '{DELETE}';
+    } else if (event.logicalKey == LogicalKeyboardKey.tab) {
+      sendKey = '{TAB}';
+    } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+      sendKey = '{ESC}';
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      sendKey = '{UP}';
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      sendKey = '{DOWN}';
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      sendKey = '{LEFT}';
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      sendKey = '{RIGHT}';
+    } else if (event.character != null && event.character!.isNotEmpty) {
+      sendKey = event.character!;
+    } else if (keyLabel.length == 1) {
+      sendKey = keyLabel;
+    }
+
+    if (sendKey != null) {
+      _dispatchCommand({'type': 'key', 'key': sendKey});
+    }
+  }
+
+  void _showAgentInstructionsDialog() {
+    final agentBatUrl =
+        'https://crm.nbsince1946.com/api/v1/support/${widget.ticketId}/remote/agent.bat';
+    final powershellCmd =
+        'powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \$s=(Invoke-WebRequest -Uri \'https://crm.nbsince1946.com/api/v1/support/${widget.ticketId}/remote/agent.ps1\' -UseBasicParsing).Content; Invoke-Expression \$s"';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              _agentOnline ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+              color: _agentOnline ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+            ),
+            const SizedBox(width: 10),
+            Text(_agentOnline ? 'Windows Agent Active' : 'Launch Windows Agent (Option 1)'),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _agentOnline
+                    ? 'The Windows Support Agent is active on the employee host machine. You have full mouse, keyboard, and UAC administrative control.'
+                    : 'To control the employee\'s mouse and keyboard (or bypass UAC admin prompts), the employee must run the lightweight Windows Support Agent:',
+                style: const TextStyle(fontSize: 13.5, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Option A: Download & Run .bat',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final uri = Uri.parse(agentBatUrl);
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                },
+                icon: const Icon(Icons.download_rounded, size: 16),
+                label: const Text('Download Agent (.bat)'),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Option B: 1-Click PowerShell Launch Command',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: SelectableText(
+                  powershellCmd,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: powershellCmd));
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('PowerShell command copied to clipboard!'),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.copy, size: 16),
+                label: const Text('Copy Command to Clipboard'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _cleanupLiveKit() async {
@@ -203,11 +405,10 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
   }
 
   void _sendSpecialKey(String keyCombo) {
-    final room = _room;
-    if (room != null && _connected) {
-      final bytes = Uint8List.fromList('KEY:$keyCombo'.codeUnits);
-      room.localParticipant?.publishData(bytes);
-    }
+    _dispatchCommand({
+      'type': 'special_key',
+      'key': keyCombo,
+    });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Dispatched $keyCombo to remote PC'),
@@ -225,11 +426,10 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
       );
       return;
     }
-    final room = _room;
-    if (room != null && _connected) {
-      final bytes = Uint8List.fromList('CLIP:$text'.codeUnits);
-      room.localParticipant?.publishData(bytes);
-    }
+    _dispatchCommand({
+      'type': 'clipboard',
+      'text': text,
+    });
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -369,6 +569,36 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
           ],
         ),
         actions: [
+          // Option 1 Windows Agent quick launcher button
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _agentOnline
+                    ? const Color(0xFF10B981)
+                    : const Color(0xFFF59E0B),
+                side: BorderSide(
+                  color: _agentOnline
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFF59E0B),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+              onPressed: _showAgentInstructionsDialog,
+              icon: Icon(
+                _agentOnline
+                    ? Icons.shield_rounded
+                    : Icons.terminal_rounded,
+                size: 16,
+              ),
+              label: Text(
+                _agentOnline ? 'Agent Active' : 'Launch Agent',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+
           // Screen Share toggle (allows employee or operator to share screen)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -595,20 +825,16 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
               focusNode: _canvasFocus,
               autofocus: true,
               onKeyEvent: (node, event) {
-                if (event is KeyDownEvent) {
-                  _sendSpecialKey(event.logicalKey.keyLabel);
-                }
+                _handleKeyEvent(event);
                 return KeyEventResult.handled;
               },
               child: Listener(
                 behavior: HitTestBehavior.opaque,
-                onPointerHover: (event) {
-                  // Forward normalized mouse coordinates via WebRTC data channel
-                },
-                onPointerDown: (event) {
-                  _canvasFocus.requestFocus();
-                },
+                onPointerHover: _handlePointerMove,
+                onPointerMove: _handlePointerMove,
+                onPointerDown: _handlePointerDown,
                 child: Stack(
+                  key: _canvasKey,
                   fit: StackFit.expand,
                   children: [
                     // Canvas / Live Video Player
@@ -710,36 +936,50 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
                     Positioned(
                       top: 12,
                       left: 12,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.75),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white24),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.shield_rounded,
-                              size: 14,
-                              color: Color(0xFF10B981),
+                      child: InkWell(
+                        onTap: _showAgentInstructionsDialog,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.8),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _agentOnline
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFFF59E0B),
                             ),
-                            const SizedBox(width: 5),
-                            Text(
-                              _connected
-                                  ? 'DIRECT WEBRTC / UAC CONTROL ACTIVE'
-                                  : 'CONNECTING...',
-                              style: const TextStyle(
-                                color: Color(0xFF10B981),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _agentOnline
+                                    ? Icons.shield_rounded
+                                    : Icons.warning_amber_rounded,
+                                size: 14,
+                                color: _agentOnline
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFFF59E0B),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 5),
+                              Text(
+                                _agentOnline
+                                    ? 'WINDOWS AGENT ONLINE (FULL CONTROL)'
+                                    : 'AWAITING AGENT (CLICK FOR SCRIPT)',
+                                style: TextStyle(
+                                  color: _agentOnline
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFFF59E0B),
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

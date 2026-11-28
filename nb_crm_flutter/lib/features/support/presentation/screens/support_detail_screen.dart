@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -58,8 +60,7 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
     );
     final myEmployeeId = auth.user?.employeeId;
     final async = ref.watch(supportTicketDetailProvider(widget.ticketId));
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isDesktopSplit = screenWidth >= 1024;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
@@ -72,21 +73,24 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
             onPressed: () => _refresh(ref, widget.ticketId),
           ),
         ],
-        bottom: isDesktopSplit
-            ? null
-            : TabBar(
-                controller: _tabCtrl,
-                tabs: const [
-                  Tab(
-                    icon: Icon(Icons.info_outline_rounded, size: 20),
-                    text: 'Details & History',
-                  ),
-                  Tab(
-                    icon: Icon(Icons.forum_outlined, size: 20),
-                    text: 'Live Chat',
-                  ),
-                ],
-              ),
+        bottom: TabBar(
+          controller: _tabCtrl,
+          indicatorWeight: 3,
+          indicatorColor: AppColors.primaryBlue,
+          labelColor: AppColors.primaryBlue,
+          unselectedLabelColor: isDark ? Colors.white60 : Colors.black54,
+          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+          tabs: const [
+            Tab(
+              icon: Icon(Icons.assignment_outlined, size: 20),
+              text: 'Query & Actions',
+            ),
+            Tab(
+              icon: Icon(Icons.forum_outlined, size: 20),
+              text: 'Live Chat',
+            ),
+          ],
+        ),
       ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -95,44 +99,14 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
           final isOwner =
               myEmployeeId != null && myEmployeeId == ticket.employeeId;
 
-          if (isDesktopSplit) {
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  width: (screenWidth * 0.42).clamp(420.0, 540.0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        right: BorderSide(
-                          color: Theme.of(context).dividerColor.withValues(alpha: 0.15),
-                        ),
-                      ),
-                    ),
-                    child: _buildDetailsList(
-                      ticket: ticket,
-                      isIt: isIt,
-                      isOwner: isOwner,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: SupportTicketChatWidget(
-                    ticketId: widget.ticketId,
-                    ticket: ticket,
-                  ),
-                ),
-              ],
-            );
-          }
-
           return TabBarView(
             controller: _tabCtrl,
             children: [
+              // TAB 1: TICKET QUERY DETAILS & ACTIONS (Full Width)
               Align(
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 800),
+                  constraints: const BoxConstraints(maxWidth: 960),
                   child: _buildDetailsList(
                     ticket: ticket,
                     isIt: isIt,
@@ -141,10 +115,16 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
                 ),
               ),
 
-              // TAB 2: LIVE CHAT
-              SupportTicketChatWidget(
-                ticketId: widget.ticketId,
-                ticket: ticket,
+              // TAB 2: LIVE CHAT (Full Width)
+              Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 960),
+                  child: SupportTicketChatWidget(
+                    ticketId: widget.ticketId,
+                    ticket: ticket,
+                  ),
+                ),
               ),
             ],
           );
@@ -158,16 +138,88 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
     required bool isIt,
     required bool isOwner,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       children: [
-        // Waiting Queue Notice (if queued)
+        // 1. Header with Title & Status Chip
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ticket.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white10
+                              : Colors.black.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          ticket.ticketNo,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white70 : Colors.black87,
+                          ),
+                        ),
+                      ),
+                      if (ticket.employeeName != null) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          'by ${ticket.employeeName}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? Colors.white60 : Colors.black54,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            _StatusChip(status: ticket.status),
+          ],
+        ),
+
+        const SizedBox(height: 16),
+
+        // 2. ALL OPTIONS & ACTIONS ON TOP (Prominent card on top of the query page)
+        _buildActionOptionsCard(
+          context: context,
+          ref: ref,
+          ticket: ticket,
+          isIt: isIt,
+          isOwner: isOwner,
+          isDark: isDark,
+        ),
+
+        const SizedBox(height: 16),
+
+        // 3. Waiting Queue Notice (if queued)
         if (ticket.isQueued) ...[
           _WaitingQueueBanner(position: ticket.queuePosition ?? 1),
           const SizedBox(height: 16),
         ],
 
-        // Transfer Pending Notice & Action Card
+        // 4. Transfer Pending Notice & Action Card
         if (ticket.isTransferPending) ...[
           _TransferApprovalCard(
             ticket: ticket,
@@ -178,7 +230,7 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
           const SizedBox(height: 16),
         ],
 
-        // Remote Access Session Banner (if requested or active)
+        // 5. Remote Access Session Banner (if requested or active)
         if (ticket.activeRemoteSession != null) ...[
           _RemoteAccessBanner(
             session: ticket.activeRemoteSession!,
@@ -204,34 +256,8 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
           const SizedBox(height: 16),
         ],
 
-        // Header with Title & Status Chip
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Text(
-                ticket.title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            _StatusChip(status: ticket.status),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          ticket.ticketNo,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-
+        // 6. Requester Profile Details
         if (ticket.employeeName != null) ...[
-          const SizedBox(height: 8),
           Text(
             '${ticket.employeeName}${ticket.employeeCode != null ? ' (${ticket.employeeCode})' : ''}',
             style: const TextStyle(fontWeight: FontWeight.w600),
@@ -246,17 +272,24 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
                 color: AppColors.textSecondary,
               ),
             ),
+          const SizedBox(height: 12),
         ],
 
-        const SizedBox(height: 16),
+        // 7. Problem Description
+        const Text(
+          'Problem Description',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+        ),
+        const SizedBox(height: 6),
         Text(
           ticket.description,
-          style: const TextStyle(fontSize: 14, height: 1.4),
+          style: const TextStyle(fontSize: 14, height: 1.45),
         ),
 
+        // Photo (if attached)
         if (ticket.photoUrl != null && ticket.photoUrl!.isNotEmpty) ...[
           const SizedBox(height: 16),
-          const Text('Photo', style: TextStyle(fontWeight: FontWeight.w700)),
+          const Text('Attached Photo', style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           ZoomablePhoto(
             url: ticket.photoUrl,
@@ -315,25 +348,65 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
           ),
         ],
 
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
         const Text(
-          'Timeline',
+          'Activity Timeline',
           style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
         ),
         const SizedBox(height: 8),
         ...ticket.events.map((e) => _EventTile(event: e)),
-
-        const SizedBox(height: 24),
-
-        // Actions
-        ..._actions(
-          context: context,
-          ref: ref,
-          ticket: ticket,
-          isIt: isIt,
-          isOwner: isOwner,
-        ),
       ],
+    );
+  }
+
+  Widget _buildActionOptionsCard({
+    required BuildContext context,
+    required WidgetRef ref,
+    required SupportTicket ticket,
+    required bool isIt,
+    required bool isOwner,
+    required bool isDark,
+  }) {
+    final actions = _actions(
+      context: context,
+      ref: ref,
+      ticket: ticket,
+      isIt: isIt,
+      isOwner: isOwner,
+    );
+
+    if (actions.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+      ),
+      color: isDark ? const Color(0xFF161E2E) : const Color(0xFFF8FAFC),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.bolt_rounded, size: 20, color: AppColors.primaryBlue),
+                const SizedBox(width: 8),
+                Text(
+                  'Options & Actions',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.3,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...actions,
+          ],
+        ),
+      ),
     );
   }
 
@@ -1172,16 +1245,22 @@ class _RemoteAccessBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final isRequested = session.isRequested;
     final isActive = session.isActive;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final agentBatUrl = 'https://crm.nbsince1946.com/api/v1/support/${session.ticketId}/remote/agent.bat';
+    final powershellCmd =
+        'powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \$s=(Invoke-WebRequest -Uri \'https://crm.nbsince1946.com/api/v1/support/${session.ticketId}/remote/agent.ps1\' -UseBasicParsing).Content; Invoke-Expression \$s"';
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: (isActive ? const Color(0xFF10B981) : const Color(0xFF6366F1))
-            .withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
+        color: (isActive ? const Color(0xFF10B981) : const Color(0xFF2563EB))
+            .withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: (isActive ? const Color(0xFF10B981) : const Color(0xFF6366F1))
+          color: (isActive ? const Color(0xFF10B981) : const Color(0xFF2563EB))
               .withValues(alpha: 0.35),
+          width: 1.2,
         ),
       ),
       child: Column(
@@ -1189,32 +1268,58 @@ class _RemoteAccessBanner extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(
-                Icons.desktop_windows_rounded,
-                color: isActive ? const Color(0xFF10B981) : const Color(0xFF6366F1),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (isActive ? const Color(0xFF10B981) : const Color(0xFF2563EB))
+                      .withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.desktop_windows_rounded,
+                  size: 20,
+                  color: isActive ? const Color(0xFF10B981) : const Color(0xFF2563EB),
+                ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                isActive
-                    ? 'Remote Desktop Session Active'
-                    : 'Remote Access Requested by IT',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  color: isActive
-                      ? const Color(0xFF10B981)
-                      : const Color(0xFF6366F1),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isActive
+                          ? 'Remote Desktop Session Active (Option 1)'
+                          : 'Remote PC Control Requested by IT',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14.5,
+                        color: isActive
+                            ? const Color(0xFF10B981)
+                            : const Color(0xFF2563EB),
+                      ),
+                    ),
+                    Text(
+                      'Room: ${session.roomName}',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: isDark ? Colors.white60 : Colors.black54,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           Text(
             isActive
-                ? 'IT Support is connected with Administrative Privileges (UAC/ADB Prompts Allowed).'
+                ? 'Option 1 Native Windows Agent allows IT Support to control mouse, keyboard, and Windows UAC prompts with administrative privileges.'
                 : 'The IT specialist requested remote control of your computer to configure services / permissions.',
-            style: const TextStyle(fontSize: 12.5),
+            style: const TextStyle(fontSize: 13, height: 1.35),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
+
+          // Actions
           if (isOwner && isRequested) ...[
             Row(
               children: [
@@ -1224,7 +1329,7 @@ class _RemoteAccessBanner extends StatelessWidget {
                   ),
                   onPressed: onAccept,
                   icon: const Icon(Icons.check, size: 16),
-                  label: const Text('Grant Full Control'),
+                  label: const Text('Accept & Allow Remote Control'),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
@@ -1234,14 +1339,42 @@ class _RemoteAccessBanner extends StatelessWidget {
                 ),
               ],
             ),
-          ] else if (isIt && isActive) ...[
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF10B981),
-              ),
-              onPressed: onOpenConsole,
-              icon: const Icon(Icons.open_in_new_rounded, size: 16),
-              label: const Text('Open Remote Operator Console'),
+          ] else ...[
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                if (isIt)
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                    ),
+                    onPressed: onOpenConsole,
+                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                    label: const Text('Open Remote Operator Console'),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final uri = Uri.parse(agentBatUrl);
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  },
+                  icon: const Icon(Icons.download_rounded, size: 16),
+                  label: const Text('Download Windows Support Agent (.bat)'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: powershellCmd));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('PowerShell launch command copied to clipboard! Paste into PowerShell to run agent.'),
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.terminal_rounded, size: 16),
+                  label: const Text('Copy 1-Click Launch Command'),
+                ),
+              ],
             ),
           ],
         ],

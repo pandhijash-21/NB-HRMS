@@ -60,6 +60,48 @@ export async function isSupportIt(req: Request): Promise<boolean> {
   return caps.isIt;
 }
 
+// Windows Native Support Agent endpoints (Option 1 - unauthenticated helper script & command polling)
+supportRouter.get('/:id/remote/agent.bat', (req: Request, res: Response) => {
+  const ticketId = p(req.params.id);
+  const host = req.get('host') || 'crm.nbsince1946.com';
+  const proto = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+  const serverUrl = `${proto}://${host}`;
+  const bat = `@echo off
+title NB-HRMS Remote Support Agent - ${ticketId}
+echo ==========================================================
+echo Starting NB-HRMS Quick Support Agent for Ticket: ${ticketId}
+echo ==========================================================
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $script = (Invoke-WebRequest -Uri '${serverUrl}/api/v1/support/${ticketId}/remote/agent.ps1' -UseBasicParsing).Content; Invoke-Expression $script"
+pause
+`;
+  res.setHeader('Content-Type', 'application/x-bat');
+  res.setHeader('Content-Disposition', `attachment; filename="launch-support-agent-${ticketId}.bat"`);
+  return res.send(bat);
+});
+
+supportRouter.get('/:id/remote/agent.ps1', (req: Request, res: Response) => {
+  const ticketId = p(req.params.id);
+  const host = req.get('host') || 'crm.nbsince1946.com';
+  const proto = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+  const serverUrl = `${proto}://${host}`;
+  const script = supportService.generateAgentScript(ticketId, serverUrl);
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="nb-support-agent-${ticketId}.ps1"`);
+  return res.send(script);
+});
+
+supportRouter.get('/:id/remote/commands', (req: Request, res: Response) => {
+  const ticketId = p(req.params.id);
+  const commands = supportService.popRemoteCommands(ticketId);
+  return res.json(ok(commands));
+});
+
+supportRouter.get('/:id/remote/agent-status', (req: Request, res: Response) => {
+  const ticketId = p(req.params.id);
+  const status = supportService.getAgentStatus(ticketId);
+  return res.json(ok(status));
+});
+
 supportRouter.use(requireAuth);
 supportRouter.use((req, res, next) => {
   const action: PermissionAction = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
@@ -476,4 +518,11 @@ supportRouter.post('/:id/remote/token', async (req: Request, res: Response) => {
   } catch (e: any) {
     return res.status(400).json(fail(e.message));
   }
+});
+
+// Windows Native Support Agent - Remote control dispatch from operator (requires Auth)
+supportRouter.post('/:id/remote/control', (req: Request, res: Response) => {
+  const ticketId = p(req.params.id);
+  const result = supportService.pushRemoteCommand(ticketId, req.body || {});
+  return res.json(ok(result));
 });

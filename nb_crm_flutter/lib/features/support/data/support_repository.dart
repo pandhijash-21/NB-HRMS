@@ -340,6 +340,26 @@ class SupportRepository {
     );
   }
 
+  Future<SupportRemoteSession> updateRemoteCredentials({
+    required String ticketId,
+    required String deskId,
+    String? password,
+  }) {
+    return _dio.postEnvelope<SupportRemoteSession>(
+      'support/$ticketId/remote/credentials',
+      data: {
+        'deskId': deskId,
+        if (password != null && password.isNotEmpty) 'password': password,
+      },
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid remote session response');
+        }
+        return SupportRemoteSession.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
   Future<SupportRemoteSession?> getActiveRemoteSession(String ticketId) {
     return _dio.getEnvelope<SupportRemoteSession?>(
       'support/$ticketId/remote/active',

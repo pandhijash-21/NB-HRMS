@@ -134,6 +134,8 @@ class SupportRemoteSession {
     this.endedAt,
     this.token,
     this.livekitUrl,
+    this.remoteDeskId,
+    this.remoteDeskPassword,
   });
 
   final String id;
@@ -148,6 +150,8 @@ class SupportRemoteSession {
   final DateTime? endedAt;
   final String? token;
   final String? livekitUrl;
+  final String? remoteDeskId;
+  final String? remoteDeskPassword;
 
   bool get isActive => status == 'ACCEPTED' || status == 'ACTIVE';
   bool get isRequested => status == 'REQUESTED';
@@ -170,6 +174,8 @@ class SupportRemoteSession {
           : null,
       token: json['token']?.toString(),
       livekitUrl: json['livekitUrl']?.toString(),
+      remoteDeskId: json['remoteDeskId']?.toString(),
+      remoteDeskPassword: json['remoteDeskPassword']?.toString(),
     );
   }
 }

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -264,9 +263,16 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
               ticket.activeRemoteSession!.id,
               false,
             ),
-            onOpenConsole: () => _openRemoteConsole(
+            onEndSession: () => _endRemoteSession(
               context,
-              ticket.activeRemoteSession!,
+              ref,
+              ticket.activeRemoteSession!.id,
+            ),
+            onShareCredentials: (deskId, pw) => _shareRemoteCredentials(
+              context,
+              ref,
+              deskId,
+              pw,
             ),
           ),
           const SizedBox(height: 16),
@@ -1027,30 +1033,51 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
     }
   }
 
-  Future<void> _openRemoteConsole(BuildContext context, SupportRemoteSession session) async {
+  Future<void> _shareRemoteCredentials(
+      BuildContext context, WidgetRef ref, String deskId, String? password) async {
     try {
-      final tokenData = await ref.read(supportRepositoryProvider).getRemoteToken(widget.ticketId);
-      if (!context.mounted) return;
-      context.push(
-        '/support/${widget.ticketId}/remote',
-        extra: {
-          'sessionId': session.id,
-          'roomName': session.roomName,
-          'token': tokenData['token'],
-          'livekitUrl': tokenData['livekitUrl'],
-        },
-      );
-    } catch (_) {
-      if (!context.mounted) return;
-      context.push(
-        '/support/${widget.ticketId}/remote',
-        extra: {
-          'sessionId': session.id,
-          'roomName': session.roomName,
-          'token': session.token,
-          'livekitUrl': session.livekitUrl,
-        },
-      );
+      await ref.read(supportRepositoryProvider).updateRemoteCredentials(
+            ticketId: widget.ticketId,
+            deskId: deskId,
+            password: password,
+          );
+      _refresh(ref, widget.ticketId);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Desk credentials shared with IT Specialist!'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to share credentials: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _endRemoteSession(
+      BuildContext context, WidgetRef ref, String sessionId) async {
+    try {
+      await ref.read(supportRepositoryProvider).endRemoteSession(sessionId);
+      _refresh(ref, widget.ticketId);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Remote desktop session ended')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to end session: $e')),
+        );
+      }
     }
   }
 }
@@ -1240,14 +1267,15 @@ class _TransferApprovalCard extends StatelessWidget {
   }
 }
 
-class _RemoteAccessBanner extends StatelessWidget {
+class _RemoteAccessBanner extends StatefulWidget {
   const _RemoteAccessBanner({
     required this.session,
     required this.isIt,
     required this.isOwner,
     required this.onAccept,
     required this.onReject,
-    required this.onOpenConsole,
+    required this.onEndSession,
+    required this.onShareCredentials,
   });
 
   final SupportRemoteSession session;
@@ -1255,27 +1283,131 @@ class _RemoteAccessBanner extends StatelessWidget {
   final bool isOwner;
   final VoidCallback onAccept;
   final VoidCallback onReject;
-  final VoidCallback onOpenConsole;
+  final VoidCallback onEndSession;
+  final Future<void> Function(String deskId, String? password) onShareCredentials;
+
+  @override
+  State<_RemoteAccessBanner> createState() => _RemoteAccessBannerState();
+}
+
+class _RemoteAccessBannerState extends State<_RemoteAccessBanner> {
+  final _deskIdCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  bool _isSubmitting = false;
+  bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.session.remoteDeskId != null) {
+      _deskIdCtrl.text = widget.session.remoteDeskId!;
+    }
+    if (widget.session.remoteDeskPassword != null) {
+      _passwordCtrl.text = widget.session.remoteDeskPassword!;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _RemoteAccessBanner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.session.remoteDeskId != null &&
+        widget.session.remoteDeskId != oldWidget.session.remoteDeskId &&
+        _deskIdCtrl.text.isEmpty) {
+      _deskIdCtrl.text = widget.session.remoteDeskId!;
+    }
+    if (widget.session.remoteDeskPassword != null &&
+        widget.session.remoteDeskPassword != oldWidget.session.remoteDeskPassword &&
+        _passwordCtrl.text.isEmpty) {
+      _passwordCtrl.text = widget.session.remoteDeskPassword!;
+    }
+  }
+
+  @override
+  void dispose() {
+    _deskIdCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitCredentials() async {
+    final deskId = _deskIdCtrl.text.trim();
+    if (deskId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your Desk ID from NB-RemoteSupport.exe')),
+      );
+      return;
+    }
+    setState(() => _isSubmitting = true);
+    try {
+      await widget.onShareCredentials(deskId, _passwordCtrl.text.trim());
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _downloadSoftware() async {
+    final uri = Uri.parse('https://crm.nbsince1946.com/api/support/agent.exe');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _launchNativeRustDesk(String deskId, String? password) async {
+    final pwText = (password != null && password.isNotEmpty) ? '\nPassword: $password' : '';
+    Clipboard.setData(ClipboardData(text: 'Desk ID: $deskId$pwText'));
+
+    final query = (password != null && password.isNotEmpty)
+        ? '?password=${Uri.encodeComponent(password)}'
+        : '';
+    final uri = Uri.parse('rustdesk://$deskId$query');
+
+    try {
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Credentials copied (Desk ID: $deskId)! Please open NB-RemoteSupport.exe to connect.'),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Opening NB Remote Support! Desk credentials copied to clipboard.'),
+              backgroundColor: Color(0xFF10B981),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Desk ID $deskId copied! Open NB-RemoteSupport.exe and paste to connect.'),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isRequested = session.isRequested;
-    final isActive = session.isActive;
+    final hasDeskId = widget.session.remoteDeskId != null && widget.session.remoteDeskId!.isNotEmpty;
+    final isActive = widget.session.isActive || hasDeskId;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final agentBatUrl = 'https://crm.nbsince1946.com/api/support/${session.ticketId}/remote/agent.bat';
-    final powershellCmd =
-        'powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \$s=(Invoke-WebRequest -Uri \'https://crm.nbsince1946.com/api/support/${session.ticketId}/remote/agent.ps1\' -UseBasicParsing).Content; Invoke-Expression \$s"';
+    final primaryColor = isActive ? const Color(0xFF10B981) : const Color(0xFF2563EB);
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: (isActive ? const Color(0xFF10B981) : const Color(0xFF2563EB))
-            .withValues(alpha: 0.1),
+        color: primaryColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: (isActive ? const Color(0xFF10B981) : const Color(0xFF2563EB))
-              .withValues(alpha: 0.35),
+          color: primaryColor.withValues(alpha: 0.35),
           width: 1.2,
         ),
       ),
@@ -1287,14 +1419,13 @@ class _RemoteAccessBanner extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: (isActive ? const Color(0xFF10B981) : const Color(0xFF2563EB))
-                      .withValues(alpha: 0.15),
+                  color: primaryColor.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   Icons.desktop_windows_rounded,
                   size: 20,
-                  color: isActive ? const Color(0xFF10B981) : const Color(0xFF2563EB),
+                  color: primaryColor,
                 ),
               ),
               const SizedBox(width: 10),
@@ -1303,94 +1434,314 @@ class _RemoteAccessBanner extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isActive
-                          ? 'Remote Desktop Session Active (Option 1)'
-                          : 'Remote PC Control Requested by IT',
+                      hasDeskId
+                          ? '🖥️ Standalone Remote Desktop Ready'
+                          : (widget.isOwner
+                              ? '🖥️ IT Support Requested Remote Access'
+                              : '🖥️ Standalone Remote Support Initiated'),
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
-                        fontSize: 14.5,
-                        color: isActive
-                            ? const Color(0xFF10B981)
-                            : const Color(0xFF2563EB),
+                        fontSize: 15,
+                        color: primaryColor,
                       ),
                     ),
                     Text(
-                      'Room: ${session.roomName}',
+                      hasDeskId
+                          ? 'Host Desk ID is ready for native 60 FPS remote connection.'
+                          : 'Zero web streaming. Powered by portable NB-RemoteSupport.exe.',
                       style: TextStyle(
-                        fontSize: 11.5,
+                        fontSize: 12,
                         color: isDark ? Colors.white60 : Colors.black54,
                       ),
                     ),
                   ],
                 ),
               ),
+              if (hasDeskId)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF10B981)),
+                  ),
+                  child: const Text(
+                    'ONLINE',
+                    style: TextStyle(
+                      color: Color(0xFF10B981),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
             ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            isActive
-                ? 'Option 1 Native Windows Agent allows IT Support to control mouse, keyboard, and Windows UAC prompts with administrative privileges.'
-                : 'The IT specialist requested remote control of your computer to configure services / permissions.',
-            style: const TextStyle(fontSize: 13, height: 1.35),
           ),
           const SizedBox(height: 14),
 
-          // Actions
-          if (isOwner && isRequested) ...[
-            Row(
-              children: [
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF10B981),
+          // If Host Desk ID has already been shared:
+          if (hasDeskId) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Your Desk ID: ',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      const SizedBox(width: 8),
+                      SelectableText(
+                        widget.session.remoteDeskId!,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.5,
+                          color: Color(0xFF2563EB),
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: 'Copy Desk ID',
+                        icon: const Icon(Icons.copy_rounded, size: 18),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: widget.session.remoteDeskId!));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Desk ID copied!'), duration: Duration(seconds: 2)),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  onPressed: onAccept,
-                  icon: const Icon(Icons.check, size: 16),
-                  label: const Text('Accept & Allow Remote Control'),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: onReject,
-                  icon: const Icon(Icons.close, size: 16),
-                  label: const Text('Decline'),
-                ),
-              ],
+                  if (widget.session.remoteDeskPassword != null &&
+                      widget.session.remoteDeskPassword!.isNotEmpty) ...[
+                    const Divider(height: 16),
+                    Row(
+                      children: [
+                        const Text(
+                          'One-Time Password: ',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                        const SizedBox(width: 8),
+                        SelectableText(
+                          _obscurePassword ? '••••••••' : widget.session.remoteDeskPassword!,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                          icon: Icon(
+                            _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                            size: 18,
+                          ),
+                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          tooltip: 'Copy Password',
+                          icon: const Icon(Icons.copy_rounded, size: 18),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: widget.session.remoteDeskPassword!));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Password copied!'), duration: Duration(seconds: 2)),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ] else ...[
+            const SizedBox(height: 12),
+
+            // Action Buttons
             Wrap(
               spacing: 10,
               runSpacing: 10,
               children: [
-                if (isIt)
+                if (widget.isIt)
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
+                      backgroundColor: const Color(0xFF10B981),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     ),
-                    onPressed: onOpenConsole,
-                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                    label: const Text('Open Remote Operator Console'),
+                    onPressed: () => _launchNativeRustDesk(
+                      widget.session.remoteDeskId!,
+                      widget.session.remoteDeskPassword,
+                    ),
+                    icon: const Icon(Icons.rocket_launch_rounded, size: 18),
+                    label: const Text(
+                      '🚀 1-Click Launch & Connect',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 OutlinedButton.icon(
-                  onPressed: () async {
-                    final uri = Uri.parse(agentBatUrl);
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  },
+                  onPressed: _downloadSoftware,
                   icon: const Icon(Icons.download_rounded, size: 16),
-                  label: const Text('Download Windows Support Agent (.bat)'),
+                  label: const Text('Download NB-RemoteSupport.exe'),
                 ),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: powershellCmd));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('PowerShell launch command copied to clipboard! Paste into PowerShell to run agent.'),
-                        duration: Duration(seconds: 3),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.terminal_rounded, size: 16),
-                  label: const Text('Copy 1-Click Launch Command'),
+                TextButton.icon(
+                  style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                  onPressed: widget.onEndSession,
+                  icon: const Icon(Icons.stop_circle_outlined, size: 16),
+                  label: const Text('End Remote Session'),
                 ),
               ],
+            ),
+          ] else if (widget.isOwner) ...[
+            // Employee view when Desk ID hasn't been submitted yet
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Follow these 3 quick steps:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text('1. Download and run NB-RemoteSupport.exe (portable, no install needed).'),
+                  const Text('2. Copy your 9-digit Desk ID & Password shown in the app.'),
+                  const Text('3. Enter them below and share with IT Support:'),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _downloadSoftware,
+                          icon: const Icon(Icons.download_rounded, size: 16),
+                          label: const Text('Download NB-RemoteSupport.exe'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          controller: _deskIdCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            labelText: 'Your Desk ID (9 digits)',
+                            hintText: 'e.g. 123 456 789',
+                            prefixIcon: Icon(Icons.badge_outlined, size: 18),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: _passwordCtrl,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            labelText: 'Password',
+                            hintText: 'Optional',
+                            prefixIcon: Icon(Icons.lock_outline, size: 18),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                        ),
+                        onPressed: _isSubmitting ? null : _submitCredentials,
+                        icon: _isSubmitting
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.send_rounded, size: 16),
+                        label: const Text('Share Credentials with IT'),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: widget.onReject,
+                        child: const Text('Decline Request'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            // IT specialist waiting for employee
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 10),
+                      Text(
+                        'Waiting for employee to launch app & share Desk ID...',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'The employee has been prompted to run NB-RemoteSupport.exe. When they submit their 9-digit Desk ID, connection credentials will appear here instantly.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _downloadSoftware,
+                        icon: const Icon(Icons.download_rounded, size: 16),
+                        label: const Text('Download NB-RemoteSupport.exe'),
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                        onPressed: widget.onEndSession,
+                        icon: const Icon(Icons.close, size: 16),
+                        label: const Text('Cancel Request'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ],

@@ -1355,6 +1355,37 @@ export const supportService = {
     });
   },
 
+  async updateRemoteCredentials(params: {
+    ticketId: string;
+    deskId: string;
+    password?: string;
+  }) {
+    const session = await this.getActiveRemoteSession(params.ticketId);
+    if (!session) throw new Error('No active remote session for this ticket');
+
+    const creds = JSON.stringify({
+      deskId: params.deskId.trim(),
+      password: (params.password ?? '').trim(),
+    });
+
+    const updated = await prisma.supportRemoteSession.update({
+      where: { id: session.id },
+      data: {
+        status: 'ACTIVE',
+        roomName: creds,
+        startedAt: session.startedAt ?? new Date(),
+      },
+    });
+
+    void notifyUsers([session.handlerUserId], {
+      title: 'Remote Desk Credentials Ready',
+      body: `Employee shared Desk ID: ${params.deskId.trim()}. Ready to connect via NB Remote Support.`,
+      path: `/support/${session.ticketId}?remote=1`,
+    });
+
+    return updated;
+  },
+
   async generateRemoteToken(params: {
     ticketId: string;
     userId: string;

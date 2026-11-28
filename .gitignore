@@ -24,6 +24,8 @@ backend/uploads/
 uploads/
 backend/backups/
 backups/
+backend/public/downloads/
+*.exe
 
 # Env files
 .env

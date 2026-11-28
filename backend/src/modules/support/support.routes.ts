@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../../middleware/auth';
 import { requirePermission, type PermissionAction } from '../../middleware/rbac';
@@ -75,6 +77,31 @@ async function assertCanManageTicket(req: Request, ticketId: string) {
     throw new Error('Only the assigned IT handler can manage this ticket');
   }
 }
+
+const getStandaloneExePath = () => {
+  const p1 = path.resolve(__dirname, '../../../public/downloads/NB-RemoteSupport.exe');
+  if (fs.existsSync(p1)) return p1;
+  const p2 = path.resolve(process.cwd(), 'public/downloads/NB-RemoteSupport.exe');
+  if (fs.existsSync(p2)) return p2;
+  return null;
+};
+
+// Standalone Remote Desktop binary (Option B - Native AnyDesk/RustDesk zero-streaming software)
+supportRouter.get('/agent.exe', (req: Request, res: Response) => {
+  const exePath = getStandaloneExePath();
+  if (exePath) {
+    return res.download(exePath, 'NB-RemoteSupport.exe');
+  }
+  return res.redirect('https://github.com/rustdesk/rustdesk/releases/download/1.5.3/rustdesk-1.5.3-x86_64.exe');
+});
+
+supportRouter.get('/:id/remote/agent.exe', (req: Request, res: Response) => {
+  const exePath = getStandaloneExePath();
+  if (exePath) {
+    return res.download(exePath, 'NB-RemoteSupport.exe');
+  }
+  return res.redirect('https://github.com/rustdesk/rustdesk/releases/download/1.5.3/rustdesk-1.5.3-x86_64.exe');
+});
 
 // Windows Native Support Agent endpoints (Option 1 - unauthenticated helper script & command polling)
 supportRouter.get('/:id/remote/agent.bat', (req: Request, res: Response) => {
@@ -511,7 +538,19 @@ supportRouter.get('/:id/remote/active', async (req: Request, res: Response) => {
     const session = await supportService.getActiveRemoteSession(ticketId);
     if (!session) return res.json(ok(null));
 
-    // Also issue livekit token so the caller can directly connect
+    let remoteDeskId: string | null = null;
+    let remoteDeskPassword: string | null = null;
+    if (session.roomName) {
+      try {
+        const parsed = JSON.parse(session.roomName);
+        if (parsed && parsed.deskId) {
+          remoteDeskId = String(parsed.deskId);
+          remoteDeskPassword = parsed.password ? String(parsed.password) : null;
+        }
+      } catch {}
+    }
+
+    // Also issue livekit token so the caller can directly connect if needed
     let tokenData: any = null;
     try {
       tokenData = await supportService.generateRemoteToken({
@@ -524,10 +563,31 @@ supportRouter.get('/:id/remote/active', async (req: Request, res: Response) => {
     return res.json(
       ok({
         ...session,
+        remoteDeskId,
+        remoteDeskPassword,
         token: tokenData?.token ?? null,
         livekitUrl: tokenData?.livekitUrl ?? null,
       }),
     );
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+supportRouter.post('/:id/remote/credentials', async (req: Request, res: Response) => {
+  try {
+    const ticketId = p(req.params.id);
+    const deskId = String(req.body?.deskId ?? req.body?.remoteDeskId ?? '').trim();
+    if (!deskId) {
+      return res.status(400).json(fail('Desk ID is required'));
+    }
+    const password = req.body?.password ?? req.body?.remoteDeskPassword;
+    const session = await supportService.updateRemoteCredentials({
+      ticketId,
+      deskId,
+      password: password != null ? String(password) : undefined,
+    });
+    return res.json(ok(session));
   } catch (e: any) {
     return res.status(400).json(fail(e.message));
   }

@@ -125,7 +125,7 @@ class ErpHomeScreen extends StatelessWidget {
                     _ErpTile(
                       icon: Icons.inventory_2_outlined,
                       title: 'Materials',
-                      subtitle: 'Independent ledger — total, used, available & used today',
+                      subtitle: 'Full catalogue ledger (Store-managed) — stock & history',
                       color: const Color(0xFF0369a1),
                       onTap: () => context.go('/erp/materials'),
                     ),

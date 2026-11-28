@@ -1441,6 +1441,10 @@ export const supportService = {
     return q;
   },
 
+  touchAgentHeartbeat(ticketId: string) {
+    agentStatusMap.set(ticketId, { lastHeartbeat: Date.now(), online: true });
+  },
+
   getAgentStatus(ticketId: string) {
     const status = agentStatusMap.get(ticketId);
     if (!status) return { online: false, lastSeen: 0 };
@@ -1457,15 +1461,106 @@ Add-Type -AssemblyName System.Drawing
 
 $code = @"
 using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
+using System.Net;
+using System.Threading;
+using System.Windows.Forms;
 using System.Runtime.InteropServices;
+
 namespace NBAgent {
     public class Native {
         [DllImport("user32.dll", SetLastError = true)]
         public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint cButtons, uint dwExtraInfo);
     }
+
+    public class ScreenStreamer {
+        private static bool _running = false;
+        private static Thread _thread = null;
+        private static ImageCodecInfo _encoder = null;
+        private static EncoderParameters _params = null;
+
+        public static void Init() {
+            try {
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
+                foreach (ImageCodecInfo codec in ImageCodecInfo.GetImageDecoders()) {
+                    if (codec.FormatID == ImageFormat.Jpeg.Guid) {
+                        _encoder = codec;
+                        break;
+                    }
+                }
+                _params = new EncoderParameters(1);
+                _params.Param[0] = new EncoderParameter(Encoder.Quality, 55L);
+            } catch {}
+        }
+
+        public static void Start(string postUrl) {
+            if (_running) return;
+            Init();
+            _running = true;
+            _thread = new Thread(() => StreamLoop(postUrl));
+            _thread.IsBackground = true;
+            _thread.SetApartmentState(ApartmentState.STA);
+            _thread.Start();
+        }
+
+        public static void Stop() {
+            _running = false;
+        }
+
+        private static void StreamLoop(string postUrl) {
+            while (_running) {
+                try {
+                    Rectangle bounds = Screen.PrimaryScreen.Bounds;
+                    int srcW = bounds.Width;
+                    int srcH = bounds.Height;
+                    if (srcW > 0 && srcH > 0) {
+                        int dstW = 1280;
+                        if (dstW > srcW) dstW = srcW;
+                        int dstH = (int)((double)srcH * dstW / srcW);
+
+                        using (Bitmap bmpSrc = new Bitmap(srcW, srcH, PixelFormat.Format32bppRgb)) {
+                            using (Graphics gSrc = Graphics.FromImage(bmpSrc)) {
+                                gSrc.CopyFromScreen(bounds.X, bounds.Y, 0, 0, bounds.Size, CopyPixelOperation.SourceCopy);
+                            }
+
+                            using (Bitmap bmpDst = new Bitmap(dstW, dstH, PixelFormat.Format24bppRgb)) {
+                                using (Graphics gDst = Graphics.FromImage(bmpDst)) {
+                                    gDst.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Low;
+                                    gDst.DrawImage(bmpSrc, 0, 0, dstW, dstH);
+                                }
+
+                                using (MemoryStream ms = new MemoryStream()) {
+                                    if (_encoder != null) {
+                                        bmpDst.Save(ms, _encoder, _params);
+                                    } else {
+                                        bmpDst.Save(ms, ImageFormat.Jpeg);
+                                    }
+                                    byte[] jpegBytes = ms.ToArray();
+
+                                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(postUrl);
+                                    req.Method = "POST";
+                                    req.ContentType = "image/jpeg";
+                                    req.ContentLength = jpegBytes.Length;
+                                    req.Timeout = 1200;
+                                    req.ReadWriteTimeout = 1200;
+                                    using (Stream reqStream = req.GetRequestStream()) {
+                                        reqStream.Write(jpegBytes, 0, jpegBytes.Length);
+                                    }
+                                    using (WebResponse resp = req.GetResponse()) {}
+                                }
+                            }
+                        }
+                    }
+                } catch {}
+                Thread.Sleep(90);
+            }
+        }
+    }
 }
 "@
-Add-Type -TypeDefinition $code -Language CSharp -ErrorAction SilentlyContinue
+Add-Type -TypeDefinition $code -ReferencedAssemblies System.Windows.Forms, System.Drawing -Language CSharp -ErrorAction SilentlyContinue
 
 Clear-Host
 Write-Host "==========================================================" -ForegroundColor Cyan
@@ -1474,7 +1569,11 @@ Write-Host "       Ticket ID: ${ticketId}" -ForegroundColor White
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "[*] Windows OS Input Bridge Loaded." -ForegroundColor Green
 Write-Host "[*] Connected to Server: ${serverUrl}" -ForegroundColor Green
-Write-Host "[+] ACTIVE: IT Support now has real mouse and keyboard control." -ForegroundColor Cyan
+Write-Host "[+] Desktop Live Screen Streamer Starting..." -ForegroundColor Cyan
+
+[NBAgent.ScreenStreamer]::Start("${serverUrl}/api/support/${ticketId}/remote/frame")
+
+Write-Host "[+] ACTIVE: Screen streaming and real mouse/keyboard control ready." -ForegroundColor Green
 Write-Host "[!] Press Ctrl+C in this console window to disconnect anytime." -ForegroundColor Gray
 Write-Host ""
 

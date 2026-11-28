@@ -52,6 +52,8 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
 
   bool _agentOnline = false;
   Timer? _agentPollTimer;
+  Timer? _frameStreamTimer;
+  int _frameCounter = 0;
   DateTime? _lastMouseMoveSent;
 
   @override
@@ -62,11 +64,17 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
     _agentPollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       _checkAgentStatus();
     });
+    _frameStreamTimer = Timer.periodic(const Duration(milliseconds: 90), (_) {
+      if (mounted && _agentOnline && _remoteVideoTrack == null) {
+        setState(() => _frameCounter++);
+      }
+    });
   }
 
   @override
   void dispose() {
     _agentPollTimer?.cancel();
+    _frameStreamTimer?.cancel();
     _canvasFocus.dispose();
     _cleanupLiveKit();
     super.dispose();
@@ -859,77 +867,16 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
                             ? VideoViewFit.contain
                             : VideoViewFit.cover,
                       ),
-                    ] else ...[
-                      // Waiting for stream / Empty State
-                      Container(
-                        color: const Color(0xFF0F1420),
-                        alignment: Alignment.center,
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 68,
-                                height: 68,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF2563EB)
-                                      .withValues(alpha: 0.15),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.desktop_windows_rounded,
-                                  size: 34,
-                                  color: Color(0xFF3B82F6),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                _connectError != null
-                                    ? 'Connection Error: $_connectError'
-                                    : 'Connected to Room: ${widget.roomName}',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Waiting for remote screen stream.\nClick "Share Screen" in the toolbar to stream your desktop/window.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.white60,
-                                  fontSize: 13,
-                                  height: 1.4,
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              FilledButton.icon(
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF2563EB),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 12,
-                                  ),
-                                ),
-                                onPressed: _toggleScreenShare,
-                                icon: Icon(
-                                  _isSharing
-                                      ? Icons.stop_screen_share_rounded
-                                      : Icons.screen_share_rounded,
-                                ),
-                                label: Text(
-                                  _isSharing
-                                      ? 'Stop Screen Sharing'
-                                      : 'Share My Screen Now',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                    ] else if (_agentOnline) ...[
+                      // LIVE NATIVE DESKTOP SCREEN STREAM FROM WINDOWS AGENT
+                      Image.network(
+                        'https://crm.nbsince1946.com/api/support/${widget.ticketId}/remote/frame?t=$_frameCounter',
+                        gaplessPlayback: true,
+                        fit: _fitToWindow ? BoxFit.contain : BoxFit.cover,
+                        errorBuilder: (ctx, err, stack) => _buildWaitingPlaceholder(),
                       ),
+                    ] else ...[
+                      _buildWaitingPlaceholder(),
                     ],
 
                     // Top Left Status Pill
@@ -988,6 +935,77 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWaitingPlaceholder() {
+    return Container(
+      color: const Color(0xFF0F1420),
+      alignment: Alignment.center,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 68,
+              height: 68,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.desktop_windows_rounded,
+                size: 34,
+                color: Color(0xFF3B82F6),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _connectError != null
+                  ? 'Connection Error: $_connectError'
+                  : 'Connected to Room: ${widget.roomName}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _agentOnline
+                  ? 'Connecting to Windows Agent desktop stream...\nMouse and keyboard control active.'
+                  : 'Waiting for remote screen stream.\nLaunch Windows Agent or click "Share Screen" in the toolbar.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white60,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+              ),
+              onPressed: _toggleScreenShare,
+              icon: Icon(
+                _isSharing
+                    ? Icons.stop_screen_share_rounded
+                    : Icons.screen_share_rounded,
+              ),
+              label: Text(
+                _isSharing ? 'Stop Screen Sharing' : 'Share My Screen Now',
+              ),
+            ),
+          ],
         ),
       ),
     );

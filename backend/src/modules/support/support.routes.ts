@@ -145,6 +145,35 @@ supportRouter.get('/:id/remote/agent-status', (req: Request, res: Response) => {
   return res.json(ok(status));
 });
 
+const latestFrameMap = new Map<string, { buffer: Buffer; timestamp: number }>();
+
+// Upload desktop screen frame from Windows Agent (Raw binary or base64)
+supportRouter.post('/:id/remote/frame', (req: Request, res: Response) => {
+  const ticketId = p(req.params.id);
+  const chunks: Buffer[] = [];
+  req.on('data', chunk => chunks.push(chunk));
+  req.on('end', () => {
+    const buf = Buffer.concat(chunks);
+    if (buf.length > 0) {
+      latestFrameMap.set(ticketId, { buffer: buf, timestamp: Date.now() });
+      supportService.touchAgentHeartbeat(ticketId);
+    }
+    return res.json(ok({ received: buf.length }));
+  });
+});
+
+// Stream/fetch current desktop screen frame for Remote Operator canvas
+supportRouter.get('/:id/remote/frame', (req: Request, res: Response) => {
+  const ticketId = p(req.params.id);
+  const frame = latestFrameMap.get(ticketId);
+  if (!frame || Date.now() - frame.timestamp > 15000) {
+    return res.status(404).send('No active frame');
+  }
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  return res.send(frame.buffer);
+});
+
 supportRouter.use(requireAuth);
 supportRouter.use((req, res, next) => {
   const action: PermissionAction = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)

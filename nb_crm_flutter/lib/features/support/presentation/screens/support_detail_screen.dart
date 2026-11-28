@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -273,6 +274,10 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
               ref,
               deskId,
               pw,
+            ),
+            onOpenConsole: () => _openRemoteConsole(
+              context,
+              ticket.activeRemoteSession!,
             ),
           ),
           const SizedBox(height: 16),
@@ -1080,6 +1085,36 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
       }
     }
   }
+
+  Future<void> _openRemoteConsole(
+      BuildContext context, SupportRemoteSession session) async {
+    try {
+      final tokenData = await ref
+          .read(supportRepositoryProvider)
+          .getRemoteToken(widget.ticketId);
+      if (!context.mounted) return;
+      context.push(
+        '/support/${widget.ticketId}/remote',
+        extra: {
+          'sessionId': session.id,
+          'roomName': session.roomName,
+          'token': tokenData['token'],
+          'livekitUrl': tokenData['livekitUrl'],
+        },
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      context.push(
+        '/support/${widget.ticketId}/remote',
+        extra: {
+          'sessionId': session.id,
+          'roomName': session.roomName,
+          'token': session.token,
+          'livekitUrl': session.livekitUrl,
+        },
+      );
+    }
+  }
 }
 
 class _StatusChip extends StatelessWidget {
@@ -1276,6 +1311,7 @@ class _RemoteAccessBanner extends StatefulWidget {
     required this.onReject,
     required this.onEndSession,
     required this.onShareCredentials,
+    required this.onOpenConsole,
   });
 
   final SupportRemoteSession session;
@@ -1285,6 +1321,7 @@ class _RemoteAccessBanner extends StatefulWidget {
   final VoidCallback onReject;
   final VoidCallback onEndSession;
   final Future<void> Function(String deskId, String? password) onShareCredentials;
+  final VoidCallback onOpenConsole;
 
   @override
   State<_RemoteAccessBanner> createState() => _RemoteAccessBannerState();
@@ -1570,7 +1607,7 @@ class _RemoteAccessBannerState extends State<_RemoteAccessBanner> {
               spacing: 10,
               runSpacing: 10,
               children: [
-                if (widget.isIt)
+                if (widget.isIt) ...[
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFF10B981),
@@ -1586,10 +1623,24 @@ class _RemoteAccessBannerState extends State<_RemoteAccessBanner> {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
+                  OutlinedButton.icon(
+                    onPressed: widget.onOpenConsole,
+                    icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+                    label: const Text('Open Remote Console (Option 1)'),
+                  ),
+                ],
                 OutlinedButton.icon(
                   onPressed: _downloadSoftware,
                   icon: const Icon(Icons.download_rounded, size: 16),
                   label: const Text('Download NB-RemoteSupport.exe'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final uri = Uri.parse('https://crm.nbsince1946.com/api/support/${widget.session.ticketId}/remote/agent.bat');
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  },
+                  icon: const Icon(Icons.terminal_rounded, size: 16),
+                  label: const Text('Download Agent (.bat)'),
                 ),
                 TextButton.icon(
                   style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
@@ -1727,6 +1778,22 @@ class _RemoteAccessBannerState extends State<_RemoteAccessBanner> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                        ),
+                        onPressed: widget.onOpenConsole,
+                        icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+                        label: const Text('Open Remote Console (Option 1)'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final uri = Uri.parse('https://crm.nbsince1946.com/api/support/${widget.session.ticketId}/remote/agent.bat');
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        },
+                        icon: const Icon(Icons.terminal_rounded, size: 16),
+                        label: const Text('Download Agent (.bat)'),
+                      ),
                       OutlinedButton.icon(
                         onPressed: _downloadSoftware,
                         icon: const Icon(Icons.download_rounded, size: 16),

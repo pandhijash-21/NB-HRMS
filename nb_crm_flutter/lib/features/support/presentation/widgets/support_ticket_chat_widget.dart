@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import '../../../../core/theme/nb_icon.dart';
 import '../../../../core/utils/clipboard_image_helper.dart';
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../../core/widgets/zoomable_photo.dart';
+import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/support_models.dart';
 import '../support_providers.dart';
@@ -39,16 +41,24 @@ class _SupportTicketChatWidgetState
   Uint8List? _pendingAttachmentBytes;
 
   void Function()? _pasteDisposer;
+  Timer? _chatPollTimer;
 
   @override
   void initState() {
     super.initState();
     // Register clipboard paste listener for images
     _pasteDisposer = attachClipboardPasteListener(_handlePastedImage);
+    // Realtime background poll every 2 seconds for instant incoming messages
+    _chatPollTimer = Timer.periodic(const Duration(milliseconds: 2000), (_) {
+      if (mounted) {
+        ref.invalidate(supportTicketMessagesProvider(widget.ticketId));
+      }
+    });
   }
 
   @override
   void dispose() {
+    _chatPollTimer?.cancel();
     _pasteDisposer?.call();
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
@@ -226,6 +236,18 @@ class _SupportTicketChatWidgetState
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final auth = ref.watch(authNotifierProvider);
     final myUserId = auth.user?.id;
+    final myEmployeeId = auth.user?.employeeId;
+    final isOwner = myEmployeeId != null && myEmployeeId == widget.ticket.employeeId;
+    final userRole = auth.user?.role.toUpperCase();
+    final isAdmin = userRole == 'ADMIN' ||
+        userRole == 'SUPERADMIN' ||
+        userRole == 'SYSTEMADMIN' ||
+        userRole == 'SYSTEM_ADMIN' ||
+        Permissions.canAdminSupport(auth.permissions, auth.user?.role);
+    final isAssigned = myEmployeeId != null &&
+        (widget.ticket.assignedHandlerId == myEmployeeId ||
+            widget.ticket.transferTargetHandlerId == myEmployeeId);
+    final canChat = isOwner || isAssigned || isAdmin;
     final messagesAsync =
         ref.watch(supportTicketMessagesProvider(widget.ticketId));
 
@@ -488,17 +510,35 @@ class _SupportTicketChatWidgetState
             ),
           ),
 
-        // Input bar
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF111622) : Colors.white,
-            border: Border(
-              top: BorderSide(
-                color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+        // Input bar or read-only notice
+        if (!canChat)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            color: isDark ? const Color(0xFF1E2638) : const Color(0xFFF1F5F9),
+            child: const Row(
+              children: [
+                Icon(Icons.lock_outline_rounded, size: 16, color: Colors.grey),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Read-only: Only the assigned IT handler and ticket creator can participate in discussion.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF111622) : Colors.white,
+              border: Border(
+                top: BorderSide(
+                  color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                ),
               ),
             ),
-          ),
           child: Row(
             children: [
               // Image Picker button

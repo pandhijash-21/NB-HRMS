@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,14 +29,25 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabCtrl;
 
+  Timer? _autoRefreshTimer;
+
   @override
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 2, vsync: this);
+    // Realtime background poll every 2.5 seconds for instant ticket and session updates
+    _autoRefreshTimer = Timer.periodic(const Duration(milliseconds: 2500), (_) {
+      if (mounted) {
+        ref.invalidate(supportTicketDetailProvider(widget.ticketId));
+        ref.invalidate(supportTicketMessagesProvider(widget.ticketId));
+        ref.invalidate(supportActiveRemoteSessionProvider(widget.ticketId));
+      }
+    });
   }
 
   @override
   void dispose() {
+    _autoRefreshTimer?.cancel();
     _tabCtrl.dispose();
     super.dispose();
   }
@@ -51,13 +63,6 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authNotifierProvider);
-    final capsAsync = ref.watch(supportCapabilitiesProvider);
-    final roleIsIt =
-        Permissions.canAdminSupport(auth.permissions, auth.user?.role);
-    final isIt = capsAsync.maybeWhen(
-      data: (c) => c.isIt,
-      orElse: () => roleIsIt,
-    );
     final myEmployeeId = auth.user?.employeeId;
     final async = ref.watch(supportTicketDetailProvider(widget.ticketId));
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -98,6 +103,17 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
         data: (ticket) {
           final isOwner =
               myEmployeeId != null && myEmployeeId == ticket.employeeId;
+          final userRole = auth.user?.role.toUpperCase();
+          final isAdmin = userRole == 'ADMIN' ||
+              userRole == 'SUPERADMIN' ||
+              userRole == 'SYSTEMADMIN' ||
+              userRole == 'SYSTEM_ADMIN' ||
+              Permissions.canAdminSupport(auth.permissions, auth.user?.role);
+          final isAssignedHandler = myEmployeeId != null &&
+              (ticket.assignedHandlerId == myEmployeeId ||
+                  ticket.transferTargetHandlerId == myEmployeeId);
+          // Only the assigned IT handler or admin can manage or take remote access
+          final canManageThisTicket = isAdmin || isAssignedHandler;
 
           return TabBarView(
             controller: _tabCtrl,
@@ -109,7 +125,7 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
                   constraints: const BoxConstraints(maxWidth: 960),
                   child: _buildDetailsList(
                     ticket: ticket,
-                    isIt: isIt,
+                    isIt: canManageThisTicket,
                     isOwner: isOwner,
                   ),
                 ),
@@ -1247,9 +1263,9 @@ class _RemoteAccessBanner extends StatelessWidget {
     final isActive = session.isActive;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final agentBatUrl = 'https://crm.nbsince1946.com/api/v1/support/${session.ticketId}/remote/agent.bat';
+    final agentBatUrl = 'https://crm.nbsince1946.com/api/support/${session.ticketId}/remote/agent.bat';
     final powershellCmd =
-        'powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \$s=(Invoke-WebRequest -Uri \'https://crm.nbsince1946.com/api/v1/support/${session.ticketId}/remote/agent.ps1\' -UseBasicParsing).Content; Invoke-Expression \$s"';
+        'powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \$s=(Invoke-WebRequest -Uri \'https://crm.nbsince1946.com/api/support/${session.ticketId}/remote/agent.ps1\' -UseBasicParsing).Content; Invoke-Expression \$s"';
 
     return Container(
       padding: const EdgeInsets.all(16),

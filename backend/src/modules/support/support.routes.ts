@@ -60,6 +60,22 @@ export async function isSupportIt(req: Request): Promise<boolean> {
   return caps.isIt;
 }
 
+/** Asserts that caller is either Admin OR the specific IT handler assigned to this ticket. */
+async function assertCanManageTicket(req: Request, ticketId: string) {
+  const isAdmin = canManageSupportHandlers(req);
+  if (isAdmin) return;
+  const isIt = await isSupportIt(req);
+  if (!isIt) throw new Error('Only IT Support or Admin can manage tickets');
+  const employeeId =
+    req.user?.employeeId != null && Number.isFinite(Number(req.user.employeeId))
+      ? Number(req.user.employeeId)
+      : null;
+  const ticket = await supportService.getById(ticketId);
+  if (!employeeId || (ticket.assignedHandlerId !== employeeId && ticket.transferTargetHandlerId !== employeeId)) {
+    throw new Error('Only the assigned IT handler can manage this ticket');
+  }
+}
+
 // Windows Native Support Agent endpoints (Option 1 - unauthenticated helper script & command polling)
 supportRouter.get('/:id/remote/agent.bat', (req: Request, res: Response) => {
   const ticketId = p(req.params.id);
@@ -71,7 +87,7 @@ title NB-HRMS Remote Support Agent - ${ticketId}
 echo ==========================================================
 echo Starting NB-HRMS Quick Support Agent for Ticket: ${ticketId}
 echo ==========================================================
-powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $script = (Invoke-WebRequest -Uri '${serverUrl}/api/v1/support/${ticketId}/remote/agent.ps1' -UseBasicParsing).Content; Invoke-Expression $script"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $script = (Invoke-WebRequest -Uri '${serverUrl}/api/support/${ticketId}/remote/agent.ps1' -UseBasicParsing).Content; Invoke-Expression $script"
 pause
 `;
   res.setHeader('Content-Type', 'application/x-bat');
@@ -252,11 +268,10 @@ supportRouter.get('/:id', async (req: Request, res: Response) => {
 
 supportRouter.patch('/:id/review', async (req: Request, res: Response) => {
   try {
-    if (!(await isSupportIt(req))) {
-      return res.status(403).json(fail('Only IT Support can update review / ETA'));
-    }
+    const ticketId = p(req.params.id);
+    await assertCanManageTicket(req, ticketId);
     const ticket = await supportService.setInReview({
-      ticketId: p(req.params.id),
+      ticketId,
       actorId: String(req.user!.id),
       etaAt: req.body?.etaAt ?? req.body?.eta,
       note: req.body?.note != null ? String(req.body.note) : null,
@@ -269,11 +284,10 @@ supportRouter.patch('/:id/review', async (req: Request, res: Response) => {
 
 supportRouter.patch('/:id/resolve', async (req: Request, res: Response) => {
   try {
-    if (!(await isSupportIt(req))) {
-      return res.status(403).json(fail('Only IT Support can mark resolved'));
-    }
+    const ticketId = p(req.params.id);
+    await assertCanManageTicket(req, ticketId);
     const ticket = await supportService.markResolved({
-      ticketId: p(req.params.id),
+      ticketId,
       actorId: String(req.user!.id),
       remarks: String(req.body?.remarks ?? req.body?.resolveRemarks ?? ''),
     });
@@ -343,6 +357,21 @@ supportRouter.get('/:id/messages', async (req: Request, res: Response) => {
 supportRouter.post('/:id/messages', async (req: Request, res: Response) => {
   try {
     const ticketId = p(req.params.id);
+    const ticket = await supportService.getById(ticketId);
+    const employeeId =
+      req.user?.employeeId != null && Number.isFinite(Number(req.user.employeeId))
+        ? Number(req.user.employeeId)
+        : null;
+    const isOwner = employeeId != null && ticket.employeeId === employeeId;
+    const isAssigned =
+      employeeId != null &&
+      (ticket.assignedHandlerId === employeeId || ticket.transferTargetHandlerId === employeeId);
+    const isAdmin = canManageSupportHandlers(req);
+
+    if (!isOwner && !isAssigned && !isAdmin) {
+      return res.status(403).json(fail('You are not authorized to message on this ticket'));
+    }
+
     const isIt = await isSupportIt(req);
     const senderRole = isIt ? 'IT_HANDLER' : 'EMPLOYEE';
     const senderName =
@@ -370,16 +399,15 @@ supportRouter.post('/:id/messages', async (req: Request, res: Response) => {
 // ==========================================
 supportRouter.post('/:id/transfer/request', async (req: Request, res: Response) => {
   try {
-    if (!(await isSupportIt(req))) {
-      return res.status(403).json(fail('Only IT Support handlers can transfer tickets'));
-    }
+    const ticketId = p(req.params.id);
+    await assertCanManageTicket(req, ticketId);
     const targetHandlerEmployeeId = Number(req.body?.targetHandlerEmployeeId);
     if (!targetHandlerEmployeeId || !Number.isFinite(targetHandlerEmployeeId)) {
       return res.status(400).json(fail('Target handler employee ID is required'));
     }
     const reason = String(req.body?.reason ?? '');
     const ticket = await supportService.requestTransfer({
-      ticketId: p(req.params.id),
+      ticketId,
       actorId: String(req.user!.id),
       targetHandlerEmployeeId,
       reason,
@@ -414,11 +442,10 @@ supportRouter.post('/:id/transfer/respond', async (req: Request, res: Response) 
 // ==========================================
 supportRouter.post('/:id/remote/request', async (req: Request, res: Response) => {
   try {
-    if (!(await isSupportIt(req))) {
-      return res.status(403).json(fail('Only IT Support can request remote control'));
-    }
+    const ticketId = p(req.params.id);
+    await assertCanManageTicket(req, ticketId);
     const session = await supportService.requestRemoteSession({
-      ticketId: p(req.params.id),
+      ticketId,
       handlerUserId: String(req.user!.id),
       accessLevel: req.body?.accessLevel ?? 'FULL_CONTROL',
       uacEnabled: req.body?.uacEnabled !== false,

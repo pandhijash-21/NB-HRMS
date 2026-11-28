@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -24,6 +25,25 @@ class _SupportHubScreenState extends ConsumerState<SupportHubScreen> {
   bool _includeClosed = false;
   String _searchQuery = '';
   SupportTicketStatus? _selectedStatusFilter;
+  Timer? _pollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-refresh support tickets list every 3.5 seconds
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 3500), (_) {
+      if (mounted) {
+        ref.invalidate(mySupportTicketsProvider);
+        ref.invalidate(supportQueueProvider);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

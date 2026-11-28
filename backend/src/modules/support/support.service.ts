@@ -128,7 +128,68 @@ async function findAvailableHandler(excludeEmployeeId?: number | null): Promise<
     },
     select: { employeeId: true, maxConcurrentTickets: true },
   });
-  if (assignees.length === 0) return null;
+
+  if (assignees.length === 0) {
+    // Fallback when no explicit assignees are configured: auto-assign to IT/Admin users with employeeId
+    const fallbackUsers = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        deletedAt: null,
+        employeeId: { not: null },
+        OR: [
+          {
+            role: {
+              name: {
+                in: [
+                  'ADMIN',
+                  'HR',
+                  'HR_MANAGER',
+                  'SYSTEMADMIN',
+                  'SYSTEM_ADMIN',
+                  'SYSTEM_ADMINISTRATOR',
+                  'SUPERADMIN',
+                ],
+              },
+            },
+          },
+          { companyAdminGranted: true },
+          {
+            role: {
+              permissions: {
+                some: {
+                  moduleKey: 'SUPPORT',
+                  canApprove: true,
+                },
+              },
+            },
+          },
+        ],
+      },
+      select: { employeeId: true },
+      take: 20,
+    });
+
+    const candidateIds = fallbackUsers
+      .map((u) => u.employeeId)
+      .filter((id): id is number => id != null && id !== excludeEmployeeId);
+
+    if (candidateIds.length === 0) return null;
+
+    const candidateLoads = await Promise.all(
+      candidateIds.map(async (empId) => {
+        const count = await prisma.supportTicket.count({
+          where: {
+            assignedHandlerId: empId,
+            status: { in: [SupportTicketStatus.OPEN, SupportTicketStatus.IN_REVIEW] },
+          },
+        });
+        return { employeeId: empId, load: count };
+      }),
+    );
+
+    candidateLoads.sort((a, b) => a.load - b.load);
+    return candidateLoads[0];
+  }
 
   const handlerLoads = await Promise.all(
     assignees.map(async (a) => {
@@ -1391,7 +1452,7 @@ $screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
 
 while ($true) {
     try {
-        $url = "${serverUrl}/api/v1/support/${ticketId}/remote/commands"
+        $url = "${serverUrl}/api/support/${ticketId}/remote/commands"
         $resp = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 4
         if ($resp -and $resp.data) {
             foreach ($cmd in $resp.data) {

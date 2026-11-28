@@ -362,21 +362,27 @@ class SupportRepository {
     );
   }
 
-  Future<void> sendRemoteControlCommand(String ticketId, Map<String, dynamic> command) {
-    return _dio.postEnvelope<void>(
-      'support/$ticketId/remote/control',
-      data: command,
-      parse: (_) {},
-    );
+  Future<void> sendRemoteControlCommand(String ticketId, Map<String, dynamic> command) async {
+    try {
+      await _dio.postEnvelope<void>(
+        'support/$ticketId/remote/control',
+        data: command,
+        parse: (_) {},
+      );
+    } catch (_) {}
   }
 
-  Future<Map<String, dynamic>> getAgentStatus(String ticketId) {
-    return _dio.getEnvelope<Map<String, dynamic>>(
-      'support/$ticketId/remote/agent-status',
-      parse: (raw) {
-        if (raw is! Map) return {'online': false};
-        return Map<String, dynamic>.from(raw);
-      },
-    );
+  Future<Map<String, dynamic>> getAgentStatus(String ticketId) async {
+    try {
+      return await _dio.getEnvelope<Map<String, dynamic>>(
+        'support/$ticketId/remote/agent-status',
+        parse: (raw) {
+          if (raw is! Map) return {'online': false};
+          return Map<String, dynamic>.from(raw);
+        },
+      );
+    } catch (_) {
+      return {'online': false};
+    }
   }
 }

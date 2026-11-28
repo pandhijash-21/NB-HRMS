@@ -171,9 +171,9 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
 
   void _showAgentInstructionsDialog() {
     final agentBatUrl =
-        'https://crm.nbsince1946.com/api/v1/support/${widget.ticketId}/remote/agent.bat';
+        'https://crm.nbsince1946.com/api/support/${widget.ticketId}/remote/agent.bat';
     final powershellCmd =
-        'powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \$s=(Invoke-WebRequest -Uri \'https://crm.nbsince1946.com/api/v1/support/${widget.ticketId}/remote/agent.ps1\' -UseBasicParsing).Content; Invoke-Expression \$s"';
+        'powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \$s=(Invoke-WebRequest -Uri \'https://crm.nbsince1946.com/api/support/${widget.ticketId}/remote/agent.ps1\' -UseBasicParsing).Content; Invoke-Expression \$s"';
 
     showDialog(
       context: context,
@@ -335,11 +335,11 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
           // Handle remote data (clipboard, status, etc.)
           try {
             final text = String.fromCharCodes(event.data);
-            if (mounted && text.isNotEmpty) {
+            if (mounted && text.startsWith('CLIP:')) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Remote Message: $text'),
-                  duration: const Duration(seconds: 2),
+                const SnackBar(
+                  content: Text('Remote clipboard synchronized'),
+                  duration: Duration(seconds: 1),
                 ),
               );
             }

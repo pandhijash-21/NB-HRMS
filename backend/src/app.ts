@@ -224,6 +224,7 @@ app.use('/api/hub/partners', ...crmLicenseGuard, hubRouter);
 app.use('/api/earth', earthRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/support', supportRouter);
+app.use('/api/v1/support', supportRouter);
 app.use('/api/events', sseEventsRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/meetings', meetingsRouter);

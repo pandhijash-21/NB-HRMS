@@ -3026,6 +3026,10 @@ model ErpPurchaseSettings {
   priorityHighWithinDays    Int      @default(3) @map("priority_high_within_days")
   /// MEDIUM if due within this many days (and above high threshold). Else LOW.
   priorityMedWithinDays     Int      @default(7) @map("priority_med_within_days")
+  /// Enable unique vendor quotation invite links (email OTP portal).
+  vendorPortalEnabled       Boolean  @default(false) @map("vendor_portal_enabled")
+  /// When sending invite emails from admin UI, allow/auto-send mail to vendors.
+  vendorPortalAutoEmail     Boolean  @default(false) @map("vendor_portal_auto_email")
   updatedAt                 DateTime @updatedAt @map("updated_at")
   createdAt                 DateTime @default(now()) @map("created_at")
 
@@ -3074,12 +3078,61 @@ model ErpPurchaseRequest {
   lines       ErpPurchaseRequestLine[]
   quotations  ErpPurchaseQuotation[]
   purchaseOrders ErpPurchaseOrder[]
+  vendorInvite ErpPurchaseVendorInvite?
 
   @@index([status, prDate])
   @@index([approverEmployeeId, status])
   @@index([storeId])
   @@index([vendorId])
   @@map("erp_purchase_requests")
+}
+
+/// Unique public link token for vendors to quote against an approved PR (RFQ).
+model ErpPurchaseVendorInvite {
+  id                String   @id @default(uuid())
+  purchaseRequestId String   @unique @map("purchase_request_id")
+  token             String   @unique
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  purchaseRequest ErpPurchaseRequest         @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  otps            ErpPurchaseVendorOtp[]
+  sessions        ErpPurchaseVendorSession[]
+
+  @@map("erp_purchase_vendor_invites")
+}
+
+model ErpPurchaseVendorOtp {
+  id            String    @id @default(uuid())
+  inviteId      String    @map("invite_id")
+  email         String
+  otpHash       String    @map("otp_hash")
+  attempts      Int       @default(0)
+  expiresAt     DateTime  @map("expires_at")
+  cooldownUntil DateTime? @map("cooldown_until")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  invite ErpPurchaseVendorInvite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+
+  @@unique([inviteId, email])
+  @@index([inviteId])
+  @@map("erp_purchase_vendor_otps")
+}
+
+model ErpPurchaseVendorSession {
+  id        String   @id @default(uuid())
+  inviteId  String   @map("invite_id")
+  email     String
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  invite ErpPurchaseVendorInvite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+
+  @@index([inviteId, email])
+  @@map("erp_purchase_vendor_sessions")
 }
 
 model ErpPurchaseRequestLine {
@@ -3117,9 +3170,31 @@ model ErpPurchaseQuotation {
   address               String?                    @db.Text
   gstNo                 String?                    @map("gst_no")
   panNo                 String?                    @map("pan_no")
+  /// INCLUSIVE | EXCLUSIVE
+  gstMode               String                     @default("INCLUSIVE") @map("gst_mode")
+  /// When exclusive: CGST_SGST | IGST (Gujarat vendors → CGST_SGST, else IGST)
+  gstTaxType            String?                    @map("gst_tax_type")
+  vendorStateCode       String?                    @map("vendor_state_code")
+  cgstRate              Decimal?                   @map("cgst_rate") @db.Decimal(6, 2)
+  sgstRate              Decimal?                   @map("sgst_rate") @db.Decimal(6, 2)
+  igstRate              Decimal?                   @map("igst_rate") @db.Decimal(6, 2)
+  cgstAmount            Decimal                    @default(0) @map("cgst_amount") @db.Decimal(16, 2)
+  sgstAmount            Decimal                    @default(0) @map("sgst_amount") @db.Decimal(16, 2)
+  igstAmount            Decimal                    @default(0) @map("igst_amount") @db.Decimal(16, 2)
+  /// INCLUSIVE | EXCLUSIVE
+  freightMode           String                     @default("INCLUSIVE") @map("freight_mode")
+  freightAmount         Decimal                    @default(0) @map("freight_amount") @db.Decimal(16, 2)
+  paymentTerms          String?                    @map("payment_terms")
+  deliveryDays          Int?                       @map("delivery_days")
+  rating                Decimal?                   @db.Decimal(3, 1)
+  /// Line subtotal (qty × rate)
   status                ErpPurchaseQuotationStatus @default(DRAFT)
   totalAmount           Decimal                    @default(0) @map("total_amount") @db.Decimal(16, 2)
+  /// Subtotal + exclusive GST + exclusive freight
+  finalAmount           Decimal                    @default(0) @map("final_amount") @db.Decimal(16, 2)
   remarks               String?                    @db.Text
+  vendorEmail           String?                    @map("vendor_email")
+  submittedViaPortal    Boolean                    @default(false) @map("submitted_via_portal")
   submittedAt           DateTime?                  @map("submitted_at")
   selectedAt            DateTime?                  @map("selected_at")
   selectedByEmployeeId  Int?                       @map("selected_by_employee_id")

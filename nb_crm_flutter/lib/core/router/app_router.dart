@@ -19,6 +19,7 @@ import '../../features/auth/presentation/verify_emails_screen.dart';
 import '../../features/public/presentation/screens/privacy_policy_screen.dart';
 import '../../features/public/presentation/screens/terms_of_service_screen.dart';
 import '../../features/public/presentation/screens/contact_us_screen.dart';
+import '../../features/erp/presentation/screens/vendor_quotation_portal_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/profile_edit_screen.dart';
@@ -110,6 +111,7 @@ import '../../features/erp/presentation/screens/boq_list_screen.dart';
 import '../../features/erp/presentation/screens/boq_form_screen.dart';
 import '../../features/erp/presentation/screens/store_config_screen.dart';
 import '../../features/erp/presentation/screens/store_masters_config_screen.dart';
+import '../../features/erp/presentation/screens/materials_config_screen.dart';
 import '../../features/erp/presentation/screens/inventory_config_screen.dart';
 import '../../features/erp/presentation/screens/purchase_home_screen.dart';
 import '../../features/erp/presentation/screens/purchase_quotation_screen.dart';
@@ -207,6 +209,8 @@ GoRouter createAppRouter(AuthBloc authBloc) {
       final trackingSetup = loc == '/tracking/setup';
       final guestMeet = loc.startsWith('/meet/guest') || loc.startsWith('/meet/r/');
       final isClientPortal = loc.startsWith('/client-portal') || state.uri.path.startsWith('/client-portal');
+      final isVendorQuotePortal =
+          loc.startsWith('/vendor-quote') || state.uri.path.startsWith('/vendor-quote');
       final isPrivacyPolicy = loc == '/privacypolicy' || state.uri.path == '/privacypolicy';
       final isTermsOfService = loc == '/termsofservice' || state.uri.path == '/termsofservice' || loc == '/terms' || state.uri.path == '/terms';
       final isContactUs = loc == '/contactus' || state.uri.path == '/contactus';
@@ -238,7 +242,16 @@ GoRouter createAppRouter(AuthBloc authBloc) {
         } else if (isSuperAdminLogin) {
           next = null;
         } else {
-          next = (loggingIn || forgettingPassword || guestMeet || isClientPortal || isPrivacyPolicy || isTermsOfService || isContactUs) ? null : '/login';
+          next = (loggingIn ||
+                  forgettingPassword ||
+                  guestMeet ||
+                  isClientPortal ||
+                  isVendorQuotePortal ||
+                  isPrivacyPolicy ||
+                  isTermsOfService ||
+                  isContactUs)
+              ? null
+              : '/login';
         }
       } else if (isSuperAdmin) {
         // SaaS Platform Superadmin is dedicated strictly to the platform console
@@ -263,8 +276,12 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           next = '/home';
         } else if (changingPassword || verifyingEmails || loggingIn) {
           next = '/home';
-        } else if (trackingSetup || isPrivacyPolicy || isTermsOfService || isContactUs) {
-          next = null; // allow full-screen tracking setup or public policy/contact screens
+        } else if (trackingSetup ||
+            isPrivacyPolicy ||
+            isTermsOfService ||
+            isContactUs ||
+            isVendorQuotePortal) {
+          next = null; // allow full-screen tracking setup, public pages, vendor quote portal
         } else {
           // Suite access: company license ∩ user permission matrix
           final enabled = auth.user?.enabledModules ?? const ['HRMS', 'CRM', 'ERP'];
@@ -352,6 +369,8 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             } else if (loc.startsWith('/erp/boq') && !Permissions.canReadBoq(perms, role)) {
               next = '/erp/home';
             } else if (loc.startsWith('/erp/store') && !Permissions.canReadStore(perms, role)) {
+              next = '/erp/home';
+            } else if (loc.startsWith('/erp/materials') && !Permissions.canReadStore(perms, role)) {
               next = '/erp/home';
             } else if (loc.startsWith('/erp/purchase') && !Permissions.canReadPurchase(perms, role)) {
               next = '/erp/home';
@@ -522,6 +541,13 @@ GoRouter createAppRouter(AuthBloc authBloc) {
               child: CircularProgressIndicator(color: Color(0xFFF59E0B)),
             ),
           );
+        },
+      ),
+      GoRoute(
+        path: '/vendor-quote/:token',
+        builder: (context, state) {
+          final token = state.pathParameters['token'] ?? '';
+          return VendorQuotationPortalScreen(token: token);
         },
       ),
       ShellRoute(
@@ -889,6 +915,10 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             builder: (context, state) => const StoreConfigScreen(),
           ),
           GoRoute(
+            path: '/erp/materials',
+            builder: (context, state) => const MaterialsConfigScreen(),
+          ),
+          GoRoute(
             path: '/erp/store/purchase-requests',
             builder: (context, state) => const PurchaseRequestListScreen(),
           ),
@@ -924,7 +954,7 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           ),
           GoRoute(
             path: '/erp/configurations/materials',
-            builder: (context, state) => const StoreConfigScreen(initialTab: 0),
+            builder: (context, state) => const MaterialsConfigScreen(),
           ),
           GoRoute(
             path: '/erp/configurations/machines',

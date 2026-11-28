@@ -139,7 +139,7 @@ class _MaterialsConfigScreenState extends State<MaterialsConfigScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Materials'),
-        leading: const AppBackButton(fallbackLocation: '/erp/configurations'),
+        leading: const AppBackButton(fallbackLocation: '/erp/home'),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -150,6 +150,16 @@ class _MaterialsConfigScreenState extends State<MaterialsConfigScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Text(
+                    'Materials ledger (independent of Store)',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Store keeps inward/outward summary. This screen is the full materials ledger.',
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+                  ),
+                  const SizedBox(height: 16),
                   const Text('Add Material', style: TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 12),
                   TextField(controller: _brandCtrl, decoration: const InputDecoration(labelText: 'Brand', border: OutlineInputBorder())),

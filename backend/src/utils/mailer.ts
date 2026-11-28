@@ -544,3 +544,96 @@ export async function sendSupportTicketNotificationEmail(params: {
     return false;
   }
 }
+
+export async function sendVendorQuotationInviteEmail(
+  to: string,
+  opts: { prNumber: string; link: string; projectName?: string | null },
+): Promise<void> {
+  const t = getTransporter();
+  if (!t) {
+    console.log(`[SMTP SIMULATED - DEV] Vendor quote invite ${opts.prNumber} → ${to}: ${opts.link}`);
+    return;
+  }
+  if (!to) return;
+  await t.sendMail({
+    from: `"NB CRM" <${env.SMTP_FROM ?? env.SMTP_USER}>`,
+    to,
+    subject: `Quotation request ${opts.prNumber} — submit your rates`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: #1e3a5f; padding: 24px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 20px;">Quotation request</h1>
+          <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0;">${escapeHtml(opts.prNumber)}</p>
+        </div>
+        <div style="padding: 24px; background: #f8fafc;">
+          <p style="color:#333;">You are invited to submit a quotation${opts.projectName ? ` for <strong>${escapeHtml(opts.projectName)}</strong>` : ''}.</p>
+          <p style="color:#555; font-size: 14px;">Open the secure link, verify your email with OTP, then enter your rates.</p>
+          <p style="margin-top:20px; text-align:center;">
+            <a href="${escapeHtml(opts.link)}" style="background:#1e3a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:700;">Open quotation form</a>
+          </p>
+          <p style="font-size:12px;color:#888;margin-top:20px;word-break:break-all;">Or copy: ${escapeHtml(opts.link)}</p>
+        </div>
+      </div>
+    `,
+  });
+}
+
+export async function sendVendorQuotationConfirmationEmail(
+  to: string,
+  opts: {
+    prNumber: string;
+    quotationNo: string;
+    vendorName: string;
+    finalAmount: number;
+    lines: Array<{ itemName: string; qty: number; rate: number; amount: number }>;
+  },
+): Promise<void> {
+  const t = getTransporter();
+  if (!t) {
+    console.log(
+      `[SMTP SIMULATED - DEV] Quote confirmation ${opts.quotationNo} → ${to} final=${opts.finalAmount}`,
+    );
+    return;
+  }
+  if (!to) return;
+  const rows = opts.lines
+    .map(
+      (l) =>
+        `<tr>
+          <td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(l.itemName)}</td>
+          <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:right;">${l.qty}</td>
+          <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:right;">${l.rate}</td>
+          <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:right;">${l.amount}</td>
+        </tr>`,
+    )
+    .join('');
+  await t.sendMail({
+    from: `"NB CRM" <${env.SMTP_FROM ?? env.SMTP_USER}>`,
+    to,
+    subject: `Quotation ${opts.quotationNo} received — ${opts.prNumber}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; padding: 20px;">
+        <div style="background: #0f766e; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 20px;">Quotation received</h1>
+        </div>
+        <div style="padding: 24px; background: #f8fafc;">
+          <p>Dear <strong>${escapeHtml(opts.vendorName)}</strong>,</p>
+          <p>We received your quotation <strong>${escapeHtml(opts.quotationNo)}</strong> for <strong>${escapeHtml(opts.prNumber)}</strong>.</p>
+          <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#fff;">
+            <thead>
+              <tr style="background:#e2e8f0;">
+                <th style="padding:6px;text-align:left;">Item</th>
+                <th style="padding:6px;text-align:right;">Qty</th>
+                <th style="padding:6px;text-align:right;">Rate</th>
+                <th style="padding:6px;text-align:right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <p style="font-size:16px;font-weight:700;">Final amount: ₹ ${opts.finalAmount.toFixed(2)}</p>
+          <p style="font-size:13px;color:#666;">Our team will review your quotation on the comparison sheet. You will be contacted if selected.</p>
+        </div>
+      </div>
+    `,
+  });
+}

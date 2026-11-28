@@ -122,6 +122,14 @@ class ErpHomeScreen extends StatelessWidget {
                       onTap: () => context.go('/erp/store'),
                     ),
                     const SizedBox(height: 10),
+                    _ErpTile(
+                      icon: Icons.inventory_2_outlined,
+                      title: 'Materials',
+                      subtitle: 'Independent ledger — total, used, available & used today',
+                      color: const Color(0xFF0369a1),
+                      onTap: () => context.go('/erp/materials'),
+                    ),
+                    const SizedBox(height: 10),
                   ],
                   if (canReadPurchase) ...[
                     _ErpTile(

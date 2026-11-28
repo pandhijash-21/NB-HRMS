@@ -64,8 +64,8 @@ class _DprFormScreenState extends State<DprFormScreen> {
   DateTime? _actualEnd;
 
   List<ErpDprMaterialLine> _draftMaterials = [];
-  /// labourId -> qty text (inline on main form; all labour masters shown)
-  final Map<String, TextEditingController> _labourQtyCtrls = {};
+  /// Labour added on the main DPR form via dropdown (not the resource tabs).
+  List<ErpDprLabourLine> _draftLabour = [];
   List<ErpDprMachineLine> _draftMachines = [];
   final List<ErpDprLine> _lines = [];
   String? _editingDprId;
@@ -83,7 +83,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
   final Map<String, List<ErpProjectTower>> _projectTowers = {};
   bool _loadingInitial = true;
 
-  int _resourceTab = 0; // 0 mat, 1 lab, 2 mac
+  int _resourceTab = 0; // 0 material, 1 machinery (labour is on main form)
   bool _saving = false;
   FormDraftInfo? _draftInfo;
 
@@ -117,42 +117,6 @@ class _DprFormScreenState extends State<DprFormScreen> {
     });
   }
 
-  List<ErpDprLabourLine> _collectLabourFromForm() {
-    final out = <ErpDprLabourLine>[];
-    for (final lb in _labour) {
-      final ctrl = _labourQtyCtrls[lb.id];
-      if (ctrl == null) continue;
-      final qty = double.tryParse(ctrl.text.trim()) ?? 0;
-      if (qty <= 0) continue;
-      out.add(ErpDprLabourLine(
-        labourId: lb.id,
-        name: lb.name,
-        unitCode: lb.unitCode,
-        consumedQty: qty,
-      ));
-    }
-    return out;
-  }
-
-  void _syncLabourQtyControllers() {
-    for (final lb in _labour) {
-      _labourQtyCtrls.putIfAbsent(lb.id, () => TextEditingController(text: ''));
-    }
-  }
-
-  void _applyLabourToControllers(List<ErpDprLabourLine> labour) {
-    _syncLabourQtyControllers();
-    for (final c in _labourQtyCtrls.values) {
-      c.text = '';
-    }
-    for (final row in labour) {
-      final id = row.labourId;
-      if (id == null) continue;
-      final ctrl = _labourQtyCtrls[id];
-      if (ctrl != null) ctrl.text = row.consumedQty > 0 ? row.consumedQty.toString() : '';
-    }
-  }
-
   String get _currentDraftTitle {
     final proj = _projects.where((p) => p.id == _projectId).firstOrNull?.name ?? 'Untitled Project';
     final dateStr = DateFormat('d MMM').format(_reportDate);
@@ -184,7 +148,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
       'completion': _completionCtrl.text.trim(),
       'lines': _lines.map((l) => l.toJson()).toList(),
       'draftMaterials': _draftMaterials.map((m) => m.toJson()).toList(),
-      'draftLabour': _collectLabourFromForm().map((l) => l.toJson()).toList(),
+      'draftLabour': _draftLabour.map((l) => l.toJson()).toList(),
       'draftMachines': _draftMachines.map((m) => m.toJson()).toList(),
     };
 
@@ -296,10 +260,9 @@ class _DprFormScreenState extends State<DprFormScreen> {
     }
     if (d['draftLabour'] is List) {
       try {
-        final labour = (d['draftLabour'] as List)
+        _draftLabour = (d['draftLabour'] as List)
             .map((l) => ErpDprLabourLine.fromJson(l as Map<String, dynamic>))
             .toList();
-        _applyLabourToControllers(labour);
       } catch (_) {}
     }
     if (d['draftMachines'] is List) {
@@ -342,7 +305,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
       _remarksCtrl.clear();
       _completionCtrl.clear();
       _draftMaterials = [];
-      _applyLabourToControllers(const []);
+      _draftLabour = [];
       _draftMachines = [];
     });
     FormDraftService.instance.setActiveMultiDraftId('erp_dpr', _currentDraftId);
@@ -564,7 +527,6 @@ class _DprFormScreenState extends State<DprFormScreen> {
         _machines = res[4] as List<ErpMachine>;
         _labour = res[5] as List<ErpLabour>;
         _editWindowDays = (res[6] as ErpDprSettings).editWindowDays;
-        _syncLabourQtyControllers();
         _loadingInitial = false;
       });
       if (_editingDprId != null) {
@@ -628,9 +590,6 @@ class _DprFormScreenState extends State<DprFormScreen> {
     _consumedCtrl.dispose();
     _remarksCtrl.dispose();
     _completionCtrl.dispose();
-    for (final c in _labourQtyCtrls.values) {
-      c.dispose();
-    }
     super.dispose();
   }
 
@@ -706,7 +665,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
       _actualStart = null;
       _actualEnd = null;
       _draftMaterials = [];
-      _applyLabourToControllers(const []);
+      _draftLabour = [];
       _draftMachines = [];
     });
   }
@@ -825,7 +784,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
           actualStartDate: _actualStart,
           actualEndDate: _actualEnd,
           materials: List.of(_draftMaterials),
-          labour: _collectLabourFromForm(),
+          labour: List.of(_draftLabour),
           machines: List.of(_draftMachines),
         ),
       );
@@ -884,6 +843,76 @@ class _DprFormScreenState extends State<DprFormScreen> {
 
   void _toast(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _addLabourDialog() async {
+    var labour = List<ErpLabour>.from(_labour);
+    String? selectedId;
+    final qtyCtrl = TextEditingController(text: '0');
+    final remCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Add Labour'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LabourDropdownWithCreate(
+                  value: selectedId,
+                  labour: labour,
+                  required: true,
+                  decoration: _dec('Labour Type', required: true),
+                  onChanged: (v) => setLocal(() => selectedId = v),
+                  onLabourCreated: (created) {
+                    setState(() => _labour = [..._labour, created]);
+                    setLocal(() {
+                      labour = [...labour, created];
+                      selectedId = created.id;
+                    });
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: qtyCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: _dec('Consumed Qty', required: true),
+                ),
+                const SizedBox(height: 10),
+                TextField(controller: remCtrl, decoration: _dec('Remarks')),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || selectedId == null) return;
+    final lb = labour.where((x) => x.id == selectedId).firstOrNull;
+    if (lb == null) return;
+    final qty = double.tryParse(qtyCtrl.text) ?? 0;
+    if (qty <= 0) {
+      _toast('Enter labour quantity');
+      return;
+    }
+    setState(() {
+      _draftLabour = [
+        ..._draftLabour,
+        ErpDprLabourLine(
+          labourId: lb.id,
+          name: lb.name,
+          unitCode: lb.unitCode,
+          consumedQty: qty,
+          remarks: remCtrl.text.trim().isEmpty ? null : remCtrl.text.trim(),
+        ),
+      ];
+    });
+    _autoSaveDraft();
   }
 
   Future<void> _addMaterialDialog() async {
@@ -1437,6 +1466,8 @@ class _DprFormScreenState extends State<DprFormScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
+                        _labourMainSection(isDark),
+                        const SizedBox(height: 16),
                         _resourceSection(isDark),
                         const SizedBox(height: 16),
                         Row(
@@ -1505,6 +1536,32 @@ class _DprFormScreenState extends State<DprFormScreen> {
     );
   }
 
+  Widget _labourMainSection(bool isDark) {
+    return _card(
+      isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Text('Labour', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed: _addLabourDialog,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Labour'),
+                style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1e3a5f)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const SizedBox(height: 12),
+          _labourDraftTable(),
+        ],
+      ),
+    );
+  }
+
   Widget _resourceSection(bool isDark) {
     return _card(
       isDark,
@@ -1515,9 +1572,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
             children: [
               _tabChip('Material', 0),
               const SizedBox(width: 8),
-              _tabChip('Labour', 1),
-              const SizedBox(width: 8),
-              _tabChip('Machinery', 2),
+              _tabChip('Machinery', 1),
               const Spacer(),
               if (_resourceTab == 0)
                 FilledButton.icon(
@@ -1527,11 +1582,6 @@ class _DprFormScreenState extends State<DprFormScreen> {
                   style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1e3a5f)),
                 ),
               if (_resourceTab == 1)
-                Text(
-                  'Enter qty for each labour type',
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
-                ),
-              if (_resourceTab == 2)
                 FilledButton.icon(
                   onPressed: _addMachineDialog,
                   icon: const Icon(Icons.add, size: 18),
@@ -1542,8 +1592,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
           ),
           const SizedBox(height: 12),
           if (_resourceTab == 0) _materialTable(),
-          if (_resourceTab == 1) _labourTable(),
-          if (_resourceTab == 2) _machineTable(),
+          if (_resourceTab == 1) _machineTable(),
         ],
       ),
     );
@@ -1607,48 +1656,44 @@ class _DprFormScreenState extends State<DprFormScreen> {
     );
   }
 
-  Widget _labourTable() {
-    _syncLabourQtyControllers();
-    if (_labour.isEmpty) {
+  Widget _labourDraftTable() {
+    if (_draftLabour.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(12),
-        child: Text('No labour types configured. Add them under BOQ / Labour masters.'),
+        child: Text('No labour added yet. Use Add Labour and pick a type from the dropdown.'),
       );
     }
-    return Column(
-      children: [
-        for (var i = 0; i < _labour.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                SizedBox(width: 36, child: Text('${i + 1}', style: const TextStyle(fontWeight: FontWeight.w600))),
-                Expanded(
-                  flex: 3,
-                  child: Text(_labour[i].name, overflow: TextOverflow.ellipsis),
-                ),
-                SizedBox(
-                  width: 72,
-                  child: Text(_labour[i].unitCode ?? '—', style: TextStyle(color: Theme.of(context).hintColor)),
-                ),
-                SizedBox(
-                  width: 110,
-                  child: TextField(
-                    controller: _labourQtyCtrls[_labour[i].id],
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                    decoration: const InputDecoration(
-                      labelText: 'Qty',
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => _autoSaveDraft(),
-                  ),
-                ),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columns: const [
+          DataColumn(label: Text('SR#')),
+          DataColumn(label: Text('LABOUR TYPE')),
+          DataColumn(label: Text('UOM')),
+          DataColumn(label: Text('QTY')),
+          DataColumn(label: Text('REMARKS')),
+          DataColumn(label: Text('ACTION')),
+        ],
+        rows: [
+          for (var i = 0; i < _draftLabour.length; i++)
+            DataRow(
+              cells: [
+                DataCell(Text('${i + 1}')),
+                DataCell(Text(_draftLabour[i].name)),
+                DataCell(Text(_draftLabour[i].unitCode ?? '—')),
+                DataCell(Text(_draftLabour[i].consumedQty.toStringAsFixed(2))),
+                DataCell(Text(_draftLabour[i].remarks ?? '—')),
+                DataCell(IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () {
+                    setState(() => _draftLabour = [..._draftLabour]..removeAt(i));
+                    _autoSaveDraft();
+                  },
+                )),
               ],
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 

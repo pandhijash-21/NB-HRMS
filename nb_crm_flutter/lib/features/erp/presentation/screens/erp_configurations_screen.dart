@@ -292,7 +292,7 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
                   ],
                   if (purchaseLookups.isNotEmpty) ...[
                     _sectionTitle(isDark, 'Purchase lookups'),
-                    _sectionHint(isDark, 'PR type and priority options.'),
+                    _sectionHint(isDark, 'PR type, priority, and payment terms.'),
                     const SizedBox(height: 12),
                     ConfigSquareGrid(
                       tiles: [

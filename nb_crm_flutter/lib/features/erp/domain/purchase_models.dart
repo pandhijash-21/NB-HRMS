@@ -8,6 +8,8 @@ class ErpPurchaseSettings {
     this.defaultPoTerms = const [],
     this.priorityHighWithinDays = 3,
     this.priorityMedWithinDays = 7,
+    this.vendorPortalEnabled = false,
+    this.vendorPortalAutoEmail = false,
   });
 
   final String id;
@@ -20,6 +22,8 @@ class ErpPurchaseSettings {
   final int priorityHighWithinDays;
   /// Need-by within this many days (above high) → MEDIUM; else LOW
   final int priorityMedWithinDays;
+  final bool vendorPortalEnabled;
+  final bool vendorPortalAutoEmail;
 
   factory ErpPurchaseSettings.fromJson(Map<String, dynamic> json) {
     final approver = json['defaultApprover'];
@@ -40,6 +44,8 @@ class ErpPurchaseSettings {
           : const [],
       priorityHighWithinDays: int.tryParse('${json['priorityHighWithinDays'] ?? 3}') ?? 3,
       priorityMedWithinDays: int.tryParse('${json['priorityMedWithinDays'] ?? 7}') ?? 7,
+      vendorPortalEnabled: json['vendorPortalEnabled'] == true,
+      vendorPortalAutoEmail: json['vendorPortalAutoEmail'] == true,
     );
   }
 }
@@ -335,8 +341,23 @@ class ErpPurchaseQuotation {
     this.address,
     this.gstNo,
     this.panNo,
+    this.gstMode = 'INCLUSIVE',
+    this.gstTaxType,
+    this.vendorStateCode,
+    this.cgstRate,
+    this.sgstRate,
+    this.igstRate,
+    this.cgstAmount = 0,
+    this.sgstAmount = 0,
+    this.igstAmount = 0,
+    this.freightMode = 'INCLUSIVE',
+    this.freightAmount = 0,
+    this.paymentTerms,
+    this.deliveryDays,
+    this.rating,
     required this.status,
     required this.totalAmount,
+    this.finalAmount = 0,
     this.remarks,
     this.selectedByName,
     this.purchaseOrderId,
@@ -353,17 +374,35 @@ class ErpPurchaseQuotation {
   final String? address;
   final String? gstNo;
   final String? panNo;
+  final String gstMode;
+  final String? gstTaxType;
+  final String? vendorStateCode;
+  final double? cgstRate;
+  final double? sgstRate;
+  final double? igstRate;
+  final double cgstAmount;
+  final double sgstAmount;
+  final double igstAmount;
+  final String freightMode;
+  final double freightAmount;
+  final String? paymentTerms;
+  final int? deliveryDays;
+  final double? rating;
   final String status;
   final double totalAmount;
+  final double finalAmount;
   final String? remarks;
   final String? selectedByName;
   final String? purchaseOrderId;
   final String? purchaseOrderNo;
   final List<ErpPurchaseQuotationLine> lines;
 
+  double get displayFinal => finalAmount > 0 ? finalAmount : totalAmount;
+
   factory ErpPurchaseQuotation.fromJson(Map<String, dynamic> json) {
     final selectedBy = json['selectedBy'];
     final po = json['purchaseOrder'];
+    final total = double.tryParse('${json['totalAmount'] ?? 0}') ?? 0;
     return ErpPurchaseQuotation(
       id: json['id']?.toString() ?? '',
       purchaseRequestId: json['purchaseRequestId']?.toString() ?? '',
@@ -375,8 +414,25 @@ class ErpPurchaseQuotation {
       address: json['address']?.toString(),
       gstNo: json['gstNo']?.toString(),
       panNo: json['panNo']?.toString(),
+      gstMode: (json['gstMode']?.toString() ?? 'INCLUSIVE').toUpperCase(),
+      gstTaxType: json['gstTaxType']?.toString(),
+      vendorStateCode: json['vendorStateCode']?.toString(),
+      cgstRate: json['cgstRate'] == null ? null : double.tryParse('${json['cgstRate']}'),
+      sgstRate: json['sgstRate'] == null ? null : double.tryParse('${json['sgstRate']}'),
+      igstRate: json['igstRate'] == null ? null : double.tryParse('${json['igstRate']}'),
+      cgstAmount: double.tryParse('${json['cgstAmount'] ?? 0}') ?? 0,
+      sgstAmount: double.tryParse('${json['sgstAmount'] ?? 0}') ?? 0,
+      igstAmount: double.tryParse('${json['igstAmount'] ?? 0}') ?? 0,
+      freightMode: (json['freightMode']?.toString() ?? 'INCLUSIVE').toUpperCase(),
+      freightAmount: double.tryParse('${json['freightAmount'] ?? 0}') ?? 0,
+      paymentTerms: json['paymentTerms']?.toString(),
+      deliveryDays: json['deliveryDays'] == null
+          ? null
+          : int.tryParse('${json['deliveryDays']}'),
+      rating: json['rating'] == null ? null : double.tryParse('${json['rating']}'),
       status: json['status']?.toString() ?? 'DRAFT',
-      totalAmount: double.tryParse('${json['totalAmount'] ?? 0}') ?? 0,
+      totalAmount: total,
+      finalAmount: double.tryParse('${json['finalAmount'] ?? total}') ?? total,
       remarks: json['remarks']?.toString(),
       selectedByName: selectedBy is Map ? selectedBy['name']?.toString() : null,
       purchaseOrderId: po is Map ? po['id']?.toString() : null,

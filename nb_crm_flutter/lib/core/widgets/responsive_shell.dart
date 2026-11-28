@@ -531,6 +531,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Store',
             section: 'ERP',
           ),
+        if (Permissions.canReadStore(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/erp/materials',
+            Icons.inventory_2_outlined,
+            Icons.inventory_2,
+            'Materials',
+            section: 'ERP',
+          ),
         if (Permissions.canReadPurchase(auth.permissions, auth.user?.role))
           const _Destination(
             '/erp/purchase',

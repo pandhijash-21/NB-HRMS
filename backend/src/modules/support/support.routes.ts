@@ -73,6 +73,7 @@ supportRouter.use((req, res, next) => {
     req.path.endsWith('/review') ||
     req.path.endsWith('/resolve') ||
     req.path.endsWith('/force-close') ||
+    req.path.endsWith('/assign') ||
     req.path.endsWith('/messages') ||
     req.path.includes('/transfer') ||
     req.path.includes('/remote')
@@ -143,6 +144,10 @@ supportRouter.post('/', async (req: Request, res: Response) => {
       title: String(req.body?.title ?? ''),
       description: String(req.body?.description ?? ''),
       photoUrl: req.body?.photoUrl != null ? String(req.body.photoUrl) : null,
+      assignedHandlerId:
+        req.body?.assignedHandlerId != null && Number.isFinite(Number(req.body.assignedHandlerId))
+          ? Number(req.body.assignedHandlerId)
+          : null,
     });
     return res.status(201).json(ok(ticket));
   } catch (e: any) {
@@ -170,7 +175,17 @@ supportRouter.get('/queue', async (req: Request, res: Response) => {
     }
     const includeClosed =
       req.query.includeClosed === 'true' || req.query.includeClosed === '1';
-    const data = await supportService.listQueue({ includeClosed });
+    const isAdmin = canManageSupportHandlers(req);
+    const employeeId =
+      req.user?.employeeId != null && Number.isFinite(Number(req.user.employeeId))
+        ? Number(req.user.employeeId)
+        : null;
+
+    const data = await supportService.listQueue({
+      includeClosed,
+      employeeId,
+      isAdmin,
+    });
     return res.json(ok(data));
   } catch (e: any) {
     return res.status(400).json(fail(e.message));
@@ -184,6 +199,7 @@ supportRouter.get('/:id', async (req: Request, res: Response) => {
       userId: String(req.user!.id),
       employeeId: employeeId && Number.isFinite(employeeId) ? employeeId : null,
       isIt: await isSupportIt(req),
+      isAdmin: canManageSupportHandlers(req),
     });
     return res.json(ok(ticket));
   } catch (e: any) {
@@ -399,10 +415,64 @@ supportRouter.post('/:id/remote/end', async (req: Request, res: Response) => {
   }
 });
 
+supportRouter.post('/:id/assign', async (req: Request, res: Response) => {
+  try {
+    if (!(await isSupportIt(req))) {
+      return res.status(403).json(fail('Only IT Support or Admin can assign tickets'));
+    }
+    const handlerId = Number(req.body?.handlerId ?? req.body?.assignedHandlerId);
+    if (!handlerId || !Number.isFinite(handlerId)) {
+      return res.status(400).json(fail('Valid target handlerId is required'));
+    }
+    const updated = await supportService.reassignTicket({
+      ticketId: p(req.params.id),
+      newHandlerId: handlerId,
+      actorId: String(req.user!.id),
+      note: req.body?.note != null ? String(req.body.note) : undefined,
+    });
+    return res.json(ok(updated));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
 supportRouter.get('/:id/remote/active', async (req: Request, res: Response) => {
   try {
-    const session = await supportService.getActiveRemoteSession(p(req.params.id));
-    return res.json(ok(session));
+    const ticketId = p(req.params.id);
+    const session = await supportService.getActiveRemoteSession(ticketId);
+    if (!session) return res.json(ok(null));
+
+    // Also issue livekit token so the caller can directly connect
+    let tokenData: any = null;
+    try {
+      tokenData = await supportService.generateRemoteToken({
+        ticketId,
+        userId: String(req.user!.id),
+        userName: (req.user as any)?.name || (req.user as any)?.fullName || 'User',
+      });
+    } catch {}
+
+    return res.json(
+      ok({
+        ...session,
+        token: tokenData?.token ?? null,
+        livekitUrl: tokenData?.livekitUrl ?? null,
+      }),
+    );
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+supportRouter.post('/:id/remote/token', async (req: Request, res: Response) => {
+  try {
+    const ticketId = p(req.params.id);
+    const data = await supportService.generateRemoteToken({
+      ticketId,
+      userId: String(req.user!.id),
+      userName: (req.user as any)?.name || (req.user as any)?.fullName || 'User',
+    });
+    return res.json(ok(data));
   } catch (e: any) {
     return res.status(400).json(fail(e.message));
   }

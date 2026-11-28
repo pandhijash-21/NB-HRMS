@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
@@ -10,7 +11,6 @@ import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/support_models.dart';
 import '../support_providers.dart';
 import '../widgets/support_ticket_chat_widget.dart';
-import 'remote_operator_screen.dart';
 
 class SupportDetailScreen extends ConsumerStatefulWidget {
   const SupportDetailScreen({super.key, required this.ticketId});
@@ -381,6 +381,16 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
           onPressed: () => _transferTicketDialog(context, ref, ticket),
           icon: const Icon(Icons.swap_horiz_rounded),
           label: const Text('Transfer Ticket to another handler'),
+        ),
+      );
+      widgets.add(const SizedBox(height: 8));
+
+      // Reassign Ticket (Direct Handler Reassignment)
+      widgets.add(
+        OutlinedButton.icon(
+          onPressed: () => _reassignTicketDialog(context, ref, ticket),
+          icon: const Icon(Icons.assignment_ind_outlined),
+          label: const Text('Reassign Ticket to another handler'),
         ),
       );
       widgets.add(const SizedBox(height: 8));
@@ -796,6 +806,99 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
     }
   }
 
+  // Direct Reassign Ticket Dialog
+  Future<void> _reassignTicketDialog(
+      BuildContext context, WidgetRef ref, SupportTicket ticket) async {
+    final handlersAsync = await ref.read(supportHandlersProvider.future);
+    final eligibleHandlers = handlersAsync
+        .where((h) => h.employeeId != ticket.assignedHandlerId && h.employeeId != ticket.employeeId)
+        .toList();
+
+    if (!context.mounted) return;
+    if (eligibleHandlers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No other eligible IT handlers available')),
+      );
+      return;
+    }
+
+    int? selectedEmpId = eligibleHandlers.first.employeeId;
+    final noteCtrl = TextEditingController();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Reassign Ticket Handler'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Select the IT team member to reassign this ticket to (ticket creator is excluded):',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: selectedEmpId,
+                items: eligibleHandlers.map((h) {
+                  return DropdownMenuItem<int>(
+                    value: h.employeeId,
+                    child: Text(h.displayName),
+                  );
+                }).toList(),
+                onChanged: (val) => setLocal(() => selectedEmpId = val),
+                decoration: const InputDecoration(
+                  labelText: 'Target Handler',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Reassignment note (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Reassign Now'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (ok != true || selectedEmpId == null) return;
+    try {
+      await ref.read(supportRepositoryProvider).reassignTicket(
+            ticket.id,
+            handlerId: selectedEmpId!,
+            note: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+          );
+      _refresh(ref, ticket.id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ticket successfully reassigned')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
   // Remote Access Actions
   Future<void> _requestRemoteOperator(
       BuildContext context, WidgetRef ref, SupportTicket ticket) async {
@@ -835,17 +938,31 @@ class _SupportDetailScreenState extends ConsumerState<SupportDetailScreen>
     }
   }
 
-  void _openRemoteConsole(BuildContext context, SupportRemoteSession session) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => RemoteOperatorScreen(
-          ticketId: widget.ticketId,
-          sessionId: session.id,
-          roomName: session.roomName,
-        ),
-      ),
-    );
+  Future<void> _openRemoteConsole(BuildContext context, SupportRemoteSession session) async {
+    try {
+      final tokenData = await ref.read(supportRepositoryProvider).getRemoteToken(widget.ticketId);
+      if (!context.mounted) return;
+      context.push(
+        '/support/${widget.ticketId}/remote',
+        extra: {
+          'sessionId': session.id,
+          'roomName': session.roomName,
+          'token': tokenData['token'],
+          'livekitUrl': tokenData['livekitUrl'],
+        },
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      context.push(
+        '/support/${widget.ticketId}/remote',
+        extra: {
+          'sessionId': session.id,
+          'roomName': session.roomName,
+          'token': session.token,
+          'livekitUrl': session.livekitUrl,
+        },
+      );
+    }
   }
 }
 

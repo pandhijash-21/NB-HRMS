@@ -1,8 +1,12 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/nb_icon.dart';
+import '../../../../core/utils/clipboard_image_helper.dart';
+import '../../../../core/utils/platform_file_picker.dart';
 import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/support_models.dart';
@@ -28,9 +32,24 @@ class _SupportTicketChatWidgetState
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   bool _sending = false;
+  bool _uploadingAttachment = false;
+
+  String? _pendingAttachmentUrl;
+  String? _pendingAttachmentName;
+  Uint8List? _pendingAttachmentBytes;
+
+  void Function()? _pasteDisposer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Register clipboard paste listener for images
+    _pasteDisposer = attachClipboardPasteListener(_handlePastedImage);
+  }
 
   @override
   void dispose() {
+    _pasteDisposer?.call();
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -48,16 +67,146 @@ class _SupportTicketChatWidgetState
     });
   }
 
-  Future<void> _send() async {
-    final text = _msgCtrl.text.trim();
-    if (text.isEmpty || _sending) return;
+  Future<void> _handlePastedImage(PickedFileData data) async {
+    final auth = ref.read(authNotifierProvider);
+    final employeeId = auth.user?.employeeId;
+    if (employeeId == null) return;
 
-    setState(() => _sending = true);
-    _msgCtrl.clear();
+    setState(() {
+      _uploadingAttachment = true;
+      _pendingAttachmentBytes = data.bytes;
+      _pendingAttachmentName = data.name;
+    });
 
     try {
       final repo = ref.read(supportRepositoryProvider);
-      await repo.sendMessage(widget.ticketId, message: text);
+      final url = await repo.uploadPhoto(
+        employeeId: employeeId,
+        bytes: data.bytes,
+        filename: data.name,
+      );
+      if (mounted) {
+        setState(() {
+          _pendingAttachmentUrl = url;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload image: $e')),
+        );
+        setState(() {
+          _pendingAttachmentBytes = null;
+          _pendingAttachmentName = null;
+          _pendingAttachmentUrl = null;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingAttachment = false);
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final auth = ref.read(authNotifierProvider);
+    final employeeId = auth.user?.employeeId;
+    if (employeeId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Employee profile not linked')),
+      );
+      return;
+    }
+
+    final picked = await pickFileFromDevice(imagesOnly: true);
+    if (picked == null) return;
+
+    setState(() {
+      _uploadingAttachment = true;
+      _pendingAttachmentBytes = picked.bytes;
+      _pendingAttachmentName = picked.name;
+    });
+
+    try {
+      final repo = ref.read(supportRepositoryProvider);
+      final url = await repo.uploadPhoto(
+        employeeId: employeeId,
+        bytes: picked.bytes,
+        filename: picked.name,
+      );
+      if (mounted) {
+        setState(() {
+          _pendingAttachmentUrl = url;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload image: $e')),
+        );
+        setState(() {
+          _pendingAttachmentBytes = null;
+          _pendingAttachmentName = null;
+          _pendingAttachmentUrl = null;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingAttachment = false);
+    }
+  }
+
+  Future<void> _pasteFromClipboard() async {
+    final auth = ref.read(authNotifierProvider);
+    final employeeId = auth.user?.employeeId;
+    if (employeeId == null) return;
+
+    try {
+      final data = await pasteImageFromClipboard();
+      if (data == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No image found in clipboard (Ctrl+V supported)'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+      await _handlePastedImage(data);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not read clipboard: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _send() async {
+    final text = _msgCtrl.text.trim();
+    if ((text.isEmpty && _pendingAttachmentUrl == null) || _sending || _uploadingAttachment) {
+      return;
+    }
+
+    setState(() => _sending = true);
+    final messageText = text.isEmpty ? 'Image attachment' : text;
+    final attUrl = _pendingAttachmentUrl;
+    final attName = _pendingAttachmentName;
+
+    _msgCtrl.clear();
+    setState(() {
+      _pendingAttachmentUrl = null;
+      _pendingAttachmentName = null;
+      _pendingAttachmentBytes = null;
+    });
+
+    try {
+      final repo = ref.read(supportRepositoryProvider);
+      await repo.sendMessage(
+        widget.ticketId,
+        message: messageText,
+        attachmentUrl: attUrl,
+        attachmentName: attName,
+      );
       ref.invalidate(supportTicketMessagesProvider(widget.ticketId));
       ref.invalidate(supportTicketDetailProvider(widget.ticketId));
       _scrollToBottom();
@@ -143,7 +292,7 @@ class _SupportTicketChatWidgetState
                       ),
                       decoration: BoxDecoration(
                         color: isMe
-                            ? const Color(0xFF2563EB)
+                            ? AppColors.primaryBlue
                             : (isDark
                                 ? const Color(0xFF1E2638)
                                 : const Color(0xFFF1F5F9)),
@@ -224,7 +373,7 @@ class _SupportTicketChatWidgetState
                                 borderRadius: BorderRadius.circular(8),
                                 child: Image.network(
                                   msg.attachmentUrl!,
-                                  height: 120,
+                                  height: 140,
                                   width: double.infinity,
                                   fit: BoxFit.cover,
                                 ),
@@ -269,6 +418,76 @@ class _SupportTicketChatWidgetState
           ),
         ),
 
+        // Pending Attachment Preview Bar (if user picked or pasted an image)
+        if (_pendingAttachmentBytes != null || _pendingAttachmentUrl != null || _uploadingAttachment)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E2638) : const Color(0xFFF1F5F9),
+              border: Border(
+                top: BorderSide(
+                  color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                if (_pendingAttachmentBytes != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.memory(
+                      _pendingAttachmentBytes!,
+                      width: 44,
+                      height: 44,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                else
+                  const Icon(Icons.image, size: 36, color: AppColors.primaryBlue),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _pendingAttachmentName ?? 'Pasted image',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _uploadingAttachment ? 'Uploading image...' : 'Ready to send',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _uploadingAttachment ? const Color(0xFFD97706) : const Color(0xFF059669),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_uploadingAttachment)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    onPressed: () {
+                      setState(() {
+                        _pendingAttachmentBytes = null;
+                        _pendingAttachmentUrl = null;
+                        _pendingAttachmentName = null;
+                      });
+                    },
+                  ),
+              ],
+            ),
+          ),
+
         // Input bar
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -282,6 +501,19 @@ class _SupportTicketChatWidgetState
           ),
           child: Row(
             children: [
+              // Image Picker button
+              IconButton(
+                icon: const Icon(Icons.image_outlined, size: 22),
+                tooltip: 'Attach image',
+                onPressed: _uploadingAttachment ? null : _pickImage,
+              ),
+              // Paste image button
+              IconButton(
+                icon: const Icon(Icons.content_paste_rounded, size: 20),
+                tooltip: 'Paste image from clipboard (Ctrl+V)',
+                onPressed: _uploadingAttachment ? null : _pasteFromClipboard,
+              ),
+              const SizedBox(width: 4),
               Expanded(
                 child: TextField(
                   controller: _msgCtrl,
@@ -290,7 +522,7 @@ class _SupportTicketChatWidgetState
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => _send(),
                   decoration: InputDecoration(
-                    hintText: 'Type a message to IT support...',
+                    hintText: 'Type a message or paste image (Ctrl+V)...',
                     hintStyle: TextStyle(
                       fontSize: 13,
                       color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
@@ -312,14 +544,14 @@ class _SupportTicketChatWidgetState
               ),
               const SizedBox(width: 8),
               IconButton(
-                onPressed: _sending ? null : _send,
+                onPressed: (_sending || _uploadingAttachment) ? null : _send,
                 icon: _sending
                     ? const SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.send_rounded, color: Color(0xFF2563EB)),
+                    : const Icon(Icons.send_rounded, color: AppColors.primaryBlue),
               ),
             ],
           ),

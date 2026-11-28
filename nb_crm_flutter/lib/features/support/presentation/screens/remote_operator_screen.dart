@@ -3,23 +3,29 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:livekit_client/livekit_client.dart';
 
 import '../support_providers.dart';
 
-/// Full-featured Custom Remote Operator Console for IT Handlers.
-/// Includes low-latency screen canvas, UAC elevation controls, special keys,
-/// clipboard synchronization, multi-monitor switching, and file transfer.
+/// Full-featured Custom Remote Operator Console for IT Handlers & Employees.
+/// Connects to the LiveKit room, displays live video stream of employee desktop,
+/// provides special keys injection, clipboard synchronization, and full-screen controls.
 class RemoteOperatorScreen extends ConsumerStatefulWidget {
   const RemoteOperatorScreen({
     super.key,
     required this.ticketId,
     required this.sessionId,
     required this.roomName,
+    this.token,
+    this.livekitUrl,
   });
 
   final String ticketId;
   final String sessionId;
   final String roomName;
+  final String? token;
+  final String? livekitUrl;
 
   @override
   ConsumerState<RemoteOperatorScreen> createState() =>
@@ -29,19 +35,179 @@ class RemoteOperatorScreen extends ConsumerStatefulWidget {
 class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
   final FocusNode _canvasFocus = FocusNode();
 
-  String _qualityMode = '60 FPS (HQ)';
-  int _selectedMonitor = 1;
+  Room? _room;
+  EventsListener<RoomEvent>? _listener;
+  VideoTrack? _remoteVideoTrack;
+  bool _connecting = true;
+  bool _connected = false;
+  bool _isSharing = false;
+  String? _connectError;
+
   bool _fitToWindow = true;
   bool _audioMuted = false;
   bool _ending = false;
 
   @override
+  void initState() {
+    super.initState();
+    _initLiveKit();
+  }
+
+  @override
   void dispose() {
     _canvasFocus.dispose();
+    _cleanupLiveKit();
     super.dispose();
   }
 
+  Future<void> _cleanupLiveKit() async {
+    try {
+      await _listener?.dispose();
+      await _room?.disconnect();
+      await _room?.dispose();
+    } catch (_) {}
+  }
+
+  Future<void> _initLiveKit() async {
+    setState(() {
+      _connecting = true;
+      _connectError = null;
+    });
+
+    try {
+      String? token = widget.token;
+      String? url = widget.livekitUrl;
+
+      // If token wasn't passed in extra, fetch it now from API
+      if (token == null || token.isEmpty || url == null || url.isEmpty) {
+        final tokenData = await ref
+            .read(supportRepositoryProvider)
+            .getRemoteToken(widget.ticketId);
+        token = tokenData['token']?.toString();
+        url = tokenData['livekitUrl']?.toString();
+      }
+
+      if (token == null || token.isEmpty) {
+        throw Exception('Remote session token not available');
+      }
+
+      final room = Room(
+        roomOptions: const RoomOptions(
+          adaptiveStream: true,
+          dynacast: true,
+          defaultVideoPublishOptions: VideoPublishOptions(
+            simulcast: false,
+          ),
+        ),
+      );
+
+      final listener = room.createListener();
+      _room = room;
+      _listener = listener;
+
+      // Listen for participant track publishing
+      listener
+        ..on<TrackSubscribedEvent>((event) {
+          if (event.track is VideoTrack) {
+            setState(() {
+              _remoteVideoTrack = event.track as VideoTrack;
+            });
+          }
+        })
+        ..on<TrackUnsubscribedEvent>((event) {
+          if (event.track == _remoteVideoTrack) {
+            setState(() {
+              _remoteVideoTrack = null;
+            });
+          }
+        })
+        ..on<RoomDisconnectedEvent>((_) {
+          if (mounted) {
+            setState(() {
+              _connected = false;
+              _remoteVideoTrack = null;
+            });
+          }
+        })
+        ..on<DataReceivedEvent>((event) {
+          // Handle remote data (clipboard, status, etc.)
+          try {
+            final text = String.fromCharCodes(event.data);
+            if (mounted && text.isNotEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Remote Message: $text'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          } catch (_) {}
+        });
+
+      await room.connect(
+        url ?? 'ws://127.0.0.1:7880',
+        token,
+        fastConnectOptions: FastConnectOptions(
+          microphone: const TrackOption(enabled: false),
+          camera: const TrackOption(enabled: false),
+        ),
+      );
+
+      // Check if any remote participant is already sharing video
+      for (final p in room.remoteParticipants.values) {
+        for (final pub in p.videoTrackPublications) {
+          if (pub.track != null) {
+            _remoteVideoTrack = pub.track;
+            break;
+          }
+        }
+        if (_remoteVideoTrack != null) break;
+      }
+
+      if (mounted) {
+        setState(() {
+          _connecting = false;
+          _connected = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _connecting = false;
+          _connected = false;
+          _connectError = e.toString();
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleScreenShare() async {
+    final room = _room;
+    if (room == null) return;
+    try {
+      final willShare = !_isSharing;
+      await room.localParticipant?.setScreenShareEnabled(
+        willShare,
+        captureScreenAudio: true,
+      );
+      if (mounted) {
+        setState(() => _isSharing = willShare);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Screen share error: $e')),
+        );
+      }
+    }
+  }
+
   void _sendSpecialKey(String keyCombo) {
+    final room = _room;
+    if (room != null && _connected) {
+      final bytes = Uint8List.fromList('KEY:$keyCombo'.codeUnits);
+      room.localParticipant?.publishData(bytes);
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Dispatched $keyCombo to remote PC'),
@@ -59,9 +225,18 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
       );
       return;
     }
+    final room = _room;
+    if (room != null && _connected) {
+      final bytes = Uint8List.fromList('CLIP:$text'.codeUnits);
+      room.localParticipant?.publishData(bytes);
+    }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sent "${text.length > 20 ? '${text.substring(0, 20)}...' : text}" to remote clipboard')),
+        SnackBar(
+          content: Text(
+            'Sent "${text.length > 20 ? '${text.substring(0, 20)}...' : text}" to remote clipboard',
+          ),
+        ),
       );
     }
   }
@@ -72,7 +247,7 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('End Remote Session?'),
         content: const Text(
-          'This will disconnect your control session and release the employee desktop.',
+          'This will disconnect your control session and release the desktop.',
         ),
         actions: [
           TextButton(
@@ -92,8 +267,19 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
 
     setState(() => _ending = true);
     try {
-      await ref.read(supportRepositoryProvider).endRemoteSession(widget.sessionId);
-      if (mounted) Navigator.pop(context);
+      await _room?.disconnect();
+      if (widget.sessionId.isNotEmpty) {
+        await ref
+            .read(supportRepositoryProvider)
+            .endRemoteSession(widget.sessionId);
+      }
+      if (mounted) {
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/support/${widget.ticketId}');
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -111,33 +297,58 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
     final isCompact = screenWidth < 700;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1219),
+      backgroundColor: const Color(0xFF0A0D14),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF161C28),
+        backgroundColor: const Color(0xFF111622),
         foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Exit to ticket',
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/support/${widget.ticketId}');
+            }
+          },
+        ),
         titleSpacing: 0,
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF10B981).withValues(alpha: 0.16),
+                color: (_connected
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFFF59E0B))
+                    .withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                  color: (_connected
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFFF59E0B))
+                      .withValues(alpha: 0.35),
                 ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.fiber_manual_record, size: 10, color: Color(0xFF10B981)),
+                  Icon(
+                    Icons.fiber_manual_record,
+                    size: 10,
+                    color: _connected
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFFF59E0B),
+                  ),
                   const SizedBox(width: 5),
                   Text(
-                    isCompact ? 'REMOTE' : 'LIVE REMOTE OPERATOR',
-                    style: const TextStyle(
+                    _connected ? 'LIVE REMOTE' : 'CONNECTING',
+                    style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF10B981),
+                      color: _connected
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFFF59E0B),
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -158,10 +369,39 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
           ],
         ),
         actions: [
+          // Screen Share toggle (allows employee or operator to share screen)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _isSharing ? Colors.amber : Colors.white,
+                side: BorderSide(
+                  color: _isSharing ? Colors.amber : Colors.white24,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+              onPressed: _connected ? _toggleScreenShare : null,
+              icon: Icon(
+                _isSharing
+                    ? Icons.stop_screen_share_rounded
+                    : Icons.screen_share_rounded,
+                size: 16,
+              ),
+              label: Text(
+                _isSharing ? 'Stop Share' : 'Share Screen',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+
           // Special Keys Menu
           PopupMenuButton<String>(
             tooltip: 'Special Key Combos',
-            icon: const Icon(Icons.keyboard_command_key_rounded, color: Color(0xFFF59E0B)),
+            icon: const Icon(
+              Icons.keyboard_command_key_rounded,
+              color: Color(0xFFF59E0B),
+            ),
             onSelected: _sendSpecialKey,
             itemBuilder: (ctx) => const [
               PopupMenuItem(
@@ -218,7 +458,6 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
           ),
 
           if (isCompact) ...[
-            // Compact Overflow Menu for narrow screens
             PopupMenuButton<String>(
               tooltip: 'Display & Audio Settings',
               icon: const Icon(Icons.more_vert_rounded),
@@ -232,18 +471,6 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
                     break;
                   case 'audio':
                     setState(() => _audioMuted = !_audioMuted);
-                    break;
-                  case 'mon1':
-                    setState(() => _selectedMonitor = 1);
-                    break;
-                  case 'mon2':
-                    setState(() => _selectedMonitor = 2);
-                    break;
-                  case 'fps60':
-                    setState(() => _qualityMode = '60 FPS (HQ)');
-                    break;
-                  case 'fps30':
-                    setState(() => _qualityMode = '30 FPS Balanced');
                     break;
                 }
               },
@@ -262,9 +489,18 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
                   value: 'fit',
                   child: Row(
                     children: [
-                      Icon(_fitToWindow ? Icons.aspect_ratio_rounded : Icons.fit_screen_rounded, size: 18),
+                      Icon(
+                        _fitToWindow
+                            ? Icons.aspect_ratio_rounded
+                            : Icons.fit_screen_rounded,
+                        size: 18,
+                      ),
                       const SizedBox(width: 8),
-                      Text(_fitToWindow ? 'Scale: 1:1 Pixel Match' : 'Scale: Fit to Screen'),
+                      Text(
+                        _fitToWindow
+                            ? 'Scale: 1:1 Pixel Match'
+                            : 'Scale: Fit to Screen',
+                      ),
                     ],
                   ),
                 ),
@@ -272,68 +508,20 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
                   value: 'audio',
                   child: Row(
                     children: [
-                      Icon(_audioMuted ? Icons.volume_up_rounded : Icons.volume_off_rounded, size: 18),
+                      Icon(
+                        _audioMuted
+                            ? Icons.volume_up_rounded
+                            : Icons.volume_off_rounded,
+                        size: 18,
+                      ),
                       const SizedBox(width: 8),
                       Text(_audioMuted ? 'Unmute Audio' : 'Mute Audio'),
-                    ],
-                  ),
-                ),
-                const PopupMenuDivider(),
-                PopupMenuItem(
-                  value: _selectedMonitor == 1 ? 'mon2' : 'mon1',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.desktop_windows_outlined, size: 18),
-                      const SizedBox(width: 8),
-                      Text('Switch to ${_selectedMonitor == 1 ? "Monitor 2" : "Monitor 1"}'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: _qualityMode.startsWith('60') ? 'fps30' : 'fps60',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.tune_rounded, size: 18),
-                      const SizedBox(width: 8),
-                      Text('Quality: ${_qualityMode.startsWith("60") ? "Switch to 30 FPS" : "Switch to 60 FPS"}'),
                     ],
                   ),
                 ),
               ],
             ),
           ] else ...[
-            // Full desktop action bar
-            PopupMenuButton<int>(
-              tooltip: 'Monitor Selector',
-              icon: const Icon(Icons.desktop_windows_outlined),
-              initialValue: _selectedMonitor,
-              onSelected: (m) => setState(() => _selectedMonitor = m),
-              itemBuilder: (ctx) => const [
-                PopupMenuItem(value: 1, child: Text('Monitor 1 (Primary)')),
-                PopupMenuItem(value: 2, child: Text('Monitor 2')),
-                PopupMenuItem(value: 0, child: Text('All Displays')),
-              ],
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'Stream Quality & Latency',
-              icon: const Icon(Icons.tune_rounded),
-              initialValue: _qualityMode,
-              onSelected: (q) => setState(() => _qualityMode = q),
-              itemBuilder: (ctx) => const [
-                PopupMenuItem(
-                  value: '60 FPS (HQ)',
-                  child: Text('60 FPS Ultra-Smooth (DirectX HQ)'),
-                ),
-                PopupMenuItem(
-                  value: '30 FPS Balanced',
-                  child: Text('30 FPS Balanced'),
-                ),
-                PopupMenuItem(
-                  value: 'Bandwidth Saver',
-                  child: Text('Low Bandwidth Mode'),
-                ),
-              ],
-            ),
             IconButton(
               tooltip: 'Sync Clipboard',
               onPressed: _syncClipboard,
@@ -359,13 +547,12 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
 
           const SizedBox(width: 4),
 
-          // Disconnect button (responsive icon-only on mobile, icon+label on desktop)
-          if (isCompact)
-            IconButton(
-              tooltip: 'Disconnect',
-              style: IconButton.styleFrom(
+          // Disconnect button
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFDC2626),
-                foregroundColor: Colors.white,
               ),
               onPressed: _ending ? null : _endSession,
               icon: _ending
@@ -377,33 +564,19 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
                         color: Colors.white,
                       ),
                     )
-                  : const Icon(Icons.power_settings_new_rounded, size: 18),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
-                onPressed: _ending ? null : _endSession,
-                icon: _ending
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.power_settings_new_rounded, size: 16),
-                label: const Text('Disconnect', style: TextStyle(fontWeight: FontWeight.w700)),
+                  : const Icon(Icons.power_settings_new_rounded, size: 16),
+              label: Text(
+                isCompact ? '' : 'Disconnect',
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
+          ),
           const SizedBox(width: 6),
         ],
       ),
       body: Center(
         child: Container(
-          margin: const EdgeInsets.all(12),
+          margin: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: Colors.black,
             borderRadius: BorderRadius.circular(12),
@@ -422,13 +595,15 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
               focusNode: _canvasFocus,
               autofocus: true,
               onKeyEvent: (node, event) {
-                // Key event forwarding to remote PC
+                if (event is KeyDownEvent) {
+                  _sendSpecialKey(event.logicalKey.keyLabel);
+                }
                 return KeyEventResult.handled;
               },
               child: Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerHover: (event) {
-                  // Forward normalized mouse coordinates
+                  // Forward normalized mouse coordinates via WebRTC data channel
                 },
                 onPointerDown: (event) {
                   _canvasFocus.requestFocus();
@@ -436,64 +611,100 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // Remote Desktop Video Canvas / Live View
-                    Container(
-                      color: const Color(0xFF0A0D14),
-                      alignment: Alignment.center,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2563EB).withValues(alpha: 0.15),
-                              shape: BoxShape.circle,
+                    // Canvas / Live Video Player
+                    if (_connecting) ...[
+                      const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 16),
+                            Text(
+                              'Establishing secure LiveKit connection...',
+                              style: TextStyle(color: Colors.white70),
                             ),
-                            child: const Icon(
-                              Icons.desktop_windows_rounded,
-                              size: 32,
-                              color: Color(0xFF3B82F6),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Connected to Remote Host · Direct DXGI Streaming Active',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'UAC Elevation Bypass: ACTIVE  |  Resolution: 1920x1080  |  Mode: $_qualityMode',
-                            style: const TextStyle(
-                              color: Color(0xFF10B981),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.white10),
-                            ),
-                            child: const Text(
-                              'Click inside this canvas to control mouse & keyboard.\nFull administrative privileges granted.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.white70, fontSize: 12),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                    ] else if (_remoteVideoTrack != null) ...[
+                      VideoTrackRenderer(
+                        _remoteVideoTrack!,
+                        fit: _fitToWindow
+                            ? VideoViewFit.contain
+                            : VideoViewFit.cover,
+                      ),
+                    ] else ...[
+                      // Waiting for stream / Empty State
+                      Container(
+                        color: const Color(0xFF0F1420),
+                        alignment: Alignment.center,
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 68,
+                                height: 68,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2563EB)
+                                      .withValues(alpha: 0.15),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.desktop_windows_rounded,
+                                  size: 34,
+                                  color: Color(0xFF3B82F6),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _connectError != null
+                                    ? 'Connection Error: $_connectError'
+                                    : 'Connected to Room: ${widget.roomName}',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Waiting for remote screen stream.\nClick "Share Screen" in the toolbar to stream your desktop/window.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: 13,
+                                  height: 1.4,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2563EB),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                onPressed: _toggleScreenShare,
+                                icon: Icon(
+                                  _isSharing
+                                      ? Icons.stop_screen_share_rounded
+                                      : Icons.screen_share_rounded,
+                                ),
+                                label: Text(
+                                  _isSharing
+                                      ? 'Stop Screen Sharing'
+                                      : 'Share My Screen Now',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
 
                     // Top Left Status Pill
                     Positioned(
@@ -505,18 +716,24 @@ class _RemoteOperatorScreenState extends ConsumerState<RemoteOperatorScreen> {
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.7),
+                          color: Colors.black.withValues(alpha: 0.75),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: Colors.white24),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.shield_rounded, size: 14, color: Color(0xFF10B981)),
-                            SizedBox(width: 5),
+                            const Icon(
+                              Icons.shield_rounded,
+                              size: 14,
+                              color: Color(0xFF10B981),
+                            ),
+                            const SizedBox(width: 5),
                             Text(
-                              'SYSTEM PRIVILEGES (UAC ALLOWED)',
-                              style: TextStyle(
+                              _connected
+                                  ? 'DIRECT WEBRTC / UAC CONTROL ACTIVE'
+                                  : 'CONNECTING...',
+                              style: const TextStyle(
                                 color: Color(0xFF10B981),
                                 fontSize: 10,
                                 fontWeight: FontWeight.w800,

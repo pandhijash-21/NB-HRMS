@@ -132,6 +132,8 @@ class SupportRemoteSession {
     this.uacEnabled = true,
     this.startedAt,
     this.endedAt,
+    this.token,
+    this.livekitUrl,
   });
 
   final String id;
@@ -144,6 +146,8 @@ class SupportRemoteSession {
   final bool uacEnabled;
   final DateTime? startedAt;
   final DateTime? endedAt;
+  final String? token;
+  final String? livekitUrl;
 
   bool get isActive => status == 'ACCEPTED' || status == 'ACTIVE';
   bool get isRequested => status == 'REQUESTED';
@@ -164,6 +168,8 @@ class SupportRemoteSession {
       endedAt: json['endedAt'] != null
           ? DateTime.tryParse('${json['endedAt']}')
           : null,
+      token: json['token']?.toString(),
+      livekitUrl: json['livekitUrl']?.toString(),
     );
   }
 }

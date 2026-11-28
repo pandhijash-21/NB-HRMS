@@ -1,11 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/presentation/auth_providers.dart';
+import 'bloc/support_bloc.dart';
 import '../data/support_repository.dart';
 import '../domain/support_models.dart';
 
 final supportRepositoryProvider = Provider<SupportRepository>((ref) {
   return SupportRepository(dioClient: ref.watch(dioClientProvider));
+});
+
+final supportBlocProvider = Provider.autoDispose<SupportBloc>((ref) {
+  final bloc = SupportBloc(repository: ref.watch(supportRepositoryProvider));
+  ref.onDispose(bloc.close);
+  return bloc;
 });
 
 final supportCapabilitiesProvider =

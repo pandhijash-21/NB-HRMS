@@ -50,6 +50,7 @@ import '../../features/support/presentation/screens/support_hub_screen.dart';
 import '../../features/support/presentation/screens/support_raise_screen.dart';
 import '../../features/support/presentation/screens/support_detail_screen.dart';
 import '../../features/support/presentation/screens/support_handlers_screen.dart';
+import '../../features/support/presentation/screens/remote_operator_screen.dart';
 import '../../features/leave/presentation/screens/leave_hub_screen.dart';
 import '../../features/leave/presentation/screens/leave_apply_screen.dart';
 import '../../features/leave/presentation/screens/leave_history_screen.dart';
@@ -454,6 +455,26 @@ GoRouter createAppRouter(AuthBloc authBloc) {
       GoRoute(
         path: '/contactus',
         builder: (context, state) => const ContactUsScreen(),
+      ),
+      GoRoute(
+        path: '/support/:id/remote',
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          final extra = state.extra as Map<String, dynamic>?;
+          return RemoteOperatorScreen(
+            ticketId: id,
+            sessionId: extra?['sessionId']?.toString() ??
+                state.uri.queryParameters['sessionId'] ??
+                '',
+            roomName: extra?['roomName']?.toString() ??
+                state.uri.queryParameters['roomName'] ??
+                'remote-$id',
+            token: extra?['token']?.toString() ??
+                state.uri.queryParameters['token'],
+            livekitUrl: extra?['livekitUrl']?.toString() ??
+                state.uri.queryParameters['livekitUrl'],
+          );
+        },
       ),
       GoRoute(
         path: '/meet/recording/:id',

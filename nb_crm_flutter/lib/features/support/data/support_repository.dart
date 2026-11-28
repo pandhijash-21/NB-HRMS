@@ -51,6 +51,7 @@ class SupportRepository {
     required String title,
     required String description,
     String? photoUrl,
+    int? assignedHandlerId,
   }) {
     return _dio.postEnvelope<SupportTicket>(
       'support',
@@ -58,9 +59,29 @@ class SupportRepository {
         'title': title,
         'description': description,
         if (photoUrl != null && photoUrl.isNotEmpty) 'photoUrl': photoUrl,
+        if (assignedHandlerId != null && assignedHandlerId > 0)
+          'assignedHandlerId': assignedHandlerId,
       },
       parse: (raw) {
         if (raw is! Map) throw const FormatException('Invalid create response');
+        return SupportTicket.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<SupportTicket> reassignTicket(
+    String ticketId, {
+    required int handlerId,
+    String? note,
+  }) {
+    return _dio.postEnvelope<SupportTicket>(
+      'support/$ticketId/assign',
+      data: {
+        'handlerId': handlerId,
+        if (note != null && note.isNotEmpty) 'note': note,
+      },
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid assign response');
         return SupportTicket.fromJson(Map<String, dynamic>.from(raw));
       },
     );
@@ -326,6 +347,17 @@ class SupportRepository {
         if (raw == null) return null;
         if (raw is! Map) return null;
         return SupportRemoteSession.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> getRemoteToken(String ticketId) {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'support/$ticketId/remote/token',
+      data: const {},
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid token response');
+        return Map<String, dynamic>.from(raw);
       },
     );
   }

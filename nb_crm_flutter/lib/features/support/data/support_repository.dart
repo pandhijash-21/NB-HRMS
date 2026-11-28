@@ -185,4 +185,148 @@ class SupportRepository {
     if (data is Map && data['url'] is String) return data['url'] as String;
     throw const FormatException('Upload response missing URL');
   }
+
+  // ==========================================
+  // LIVE CHAT
+  // ==========================================
+  Future<List<SupportTicketMessage>> listMessages(String ticketId) {
+    return _dio.getEnvelope<List<SupportTicketMessage>>(
+      'support/$ticketId/messages',
+      parse: (raw) {
+        if (raw is! List) throw const FormatException('Invalid messages list');
+        return raw
+            .whereType<Map>()
+            .map((e) =>
+                SupportTicketMessage.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+      },
+    );
+  }
+
+  Future<SupportTicketMessage> sendMessage(
+    String ticketId, {
+    required String message,
+    String? attachmentUrl,
+    String? attachmentName,
+  }) {
+    return _dio.postEnvelope<SupportTicketMessage>(
+      'support/$ticketId/messages',
+      data: {
+        'message': message,
+        if (attachmentUrl != null) 'attachmentUrl': attachmentUrl,
+        if (attachmentName != null) 'attachmentName': attachmentName,
+      },
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid message response');
+        return SupportTicketMessage.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  // ==========================================
+  // TICKET TRANSFER WITH APPROVALS
+  // ==========================================
+  Future<SupportTicket> requestTransfer(
+    String ticketId, {
+    required int targetHandlerEmployeeId,
+    required String reason,
+  }) {
+    return _dio.postEnvelope<SupportTicket>(
+      'support/$ticketId/transfer/request',
+      data: {
+        'targetHandlerEmployeeId': targetHandlerEmployeeId,
+        'reason': reason,
+      },
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid transfer response');
+        return SupportTicket.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<SupportTicket> respondTransfer(
+    String ticketId, {
+    required bool accept,
+    String? remarks,
+  }) {
+    return _dio.postEnvelope<SupportTicket>(
+      'support/$ticketId/transfer/respond',
+      data: {
+        'accept': accept,
+        if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
+      },
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid transfer response');
+        return SupportTicket.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  // ==========================================
+  // REMOTE OPERATOR SIGNALING
+  // ==========================================
+  Future<SupportRemoteSession> requestRemoteSession(
+    String ticketId, {
+    String accessLevel = 'FULL_CONTROL',
+    bool uacEnabled = true,
+  }) {
+    return _dio.postEnvelope<SupportRemoteSession>(
+      'support/$ticketId/remote/request',
+      data: {
+        'accessLevel': accessLevel,
+        'uacEnabled': uacEnabled,
+      },
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid remote session response');
+        }
+        return SupportRemoteSession.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<SupportRemoteSession> respondRemoteSession({
+    required String sessionId,
+    required bool accept,
+  }) {
+    return _dio.postEnvelope<SupportRemoteSession>(
+      'support/0/remote/respond',
+      data: {
+        'sessionId': sessionId,
+        'accept': accept,
+      },
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid remote session response');
+        }
+        return SupportRemoteSession.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<SupportRemoteSession> endRemoteSession(String sessionId) {
+    return _dio.postEnvelope<SupportRemoteSession>(
+      'support/0/remote/end',
+      data: {
+        'sessionId': sessionId,
+      },
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid remote session response');
+        }
+        return SupportRemoteSession.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<SupportRemoteSession?> getActiveRemoteSession(String ticketId) {
+    return _dio.getEnvelope<SupportRemoteSession?>(
+      'support/$ticketId/remote/active',
+      parse: (raw) {
+        if (raw == null) return null;
+        if (raw is! Map) return null;
+        return SupportRemoteSession.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
 }

@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-/// Lightweight OS notifications for chat / admin / profile events.
+import '../logging/app_logger.dart';
+import '../router/app_navigation_service.dart';
+
+/// Lightweight OS push / heads-up notifications for support / chat / admin / profile events.
 class AppPushNotifier {
   AppPushNotifier._();
 
@@ -15,22 +18,52 @@ class AppPushNotifier {
 
   static Future<void> ensureInitialized() async {
     if (_ready || kIsWeb) return;
+
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const ios = DarwinInitializationSettings();
+    const ios = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+
     await _plugin.initialize(
       const InitializationSettings(android: android, iOS: ios),
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        final payload = response.payload;
+        AppLogger.app.i('Notification tapped: payload=$payload');
+        if (payload != null && payload.isNotEmpty) {
+          AppNavigationService.navigateTo(payload);
+        }
+      },
     );
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(
-          const AndroidNotificationChannel(
-            _channelId,
-            _channelName,
-            description: 'Chat, announcements, and profile updates',
-            importance: Importance.high,
-          ),
-        );
+
+    // Request permissions for Android 13+ (API 33+)
+    final androidImpl = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImpl != null) {
+      await androidImpl.requestNotificationsPermission();
+      await androidImpl.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _channelId,
+          _channelName,
+          description: 'Support tickets, chat, announcements, and task updates',
+          importance: Importance.max,
+          enableVibration: true,
+          playSound: true,
+        ),
+      );
+    }
+
+    // Check if app was cold-launched by tapping an OS notification
+    final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+    if (launchDetails?.didNotificationLaunchApp == true) {
+      final payload = launchDetails?.notificationResponse?.payload;
+      if (payload != null && payload.isNotEmpty) {
+        AppLogger.app.i('App cold-launched from notification payload=$payload');
+        AppNavigationService.navigateTo(payload);
+      }
+    }
+
     _ready = true;
   }
 
@@ -50,14 +83,23 @@ class AppPushNotifier {
           android: AndroidNotificationDetails(
             _channelId,
             _channelName,
-            channelDescription: 'Chat, announcements, and profile updates',
-            importance: Importance.high,
+            channelDescription:
+                'Support tickets, chat, announcements, and task updates',
+            importance: Importance.max,
             priority: Priority.high,
+            enableVibration: true,
+            playSound: true,
           ),
-          iOS: DarwinNotificationDetails(),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
         ),
         payload: payload,
       );
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.app.w('Failed to display OS notification: $e');
+    }
   }
 }

@@ -7,6 +7,7 @@ import '../logging/app_logger.dart';
 import '../network/app_config.dart';
 import '../services/widget_sync_service.dart';
 import 'app_navigation.dart';
+import 'app_navigation_service.dart';
 import 'go_router_refresh_stream.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/auth/domain/permissions.dart';
@@ -179,7 +180,7 @@ GoRouter createAppRouter(AuthBloc authBloc) {
     return '/login';
   }
 
-  return GoRouter(
+  final router = GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: resolveInitialLocation(),
     refreshListenable: refresh,
@@ -1340,4 +1341,7 @@ GoRouter createAppRouter(AuthBloc authBloc) {
       ),
     ],
   );
+
+  AppNavigationService.attach(router, rootNavigatorKey);
+  return router;
 }

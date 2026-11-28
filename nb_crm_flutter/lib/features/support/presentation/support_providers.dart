@@ -32,3 +32,15 @@ final supportTicketDetailProvider =
     FutureProvider.autoDispose.family<SupportTicket, String>((ref, id) {
   return ref.watch(supportRepositoryProvider).getById(id);
 });
+
+final supportTicketMessagesProvider =
+    FutureProvider.autoDispose.family<List<SupportTicketMessage>, String>(
+        (ref, id) {
+  return ref.watch(supportRepositoryProvider).listMessages(id);
+});
+
+final supportActiveRemoteSessionProvider =
+    FutureProvider.autoDispose.family<SupportRemoteSession?, String>(
+        (ref, id) {
+  return ref.watch(supportRepositoryProvider).getActiveRemoteSession(id);
+});

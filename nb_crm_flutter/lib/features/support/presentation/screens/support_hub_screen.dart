@@ -71,29 +71,35 @@ class _SupportHubScreenState extends ConsumerState<SupportHubScreen> {
               backgroundColor: AppColors.bronze,
             )
           : null,
-      body: Column(
-        children: [
-          if (isIt)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: SegmentedButton<int>(
-                segments: const [
-                  ButtonSegment(value: 0, label: Text('My tickets')),
-                  ButtonSegment(value: 1, label: Text('IT queue')),
-                ],
-                selected: {_tab},
-                onSelectionChanged: (s) => setState(() => _tab = s.first),
-              ),
-            ),
-          Expanded(
-            child: !isIt || _tab == 0
-                ? const _MyTicketsList()
-                : _QueueList(
-                    includeClosed: _includeClosed,
-                    onToggleClosed: (v) => setState(() => _includeClosed = v),
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 960),
+          child: Column(
+            children: [
+              if (isIt)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: SegmentedButton<int>(
+                    segments: const [
+                      ButtonSegment(value: 0, label: Text('My tickets')),
+                      ButtonSegment(value: 1, label: Text('IT queue')),
+                    ],
+                    selected: {_tab},
+                    onSelectionChanged: (s) => setState(() => _tab = s.first),
                   ),
+                ),
+              Expanded(
+                child: !isIt || _tab == 0
+                    ? const _MyTicketsList()
+                    : _QueueList(
+                        includeClosed: _includeClosed,
+                        onToggleClosed: (v) => setState(() => _includeClosed = v),
+                      ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -173,6 +179,8 @@ class _TicketCard extends StatelessWidget {
 
   Color _statusColor() {
     switch (ticket.status) {
+      case SupportTicketStatus.queued:
+        return Colors.amber.shade800;
       case SupportTicketStatus.open:
         return Colors.orange;
       case SupportTicketStatus.inReview:
@@ -226,6 +234,58 @@ class _TicketCard extends StatelessWidget {
                   ),
                 ],
               ),
+              if (ticket.status == SupportTicketStatus.queued && (ticket.queuePosition ?? 0) > 0) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.amber.shade300),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.hourglass_top, size: 14, color: Colors.amber.shade900),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Queue Position: #${ticket.queuePosition}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (ticket.transferStatus == 'PENDING') ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.blue.shade300),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.swap_horiz, size: 14, color: Colors.blue.shade800),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Transfer Request Pending',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 4),
               Text(
                 [

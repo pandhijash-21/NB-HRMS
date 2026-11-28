@@ -1806,6 +1806,7 @@ model ReimbursementApprovalStep {
 // =============================================================================
 
 enum SupportTicketStatus {
+  QUEUED
   OPEN
   IN_REVIEW
   RESOLVED
@@ -1824,6 +1825,14 @@ model SupportTicket {
   resolveRemarks String?          @map("resolve_remarks") @db.Text
   denyRemarks String?             @map("deny_remarks") @db.Text
   forceClosed Boolean             @default(false) @map("force_closed")
+  assignedHandlerId Int?          @map("assigned_handler_id")
+  assignedAt    DateTime?         @map("assigned_at")
+  queuePosition Int?              @map("queue_position")
+  transferStatus String?          @default("NONE") @map("transfer_status") // NONE, PENDING, APPROVED, REJECTED
+  transferTargetHandlerId Int?    @map("transfer_target_handler_id")
+  transferReason String?          @map("transfer_reason") @db.Text
+  transferRequestedBy String?     @map("transfer_requested_by")
+  transferRequestedAt DateTime?   @map("transfer_requested_at")
   createdBy   String              @map("created_by")
   closedAt    DateTime?           @map("closed_at")
   createdAt   DateTime            @default(now()) @map("created_at")
@@ -1831,10 +1840,51 @@ model SupportTicket {
 
   employee Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   events   SupportTicketEvent[]
+  messages SupportTicketMessage[]
+  remoteSessions SupportRemoteSession[]
 
   @@index([employeeId, status])
   @@index([status, createdAt])
+  @@index([assignedHandlerId, status])
   @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id             String        @id @default(uuid())
+  ticketId       String        @map("ticket_id")
+  senderId       String        @map("sender_id")
+  senderRole     String        @map("sender_role") // "EMPLOYEE" or "IT_HANDLER"
+  senderName     String?       @map("sender_name")
+  message        String        @db.Text
+  attachmentUrl  String?       @map("attachment_url")
+  attachmentName String?       @map("attachment_name")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  ticket         SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_messages")
+}
+
+model SupportRemoteSession {
+  id             String        @id @default(uuid())
+  ticketId       String        @map("ticket_id")
+  roomName       String        @map("room_name")
+  handlerUserId  String        @map("handler_user_id")
+  employeeUserId String        @map("employee_user_id")
+  status         String        @default("REQUESTED") @map("status") // REQUESTED, ACCEPTED, REJECTED, ACTIVE, ENDED
+  accessLevel    String        @default("FULL_CONTROL") @map("access_level") // FULL_CONTROL, VIEW_ONLY
+  uacEnabled     Boolean       @default(true) @map("uac_enabled")
+  startedAt      DateTime?     @map("started_at")
+  endedAt        DateTime?     @map("ended_at")
+  endedBy        String?       @map("ended_by")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  ticket         SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, status])
+  @@map("support_remote_sessions")
 }
 
 model SupportTicketEvent {
@@ -1854,10 +1904,12 @@ model SupportTicketEvent {
 
 /// Employees Admin assigns to receive / handle IT Support tickets.
 model SupportItAssignee {
-  id         String   @id @default(uuid())
-  employeeId Int      @unique @map("employee_id")
-  createdBy  String?  @map("created_by")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id                    String   @id @default(uuid())
+  employeeId            Int      @unique @map("employee_id")
+  maxConcurrentTickets  Int      @default(3) @map("max_concurrent_tickets")
+  isActive              Boolean  @default(true) @map("is_active")
+  createdBy             String?  @map("created_by")
+  createdAt             DateTime @default(now()) @map("created_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 

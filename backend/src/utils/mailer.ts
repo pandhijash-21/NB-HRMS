@@ -352,3 +352,195 @@ export async function sendContactUsEmail(params: {
   });
   return true;
 }
+
+export interface SupportTicketEmailParams {
+  ticketId: string;
+  ticketNo: string;
+  title: string;
+  description: string;
+  raisedByName: string;
+  raisedByCode?: string | null;
+  department?: string | null;
+  designation?: string | null;
+  createdAt?: Date;
+  status: string;
+  etaAt?: Date | null;
+  remarks?: string | null;
+  photoUrl?: string | null;
+}
+
+export async function sendSupportTicketNotificationEmail(params: {
+  to: string | string[];
+  isHandler: boolean;
+  action: 'CREATED' | 'IN_REVIEW' | 'RESOLVED' | 'CONFIRMED' | 'DENIED' | 'FORCE_CLOSED';
+  ticket: SupportTicketEmailParams;
+}): Promise<boolean> {
+  const recipients = (Array.isArray(params.to) ? params.to : [params.to])
+    .map((e) => (e || '').trim())
+    .filter((e) => e.length > 3 && e.includes('@'));
+
+  if (recipients.length === 0) return false;
+
+  const t = getTransporter();
+  const ticket = params.ticket;
+  const baseUrl = (env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  const ticketUrl = `${baseUrl}/support/${ticket.ticketId}`;
+
+  // Subject and Badge determination
+  let subject = '';
+  let badgeText = ticket.status;
+  let badgeColor = '#2563EB'; // Blue
+  let headerMessage = '';
+
+  switch (params.action) {
+    case 'CREATED':
+      badgeText = 'OPEN';
+      badgeColor = '#2563EB';
+      if (params.isHandler) {
+        subject = `[IT Support] New Ticket #${ticket.ticketNo}: ${ticket.title}`;
+        headerMessage = 'A new IT Support ticket has been raised and assigned to your queue.';
+      } else {
+        subject = `[IT Support] Ticket Received: #${ticket.ticketNo} - ${ticket.title}`;
+        headerMessage = 'Your support ticket has been received by the IT helpdesk. Our team is reviewing it.';
+      }
+      break;
+
+    case 'IN_REVIEW':
+      badgeText = 'IN REVIEW';
+      badgeColor = '#D97706';
+      subject = `[IT Support] Ticket #${ticket.ticketNo} In Review`;
+      headerMessage = 'IT Support has initiated review of your ticket and scheduled an estimated resolution time.';
+      break;
+
+    case 'RESOLVED':
+      badgeText = 'RESOLVED';
+      badgeColor = '#059669';
+      subject = `[IT Support] Ticket #${ticket.ticketNo} Resolved — Please Confirm`;
+      headerMessage = 'IT Support has resolved your issue. Please test and confirm resolution in the app.';
+      break;
+
+    case 'CONFIRMED':
+      badgeText = 'CLOSED';
+      badgeColor = '#475569';
+      subject = `[IT Support] Ticket #${ticket.ticketNo} Closed (Confirmed)`;
+      headerMessage = 'The employee confirmed the resolution and the ticket is now formally closed.';
+      break;
+
+    case 'DENIED':
+      badgeText = 'REOPENED';
+      badgeColor = '#DC2626';
+      subject = `[IT Support] Ticket #${ticket.ticketNo} Denied by User`;
+      headerMessage = 'The employee indicated the issue persists and sent the ticket back for further IT review.';
+      break;
+
+    case 'FORCE_CLOSED':
+      badgeText = 'FORCE CLOSED';
+      badgeColor = '#475569';
+      subject = `[IT Support] Ticket #${ticket.ticketNo} Closed by IT`;
+      headerMessage = 'Your ticket was force closed by the IT administration team.';
+      break;
+  }
+
+  if (!t) {
+    console.log(`[SMTP SIMULATED - DEV] Support ticket email (${params.action}) to ${recipients.join(', ')}:`, {
+      subject,
+      ticketNo: ticket.ticketNo,
+      ticketUrl,
+    });
+    return true;
+  }
+
+  const sender = env.SMTP_FROM || env.SMTP_USER;
+  const etaFormatted = ticket.etaAt
+    ? new Date(ticket.etaAt).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : null;
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 620px; margin: 0 auto; padding: 20px; color: #1E293B;">
+      <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); padding: 24px 28px; text-align: left; border-radius: 12px 12px 0 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h1 style="color: #F59E0B; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.5px;">NB INFRA PROJECTS LTD.</h1>
+        </div>
+        <div style="margin-top: 10px;">
+          <span style="display: inline-block; padding: 4px 10px; font-size: 11px; font-weight: 700; color: #ffffff; background-color: ${badgeColor}; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.5px;">
+            ${badgeText}
+          </span>
+          <span style="color: #94A3B8; font-size: 13px; margin-left: 10px; font-weight: 600;">#${escapeHtml(ticket.ticketNo)}</span>
+        </div>
+      </div>
+
+      <div style="padding: 26px 28px; background: #ffffff; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 12px 12px;">
+        <p style="margin: 0 0 18px 0; font-size: 14px; line-height: 1.5; color: #334155;">
+          ${escapeHtml(headerMessage)}
+        </p>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
+          <tr>
+            <td style="padding: 7px 0; color: #64748B; width: 130px; font-weight: 600;">Title:</td>
+            <td style="padding: 7px 0; color: #0F172A; font-weight: 700;">${escapeHtml(ticket.title)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 7px 0; color: #64748B; font-weight: 600;">Raised By:</td>
+            <td style="padding: 7px 0; color: #0F172A; font-weight: 600;">
+              ${escapeHtml(ticket.raisedByName)}${ticket.raisedByCode ? ` (${escapeHtml(ticket.raisedByCode)})` : ''}
+            </td>
+          </tr>
+          ${ticket.department ? `
+          <tr>
+            <td style="padding: 7px 0; color: #64748B; font-weight: 600;">Department:</td>
+            <td style="padding: 7px 0; color: #0F172A;">${escapeHtml(ticket.department)}</td>
+          </tr>` : ''}
+          ${etaFormatted ? `
+          <tr>
+            <td style="padding: 7px 0; color: #D97706; font-weight: 600;">ETA for Resolution:</td>
+            <td style="padding: 7px 0; color: #D97706; font-weight: 700;">${escapeHtml(etaFormatted)}</td>
+          </tr>` : ''}
+        </table>
+
+        <div style="margin: 16px 0; padding: 14px 16px; background: #F8FAFC; border-left: 4px solid #F59E0B; border-radius: 6px;">
+          <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748B; letter-spacing: 0.5px;">Ticket Description:</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #1E293B; white-space: pre-wrap;">${escapeHtml(ticket.description)}</p>
+        </div>
+
+        ${ticket.remarks ? `
+        <div style="margin: 16px 0; padding: 14px 16px; background: #FEF3C7; border-left: 4px solid #D97706; border-radius: 6px;">
+          <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #92400E; letter-spacing: 0.5px;">Latest Remarks / Notes:</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #78350F; white-space: pre-wrap;">${escapeHtml(ticket.remarks)}</p>
+        </div>` : ''}
+
+        ${ticket.photoUrl ? `
+        <p style="font-size: 12px; margin: 12px 0; color: #64748B;">
+          📎 Attachment: <a href="${escapeHtml(ticket.photoUrl)}" target="_blank" style="color: #2563EB; text-decoration: underline;">View attached screenshot/photo</a>
+        </p>` : ''}
+
+        <div style="margin: 26px 0 10px 0; text-align: center;">
+          <a href="${ticketUrl}" target="_blank" style="display: inline-block; padding: 12px 28px; background-color: #0F172A; color: #F59E0B; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 8px; letter-spacing: 0.3px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            View Ticket in HRMS &rarr;
+          </a>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid #E2E8F0; margin: 24px 0 14px 0;" />
+        <p style="font-size: 11px; color: #94A3B8; margin: 0; text-align: center;">
+          This is an automated notification from NB Infra Projects LTD. IT Helpdesk.
+        </p>
+      </div>
+    </div>
+  `;
+
+  try {
+    await t.sendMail({
+      from: `"NB Infra Projects LTD. - IT Support" <${sender}>`,
+      to: recipients.join(', '),
+      subject,
+      html,
+    });
+    return true;
+  } catch (err) {
+    console.error('[SUPPORT EMAIL ERROR]', err);
+    return false;
+  }
+}

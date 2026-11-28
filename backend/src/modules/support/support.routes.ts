@@ -67,11 +67,15 @@ supportRouter.use((req, res, next) => {
     : 'READ';
   if (
     req.path === '/queue' ||
+    req.path === '/queue/status' ||
     req.path === '/handlers' ||
     req.path === '/capabilities' ||
     req.path.endsWith('/review') ||
     req.path.endsWith('/resolve') ||
-    req.path.endsWith('/force-close')
+    req.path.endsWith('/force-close') ||
+    req.path.endsWith('/messages') ||
+    req.path.includes('/transfer') ||
+    req.path.includes('/remote')
   ) {
     return requirePermission('SUPPORT', 'READ')(req, res, next);
   }
@@ -256,17 +260,149 @@ supportRouter.patch('/:id/deny', async (req: Request, res: Response) => {
   }
 });
 
-supportRouter.patch('/:id/force-close', async (req: Request, res: Response) => {
+supportRouter.get('/queue/status', async (req: Request, res: Response) => {
+  try {
+    const data = await supportService.getQueueStatus();
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+// ==========================================
+// TICKET MESSAGES / LIVE CHAT
+// ==========================================
+supportRouter.get('/:id/messages', async (req: Request, res: Response) => {
+  try {
+    const ticketId = p(req.params.id);
+    const messages = await supportService.listMessages(ticketId);
+    return res.json(ok(messages));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+supportRouter.post('/:id/messages', async (req: Request, res: Response) => {
+  try {
+    const ticketId = p(req.params.id);
+    const isIt = await isSupportIt(req);
+    const senderRole = isIt ? 'IT_HANDLER' : 'EMPLOYEE';
+    const senderName =
+      (req.user as any)?.employee?.generalInfo?.fullName ??
+      (req.user as any)?.username ??
+      (isIt ? 'IT Support' : 'Employee');
+
+    const msg = await supportService.sendMessage({
+      ticketId,
+      senderId: String(req.user!.id),
+      senderRole,
+      senderName,
+      message: String(req.body?.message ?? ''),
+      attachmentUrl: req.body?.attachmentUrl ? String(req.body.attachmentUrl) : null,
+      attachmentName: req.body?.attachmentName ? String(req.body.attachmentName) : null,
+    });
+    return res.status(201).json(ok(msg));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+// ==========================================
+// TICKET TRANSFER WITH APPROVALS
+// ==========================================
+supportRouter.post('/:id/transfer/request', async (req: Request, res: Response) => {
   try {
     if (!(await isSupportIt(req))) {
-      return res.status(403).json(fail('Only IT Support can force-close tickets'));
+      return res.status(403).json(fail('Only IT Support handlers can transfer tickets'));
     }
-    const ticket = await supportService.forceClose({
+    const targetHandlerEmployeeId = Number(req.body?.targetHandlerEmployeeId);
+    if (!targetHandlerEmployeeId || !Number.isFinite(targetHandlerEmployeeId)) {
+      return res.status(400).json(fail('Target handler employee ID is required'));
+    }
+    const reason = String(req.body?.reason ?? '');
+    const ticket = await supportService.requestTransfer({
       ticketId: p(req.params.id),
       actorId: String(req.user!.id),
-      remarks: String(req.body?.remarks ?? ''),
+      targetHandlerEmployeeId,
+      reason,
     });
     return res.json(ok(ticket));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+supportRouter.post('/:id/transfer/respond', async (req: Request, res: Response) => {
+  try {
+    if (!(await isSupportIt(req))) {
+      return res.status(403).json(fail('Only IT Support handlers can respond to transfers'));
+    }
+    const accept = req.body?.accept === true || req.body?.accept === 'true';
+    const remarks = req.body?.remarks ? String(req.body.remarks) : null;
+    const ticket = await supportService.respondTransfer({
+      ticketId: p(req.params.id),
+      actorId: String(req.user!.id),
+      accept,
+      remarks,
+    });
+    return res.json(ok(ticket));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+// ==========================================
+// CUSTOM REMOTE OPERATOR SIGNALING
+// ==========================================
+supportRouter.post('/:id/remote/request', async (req: Request, res: Response) => {
+  try {
+    if (!(await isSupportIt(req))) {
+      return res.status(403).json(fail('Only IT Support can request remote control'));
+    }
+    const session = await supportService.requestRemoteSession({
+      ticketId: p(req.params.id),
+      handlerUserId: String(req.user!.id),
+      accessLevel: req.body?.accessLevel ?? 'FULL_CONTROL',
+      uacEnabled: req.body?.uacEnabled !== false,
+    });
+    return res.status(201).json(ok(session));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+supportRouter.post('/:id/remote/respond', async (req: Request, res: Response) => {
+  try {
+    const sessionId = String(req.body?.sessionId ?? '');
+    const accept = req.body?.accept === true || req.body?.accept === 'true';
+    const session = await supportService.respondRemoteSession({
+      sessionId,
+      employeeUserId: String(req.user!.id),
+      accept,
+    });
+    return res.json(ok(session));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+supportRouter.post('/:id/remote/end', async (req: Request, res: Response) => {
+  try {
+    const sessionId = String(req.body?.sessionId ?? '');
+    const session = await supportService.endRemoteSession({
+      sessionId,
+      endedByUserId: String(req.user!.id),
+    });
+    return res.json(ok(session));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+supportRouter.get('/:id/remote/active', async (req: Request, res: Response) => {
+  try {
+    const session = await supportService.getActiveRemoteSession(p(req.params.id));
+    return res.json(ok(session));
   } catch (e: any) {
     return res.status(400).json(fail(e.message));
   }

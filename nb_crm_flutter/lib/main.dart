@@ -11,6 +11,7 @@ import 'core/di/app_repositories.dart';
 import 'core/network/api_url_cubit.dart';
 import 'core/network/app_config.dart';
 import 'core/router/app_router.dart';
+import 'core/services/app_push_notifier.dart';
 import 'core/services/app_sounds.dart';
 import 'core/services/background_tracking_service.dart';
 import 'core/services/branding_config.dart';
@@ -39,6 +40,7 @@ import 'features/auth/presentation/auth_riverpod_bridge.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/permission_guard.dart';
 import 'features/collaboration/presentation/notification_bell.dart';
+import 'core/widgets/in_app_notification_host.dart';
 import 'features/lookups/presentation/bloc/lookups_bloc.dart';
 import 'core/router/url_strategy.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -65,6 +67,7 @@ void main() async {
   // Load the icon font after the first frame so the app shell renders immediately
   unawaited(loadFullMaterialIconsFont());
   if (!kIsWeb) {
+    unawaited(AppPushNotifier.ensureInitialized());
     unawaited(initializeBackgroundService());
     // One-time: copy Keystore JWT into prefs so FGS can post GPS after upgrade.
     unawaited(() async {
@@ -230,6 +233,7 @@ class NbCrmApp extends StatelessWidget {
                                     ),
                                   ),
                                   const IncomingCallHost(),
+                                  const InAppNotificationHost(),
                                   const TourOverlayHost(),
                                   const FirstVisitHost(),
                                   const TourDebugInspector(),

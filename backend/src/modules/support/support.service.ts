@@ -5,6 +5,10 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { emitPushNotify } from '../collaboration/socket';
+import {
+  sendSupportTicketNotificationEmail,
+  type SupportTicketEmailParams,
+} from '../../utils/mailer';
 
 const ticketInclude = {
   employee: {
@@ -21,6 +25,12 @@ const ticketInclude = {
     },
   },
   events: { orderBy: { createdAt: 'asc' as const } },
+  messages: { orderBy: { createdAt: 'asc' as const } },
+  remoteSessions: {
+    where: { status: { in: ['REQUESTED', 'ACCEPTED', 'ACTIVE'] } },
+    orderBy: { createdAt: 'desc' as const },
+    take: 1,
+  },
 };
 
 async function nextTicketNo(): Promise<string> {
@@ -60,6 +70,155 @@ async function notifyUsers(
     body: payload.body,
     path: payload.path ?? '/support',
   });
+}
+
+async function resolveEmployeeEmail(employeeId: number): Promise<string | null> {
+  const addr = await prisma.employeeAddress.findFirst({
+    where: { employeeId, addressType: 'LOCAL' },
+    select: { personalEmail: true, instituteEmail: true },
+  });
+  return addr?.personalEmail?.trim() || addr?.instituteEmail?.trim() || null;
+}
+
+async function resolveUserEmails(userIds: string[]): Promise<string[]> {
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { employeeId: true },
+  });
+  const empIds = users.map((u) => u.employeeId).filter((id): id is number => id != null);
+  if (empIds.length === 0) return [];
+  const addresses = await prisma.employeeAddress.findMany({
+    where: { employeeId: { in: empIds }, addressType: 'LOCAL' },
+    select: { personalEmail: true, instituteEmail: true },
+  });
+  const emails: string[] = [];
+  for (const a of addresses) {
+    const e = a.personalEmail?.trim() || a.instituteEmail?.trim();
+    if (e && e.includes('@')) emails.push(e);
+  }
+  return [...new Set(emails)];
+}
+
+function buildEmailTicketParams(ticket: any, remarks?: string | null): SupportTicketEmailParams {
+  return {
+    ticketId: ticket.id,
+    ticketNo: ticket.ticketNo,
+    title: ticket.title,
+    description: ticket.description,
+    raisedByName: ticket.employee?.generalInfo?.fullName?.trim() || `Employee #${ticket.employeeId}`,
+    raisedByCode: ticket.employee?.generalInfo?.employeeCode?.trim() || null,
+    department: ticket.employee?.generalInfo?.department?.trim() || null,
+    designation: ticket.employee?.generalInfo?.designation?.trim() || null,
+    createdAt: ticket.createdAt,
+    status: ticket.status,
+    etaAt: ticket.etaAt,
+    remarks: remarks || ticket.resolveRemarks || ticket.denyRemarks || null,
+    photoUrl: ticket.photoUrl,
+  };
+}
+
+async function findAvailableHandler(): Promise<{ employeeId: number; load: number } | null> {
+  const assignees = await prisma.supportItAssignee.findMany({
+    where: { isActive: true },
+    select: { employeeId: true, maxConcurrentTickets: true },
+  });
+  if (assignees.length === 0) return null;
+
+  const handlerLoads = await Promise.all(
+    assignees.map(async (a) => {
+      const activeCount = await prisma.supportTicket.count({
+        where: {
+          assignedHandlerId: a.employeeId,
+          status: { in: [SupportTicketStatus.OPEN, SupportTicketStatus.IN_REVIEW] },
+        },
+      });
+      const maxLimit = a.maxConcurrentTickets ?? 3;
+      return {
+        employeeId: a.employeeId,
+        load: activeCount,
+        maxLimit,
+        hasCapacity: activeCount < maxLimit,
+      };
+    }),
+  );
+
+  const available = handlerLoads.filter((h) => h.hasCapacity);
+  if (available.length === 0) return null;
+
+  available.sort((a, b) => a.load - b.load);
+  return { employeeId: available[0].employeeId, load: available[0].load };
+}
+
+async function popNextQueuedTicket(freedHandlerEmployeeId?: number): Promise<void> {
+  try {
+    const nextQueued = await prisma.supportTicket.findFirst({
+      where: { status: SupportTicketStatus.QUEUED },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!nextQueued) return;
+
+    let targetHandlerId = freedHandlerEmployeeId;
+    if (!targetHandlerId) {
+      const avail = await findAvailableHandler();
+      targetHandlerId = avail?.employeeId;
+    }
+    if (!targetHandlerId) return;
+
+    const updated = await prisma.supportTicket.update({
+      where: { id: nextQueued.id },
+      data: {
+        status: SupportTicketStatus.OPEN,
+        assignedHandlerId: targetHandlerId,
+        assignedAt: new Date(),
+        queuePosition: null,
+        events: {
+          create: {
+            actorId: 'system',
+            fromStatus: SupportTicketStatus.QUEUED,
+            toStatus: SupportTicketStatus.OPEN,
+            note: 'Promoted from waiting queue and assigned to handler',
+          },
+        },
+      },
+      include: ticketInclude,
+    });
+
+    // Re-index remaining queued tickets
+    const remainingQueued = await prisma.supportTicket.findMany({
+      where: { status: SupportTicketStatus.QUEUED },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    for (let i = 0; i < remainingQueued.length; i++) {
+      await prisma.supportTicket.update({
+        where: { id: remainingQueued[i].id },
+        data: { queuePosition: i + 1 },
+      });
+    }
+
+    const raiserUserId = updated.employee?.user?.id;
+    if (raiserUserId) {
+      void notifyUsers([raiserUserId], {
+        title: 'Support ticket assigned',
+        body: `Your ticket #${updated.ticketNo} has been assigned to an IT specialist`,
+        path: `/support/${updated.id}`,
+      });
+    }
+
+    const handlerUser = await prisma.user.findFirst({
+      where: { employeeId: targetHandlerId },
+      select: { id: true },
+    });
+    if (handlerUser) {
+      void notifyUsers([handlerUser.id], {
+        title: 'New ticket assigned from queue',
+        body: `Ticket #${updated.ticketNo}: ${updated.title}`,
+        path: `/support/${updated.id}`,
+      });
+    }
+  } catch (err) {
+    console.error('[SUPPORT QUEUE POP ERROR]', err);
+  }
 }
 
 const assigneeInclude = {
@@ -173,6 +332,20 @@ export const supportService = {
     if (!description) throw new Error('Description is required');
 
     const ticketNo = await nextTicketNo();
+    const available = await findAvailableHandler();
+    let initialStatus: SupportTicketStatus = SupportTicketStatus.OPEN;
+    let queuePosition: number | null = null;
+    let assignedHandlerId: number | null = null;
+
+    const totalAssignees = await prisma.supportItAssignee.count({ where: { isActive: true } });
+    if (totalAssignees > 0 && !available) {
+      initialStatus = SupportTicketStatus.QUEUED;
+      const queuedCount = await prisma.supportTicket.count({ where: { status: SupportTicketStatus.QUEUED } });
+      queuePosition = queuedCount + 1;
+    } else if (available) {
+      assignedHandlerId = available.employeeId;
+    }
+
     const ticket = await prisma.supportTicket.create({
       data: {
         ticketNo,
@@ -180,14 +353,20 @@ export const supportService = {
         title,
         description,
         photoUrl: params.photoUrl?.trim() || null,
-        status: SupportTicketStatus.OPEN,
+        status: initialStatus,
+        assignedHandlerId,
+        assignedAt: assignedHandlerId ? new Date() : null,
+        queuePosition,
         createdBy: params.createdBy,
         events: {
           create: {
             actorId: params.createdBy,
             fromStatus: null,
-            toStatus: SupportTicketStatus.OPEN,
-            note: 'Ticket raised',
+            toStatus: initialStatus,
+            note:
+              initialStatus === SupportTicketStatus.QUEUED
+                ? `All handlers occupied. Ticket placed in queue (Position #${queuePosition})`
+                : 'Ticket raised',
           },
         },
       },
@@ -195,14 +374,54 @@ export const supportService = {
     });
 
     const itIds = await resolveItUserIds();
+    const itRecipients = itIds.filter((id) => id !== params.createdBy);
     void notifyUsers(
-      itIds.filter((id) => id !== params.createdBy),
+      itRecipients,
       {
         title: 'New support ticket',
         body: `${employeeLabel(ticket)}: ${ticket.title} (${ticket.ticketNo})`,
         path: `/support/${ticket.id}`,
       },
     );
+
+    // Confirmation in-app notification to the raiser
+    const raiserUserId = ticket.employee?.user?.id;
+    if (raiserUserId && raiserUserId === params.createdBy) {
+      void notifyUsers([raiserUserId], {
+        title: 'Support ticket submitted',
+        body: `Ticket #${ticket.ticketNo} has been received by IT Helpdesk`,
+        path: `/support/${ticket.id}`,
+      });
+    }
+
+    // Dispatch emails in background
+    void (async () => {
+      try {
+        const emailParams = buildEmailTicketParams(ticket);
+        // 1. Email to ticket raiser
+        const employeeEmail = await resolveEmployeeEmail(params.employeeId);
+        if (employeeEmail) {
+          await sendSupportTicketNotificationEmail({
+            to: employeeEmail,
+            isHandler: false,
+            action: 'CREATED',
+            ticket: emailParams,
+          });
+        }
+        // 2. Email to IT handlers
+        const itEmails = await resolveUserEmails(itRecipients);
+        if (itEmails.length > 0) {
+          await sendSupportTicketNotificationEmail({
+            to: itEmails,
+            isHandler: true,
+            action: 'CREATED',
+            ticket: emailParams,
+          });
+        }
+      } catch (err) {
+        console.error('[SUPPORT SERVICE] Error dispatching ticket creation emails:', err);
+      }
+    })();
 
     return ticket;
   },
@@ -281,6 +500,24 @@ export const supportService = {
         path: `/support/${updated.id}`,
       });
     }
+
+    // Email employee about In-Review with ETA
+    void (async () => {
+      try {
+        const employeeEmail = await resolveEmployeeEmail(updated.employeeId);
+        if (employeeEmail) {
+          await sendSupportTicketNotificationEmail({
+            to: employeeEmail,
+            isHandler: false,
+            action: 'IN_REVIEW',
+            ticket: buildEmailTicketParams(updated, params.note),
+          });
+        }
+      } catch (err) {
+        console.error('[SUPPORT SERVICE] Error dispatching in-review email:', err);
+      }
+    })();
+
     return updated;
   },
 
@@ -332,6 +569,27 @@ export const supportService = {
         path: `/support/${updated.id}`,
       });
     }
+
+    // Email employee about Resolution
+    void (async () => {
+      try {
+        const employeeEmail = await resolveEmployeeEmail(updated.employeeId);
+        if (employeeEmail) {
+          await sendSupportTicketNotificationEmail({
+            to: employeeEmail,
+            isHandler: false,
+            action: 'RESOLVED',
+            ticket: buildEmailTicketParams(updated, remarks),
+          });
+        }
+      } catch (err) {
+        console.error('[SUPPORT SERVICE] Error dispatching resolved email:', err);
+      }
+    })();
+
+    // Pop queued ticket if any
+    void popNextQueuedTicket(updated.assignedHandlerId ?? undefined);
+
     return updated;
   },
 
@@ -344,7 +602,7 @@ export const supportService = {
       throw new Error('Only resolved tickets can be confirmed');
     }
 
-    return prisma.supportTicket.update({
+    const updated = await prisma.supportTicket.update({
       where: { id: ticket.id },
       data: {
         status: SupportTicketStatus.CLOSED,
@@ -361,6 +619,34 @@ export const supportService = {
       },
       include: ticketInclude,
     });
+
+    const itIds = await resolveItUserIds();
+    void notifyUsers(itIds, {
+      title: 'Support ticket closed (confirmed)',
+      body: `${updated.ticketNo}: Confirmed resolved by ${employeeLabel(updated)}`,
+      path: `/support/${updated.id}`,
+    });
+
+    // Email IT handlers about confirmation
+    void (async () => {
+      try {
+        const itEmails = await resolveUserEmails(itIds);
+        if (itEmails.length > 0) {
+          await sendSupportTicketNotificationEmail({
+            to: itEmails,
+            isHandler: true,
+            action: 'CONFIRMED',
+            ticket: buildEmailTicketParams(updated, 'Confirmed by employee'),
+          });
+        }
+      } catch (err) {
+        console.error('[SUPPORT SERVICE] Error dispatching confirmed email:', err);
+      }
+    })();
+
+    void popNextQueuedTicket(updated.assignedHandlerId ?? undefined);
+
+    return updated;
   },
 
   async deny(params: {
@@ -402,6 +688,23 @@ export const supportService = {
       body: `${updated.ticketNo}: ${employeeLabel(updated)} asked for more work`,
       path: `/support/${updated.id}`,
     });
+
+    // Email IT handlers about denial
+    void (async () => {
+      try {
+        const itEmails = await resolveUserEmails(itIds);
+        if (itEmails.length > 0) {
+          await sendSupportTicketNotificationEmail({
+            to: itEmails,
+            isHandler: true,
+            action: 'DENIED',
+            ticket: buildEmailTicketParams(updated, note),
+          });
+        }
+      } catch (err) {
+        console.error('[SUPPORT SERVICE] Error dispatching denied email:', err);
+      }
+    })();
 
     return updated;
   },
@@ -445,6 +748,26 @@ export const supportService = {
         path: `/support/${updated.id}`,
       });
     }
+
+    // Email employee about force-close
+    void (async () => {
+      try {
+        const employeeEmail = await resolveEmployeeEmail(updated.employeeId);
+        if (employeeEmail) {
+          await sendSupportTicketNotificationEmail({
+            to: employeeEmail,
+            isHandler: false,
+            action: 'FORCE_CLOSED',
+            ticket: buildEmailTicketParams(updated, remarks),
+          });
+        }
+      } catch (err) {
+        console.error('[SUPPORT SERVICE] Error dispatching force-closed email:', err);
+      }
+    })();
+
+    void popNextQueuedTicket(updated.assignedHandlerId ?? undefined);
+
     return updated;
   },
 
@@ -526,6 +849,332 @@ export const supportService = {
       handlersConfigured,
       isAssignedHandler: isAssigned,
     };
+  },
+
+  async getQueueStatus() {
+    const queuedCount = await prisma.supportTicket.count({
+      where: { status: SupportTicketStatus.QUEUED },
+    });
+    const activeAssignees = await prisma.supportItAssignee.findMany({
+      where: { isActive: true },
+      include: assigneeInclude,
+    });
+    const handlerLoads = await Promise.all(
+      activeAssignees.map(async (a) => {
+        const load = await prisma.supportTicket.count({
+          where: {
+            assignedHandlerId: a.employeeId,
+            status: { in: [SupportTicketStatus.OPEN, SupportTicketStatus.IN_REVIEW] },
+          },
+        });
+        return {
+          employeeId: a.employeeId,
+          name: a.employee.generalInfo?.fullName ?? `Handler #${a.employeeId}`,
+          load,
+          max: a.maxConcurrentTickets ?? 3,
+          isFull: load >= (a.maxConcurrentTickets ?? 3),
+        };
+      }),
+    );
+    return {
+      queuedCount,
+      handlers: handlerLoads,
+      allBusy: handlerLoads.length > 0 && handlerLoads.every((h) => h.isFull),
+    };
+  },
+
+  // ==========================================
+  // LIVE CHAT
+  // ==========================================
+  async listMessages(ticketId: string) {
+    return prisma.supportTicketMessage.findMany({
+      where: { ticketId },
+      orderBy: { createdAt: 'asc' },
+    });
+  },
+
+  async sendMessage(params: {
+    ticketId: string;
+    senderId: string;
+    senderRole: string; // "EMPLOYEE" or "IT_HANDLER"
+    senderName?: string | null;
+    message: string;
+    attachmentUrl?: string | null;
+    attachmentName?: string | null;
+  }) {
+    const msgText = params.message.trim();
+    if (!msgText && !params.attachmentUrl) {
+      throw new Error('Message text or attachment required');
+    }
+
+    const ticket = await this.getById(params.ticketId);
+    const msg = await prisma.supportTicketMessage.create({
+      data: {
+        ticketId: params.ticketId,
+        senderId: params.senderId,
+        senderRole: params.senderRole,
+        senderName: params.senderName,
+        message: msgText,
+        attachmentUrl: params.attachmentUrl?.trim() || null,
+        attachmentName: params.attachmentName?.trim() || null,
+      },
+    });
+
+    const raiserUserId = ticket.employee?.user?.id;
+    const itIds = await resolveItUserIds();
+    const recipientIds =
+      params.senderRole === 'EMPLOYEE'
+        ? itIds.filter((id) => id !== params.senderId)
+        : raiserUserId && raiserUserId !== params.senderId
+        ? [raiserUserId]
+        : [];
+
+    if (recipientIds.length > 0) {
+      void notifyUsers(recipientIds, {
+        title: `Message on ${ticket.ticketNo}`,
+        body: `${params.senderName ?? 'Support'}: ${msgText || 'Sent an attachment'}`,
+        path: `/support/${ticket.id}`,
+      });
+    }
+
+    return msg;
+  },
+
+  // ==========================================
+  // TICKET TRANSFER WITH APPROVAL
+  // ==========================================
+  async requestTransfer(params: {
+    ticketId: string;
+    actorId: string;
+    targetHandlerEmployeeId: number;
+    reason: string;
+  }) {
+    const ticket = await this.getById(params.ticketId);
+    if (ticket.status === SupportTicketStatus.CLOSED) {
+      throw new Error('Cannot transfer closed ticket');
+    }
+    const reason = params.reason.trim();
+    if (!reason) throw new Error('Transfer reason is required');
+
+    const targetEmp = await prisma.employee.findUnique({
+      where: { id: params.targetHandlerEmployeeId },
+      include: {
+        generalInfo: { select: { fullName: true } },
+        user: { select: { id: true } },
+      },
+    });
+    if (!targetEmp) throw new Error('Target handler employee not found');
+
+    const updated = await prisma.supportTicket.update({
+      where: { id: ticket.id },
+      data: {
+        transferStatus: 'PENDING',
+        transferTargetHandlerId: params.targetHandlerEmployeeId,
+        transferReason: reason,
+        transferRequestedBy: params.actorId,
+        transferRequestedAt: new Date(),
+        events: {
+          create: {
+            actorId: params.actorId,
+            fromStatus: ticket.status,
+            toStatus: ticket.status,
+            note: `Transfer requested to ${targetEmp.generalInfo?.fullName ?? 'Handler'}: ${reason}`,
+          },
+        },
+      },
+      include: ticketInclude,
+    });
+
+    if (targetEmp.user?.id) {
+      void notifyUsers([targetEmp.user.id], {
+        title: 'Ticket Transfer Request',
+        body: `Ticket #${updated.ticketNo} transferred to you: ${reason}`,
+        path: `/support/${updated.id}`,
+      });
+    }
+
+    return updated;
+  },
+
+  async respondTransfer(params: {
+    ticketId: string;
+    actorId: string;
+    accept: boolean;
+    remarks?: string | null;
+  }) {
+    const ticket = await this.getById(params.ticketId);
+    if (ticket.transferStatus !== 'PENDING') {
+      throw new Error('No pending transfer on this ticket');
+    }
+
+    if (params.accept) {
+      const updated = await prisma.supportTicket.update({
+        where: { id: ticket.id },
+        data: {
+          assignedHandlerId: ticket.transferTargetHandlerId,
+          transferStatus: 'APPROVED',
+          events: {
+            create: {
+              actorId: params.actorId,
+              fromStatus: ticket.status,
+              toStatus: ticket.status,
+              note: `Transfer accepted by handler. ${params.remarks ? `Remarks: ${params.remarks}` : ''}`,
+            },
+          },
+        },
+        include: ticketInclude,
+      });
+
+      if (ticket.transferRequestedBy) {
+        void notifyUsers([ticket.transferRequestedBy], {
+          title: 'Transfer Accepted',
+          body: `Ticket #${updated.ticketNo} transfer was accepted`,
+          path: `/support/${updated.id}`,
+        });
+      }
+      return updated;
+    } else {
+      const updated = await prisma.supportTicket.update({
+        where: { id: ticket.id },
+        data: {
+          transferStatus: 'REJECTED',
+          events: {
+            create: {
+              actorId: params.actorId,
+              fromStatus: ticket.status,
+              toStatus: ticket.status,
+              note: `Transfer rejected: ${params.remarks ?? 'Declined by handler'}`,
+            },
+          },
+        },
+        include: ticketInclude,
+      });
+
+      if (ticket.transferRequestedBy) {
+        void notifyUsers([ticket.transferRequestedBy], {
+          title: 'Transfer Declined',
+          body: `Ticket #${updated.ticketNo} transfer was declined: ${params.remarks ?? ''}`,
+          path: `/support/${updated.id}`,
+        });
+      }
+      return updated;
+    }
+  },
+
+  // ==========================================
+  // CUSTOM NB REMOTE OPERATOR SIGNALING
+  // ==========================================
+  async requestRemoteSession(params: {
+    ticketId: string;
+    handlerUserId: string;
+    accessLevel?: string;
+    uacEnabled?: boolean;
+  }) {
+    const ticket = await this.getById(params.ticketId);
+    const employeeUserId = ticket.employee?.user?.id;
+    if (!employeeUserId) {
+      throw new Error('Ticket owner does not have an active user account');
+    }
+
+    await prisma.supportRemoteSession.updateMany({
+      where: {
+        ticketId: ticket.id,
+        status: { in: ['REQUESTED', 'ACCEPTED', 'ACTIVE'] },
+      },
+      data: { status: 'ENDED', endedAt: new Date() },
+    });
+
+    const roomName = `remote-${ticket.ticketNo.toLowerCase()}-${Date.now().toString(36)}`;
+    const session = await prisma.supportRemoteSession.create({
+      data: {
+        ticketId: ticket.id,
+        roomName,
+        handlerUserId: params.handlerUserId,
+        employeeUserId,
+        status: 'REQUESTED',
+        accessLevel: params.accessLevel ?? 'FULL_CONTROL',
+        uacEnabled: params.uacEnabled ?? true,
+      },
+    });
+
+    void notifyUsers([employeeUserId], {
+      title: 'Remote Support Request',
+      body: 'IT Specialist is requesting remote access to your computer. Tap to grant permission.',
+      path: `/support/${ticket.id}?remote=1`,
+    });
+
+    return session;
+  },
+
+  async respondRemoteSession(params: {
+    sessionId: string;
+    employeeUserId: string;
+    accept: boolean;
+  }) {
+    const session = await prisma.supportRemoteSession.findUnique({
+      where: { id: params.sessionId },
+    });
+    if (!session) throw new Error('Remote session not found');
+
+    const updated = await prisma.supportRemoteSession.update({
+      where: { id: session.id },
+      data: {
+        status: params.accept ? 'ACCEPTED' : 'REJECTED',
+        startedAt: params.accept ? new Date() : null,
+      },
+    });
+
+    void notifyUsers([session.handlerUserId], {
+      title: params.accept ? 'Remote Session Granted' : 'Remote Session Declined',
+      body: params.accept
+        ? 'The employee accepted the remote control request.'
+        : 'The employee declined the remote control request.',
+      path: `/support/${session.ticketId}?remote=1`,
+    });
+
+    return updated;
+  },
+
+  async endRemoteSession(params: {
+    sessionId: string;
+    endedByUserId: string;
+  }) {
+    const session = await prisma.supportRemoteSession.findUnique({
+      where: { id: params.sessionId },
+    });
+    if (!session) throw new Error('Remote session not found');
+
+    const updated = await prisma.supportRemoteSession.update({
+      where: { id: session.id },
+      data: {
+        status: 'ENDED',
+        endedAt: new Date(),
+        endedBy: params.endedByUserId,
+      },
+    });
+
+    const otherUser =
+      params.endedByUserId === session.handlerUserId
+        ? session.employeeUserId
+        : session.handlerUserId;
+
+    void notifyUsers([otherUser], {
+      title: 'Remote Session Ended',
+      body: 'The remote desktop session has been terminated.',
+      path: `/support/${session.ticketId}`,
+    });
+
+    return updated;
+  },
+
+  async getActiveRemoteSession(ticketId: string) {
+    return prisma.supportRemoteSession.findFirst({
+      where: {
+        ticketId,
+        status: { in: ['REQUESTED', 'ACCEPTED', 'ACTIVE'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   },
 };
 

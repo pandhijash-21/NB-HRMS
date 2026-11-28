@@ -91,11 +91,15 @@ class _SupportRaiseScreenState extends ConsumerState<SupportRaiseScreen> {
         title: const Text('Raise support ticket'),
         leading: const AppBackButton(fallbackLocation: '/support'),
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
             TextFormField(
               controller: _titleCtrl,
               decoration: const InputDecoration(
@@ -163,6 +167,8 @@ class _SupportRaiseScreenState extends ConsumerState<SupportRaiseScreen> {
           ],
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 }

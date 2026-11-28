@@ -103,9 +103,13 @@ class _SupportHandlersScreenState extends ConsumerState<SupportHandlersScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Text(
@@ -202,7 +206,9 @@ class _SupportHandlersScreenState extends ConsumerState<SupportHandlersScreen> {
           ),
         ],
       ),
-    );
+    ),
+  ),
+);
   }
 
   String _labelFor(

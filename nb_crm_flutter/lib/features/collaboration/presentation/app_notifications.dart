@@ -115,12 +115,27 @@ class AppNotificationsState {
   const AppNotificationsState({
     this.items = const [],
     this.incoming,
+    this.bannerNotice,
   });
 
   final List<AppNotice> items;
   final IncomingCall? incoming;
+  final AppNotice? bannerNotice;
 
   int get unread => items.where((n) => !n.read).length;
+
+  AppNotificationsState copyWith({
+    List<AppNotice>? items,
+    IncomingCall? incoming,
+    AppNotice? bannerNotice,
+    bool clearBanner = false,
+  }) {
+    return AppNotificationsState(
+      items: items ?? this.items,
+      incoming: incoming ?? this.incoming,
+      bannerNotice: clearBanner ? null : (bannerNotice ?? this.bannerNotice),
+    );
+  }
 }
 
 class AppNotifications extends Notifier<AppNotificationsState> {
@@ -129,6 +144,7 @@ class AppNotifications extends Notifier<AppNotificationsState> {
   bool _listening = false;
   CollabSocket? _socket;
   String? _me;
+  Timer? _bannerTimer;
   AppNotificationsState _latest = const AppNotificationsState();
   /// Locally cleared/dismissed notice IDs — prevents server pull from re-showing them in the bell.
   final Set<String> _dismissedIds = {};
@@ -217,6 +233,8 @@ class AppNotifications extends Notifier<AppNotificationsState> {
   }
 
   void _detach() {
+    _bannerTimer?.cancel();
+    _bannerTimer = null;
     if (!_listening && _socket == null) return;
     _listening = false;
     _socket?.offPushNotify(_onPush);
@@ -291,6 +309,37 @@ class AppNotifications extends Notifier<AppNotificationsState> {
     } catch (_) {}
   }
 
+  void dismissBanner() {
+    _bannerTimer?.cancel();
+    _bannerTimer = null;
+    if (_latest.bannerNotice != null) {
+      _set(_latest.copyWith(clearBanner: true));
+    }
+  }
+
+  void showInAppBanner(AppNotice notice) {
+    _bannerTimer?.cancel();
+    _set(_latest.copyWith(bannerNotice: notice));
+    _bannerTimer = Timer(const Duration(milliseconds: 5500), () {
+      dismissBanner();
+    });
+  }
+
+  Future<void> markRead(String id) async {
+    _set(_latest.copyWith(
+      items: [
+        for (final n in _latest.items)
+          if (n.id == id) n.copyWith(read: true) else n,
+      ],
+      clearBanner: _latest.bannerNotice?.id == id,
+    ));
+    await _persist();
+    try {
+      final dio = ref.read(dioClientProvider);
+      await dio.postEnvelope<void>('notifications/$id/read', parse: (_) {});
+    } catch (_) {}
+  }
+
   void _onPush(Map<String, dynamic> data) {
     if (_me != null && data['senderId']?.toString() == _me) return;
     final kind = data['kind']?.toString() ?? 'chat';
@@ -308,12 +357,21 @@ class AppNotifications extends Notifier<AppNotificationsState> {
       channelId: data['channelId']?.toString(),
       code: data['code']?.toString(),
     );
+
+    final showBanner = kind != 'voice_call' && kind != 'meet_call';
+
     _set(AppNotificationsState(
       items: [notice, ...state.items].take(40).toList(),
       incoming: state.incoming,
+      bannerNotice: showBanner ? notice : state.bannerNotice,
     ));
     unawaited(_persist());
-    if (kind != 'voice_call' && kind != 'meet_call') {
+
+    if (showBanner) {
+      _bannerTimer?.cancel();
+      _bannerTimer = Timer(const Duration(milliseconds: 5500), () {
+        dismissBanner();
+      });
       unawaited(AppSounds.playNotify());
       unawaited(
         AppPushNotifier.show(
